@@ -92,16 +92,48 @@ const UNIT_TYPES = {
     dmg: 55, range: 54, atkTime: 2.3, aggro: 300, hotkey: '-', code: 'Minus',
     desc: 'Huge, slow and brutal. Goes for whoever has the most health, ignoring taunts, and each blow splashes the 2 enemies beside its target. Cannot be commanded directly: it follows the troops around it, and may wander off on its own. Archers hurt and confuse giants.',
   },
+  // Ninjas strike first and hardest: an ambush blow, then quick cuts. They vanish while running.
+  ninja: {
+    key: 'ninja', name: 'Ninja', building: 'Dojo', cost: 150, time: 5, hp: 75, speed: 125, pop: 1,
+    dmg: 15, range: 28, atkTime: 0.75, aggro: 340, hotkey: '=', code: 'Equal',
+    desc: 'Fast, fragile assassin. Its first blow of a fight deals triple damage, its blade cuts through some armor, and it cannot be targeted while running (5s cooldown after it stops or strikes). Hunts the weakest enemy in reach and goes for archers first.',
+  },
+  // Flyers glide above the battle: only ranged attacks can reach them.
+  flyer: {
+    key: 'flyer', name: 'Kestrel', building: 'Aerie', cost: 175, time: 6, hp: 70, speed: 95, pop: 1,
+    dmg: 15, range: 300, atkTime: 1.15, aggro: 340, hotkey: '[', code: 'BracketLeft',
+    desc: 'Glides above the battle with a small crossbow, over walls and out of reach of melee: only archers, warlocks, castle archers, thrown stars and other Kestrels can hit it. Weaker shots than an archer. Enemy ranged units shoot at it first.',
+  },
 };
-const UNIT_ORDER = ['miner', 'sword', 'archer', 'spear', 'cleric', 'warlock', 'giant'];
+const UNIT_ORDER = ['miner', 'sword', 'archer', 'spear', 'cleric', 'warlock', 'giant', 'ninja', 'flyer'];
 const isMage = u => u.type === 'cleric' || u.type === 'warlock';
-const isRanged = u => u.type === 'archer' || u.type === 'warlock';
 const isGiant = u => u.type === 'giant';
+// Kestrels are airborne until Feather Fall drops them to the ground (then they fight with a knife).
+const isFlying = u => u.type === 'flyer' && !u.grounded;
+// Ninjas count as ranged while throwing stars (u.starRanged is decided each frame).
+const isRanged = u => u.type === 'archer' || u.type === 'warlock' || isFlying(u) || (u.type === 'ninja' && !!u.starRanged);
 const trainCode = def => def.code || 'Digit' + def.hotkey;
-// Mages come down the castle ladder; their halls stand on the rampart. The giant pit is outside the gate.
+// Mages come down the castle ladder; the Dojo and Aerie troops leave straight off the rampart, where
+// all four halls stand. The giant pit is outside the gate.
 const GIANT_PIT_X = 655;
-const DOOR_X = { ...BUILD_X, cleric: 52, warlock: 52, giant: GIANT_PIT_X };
-const MAGE_HALL_X = { cleric: 150, warlock: 222 };
+const RAMPART_HALL_X = { cleric: 150, warlock: 222, ninja: 340, flyer: 462 };
+const DOOR_X = { ...BUILD_X, cleric: 52, warlock: 52, giant: GIANT_PIT_X, ninja: RAMPART_HALL_X.ninja, flyer: RAMPART_HALL_X.flyer };
+
+// Ninjas
+const NINJA_AMBUSH = 3;           // damage multiplier of the first blow of a fight (or out of stealth)
+const NINJA_AMBUSH_GAP = 2.5;     // seconds without striking before the next blow counts as a first blow
+const NINJA_VANISH_CD = 5;        // after striking or stopping, seconds before it can vanish again
+const NINJA_PIERCE = [0.3, 0.65]; // share of the target's armor ignored: base / Serrated Blades
+const PARRY_CD = 6;               // Parry blocks one attack this often...
+const PARRY_STUN = 1.5;           // ...and stuns a melee attacker for this long
+const STAR = { range: 230, dmg: 11, atkTime: 0.9, confuse: 0.15 };   // Throwing Stars
+
+// Kestrels (flyers)
+const FLY_ALT = 78;               // cruising height above the lane
+const GROUNDED = { hp: 45, dmg: 6, range: 26, atkTime: 0.9, speed: 70 };   // after Feather Fall: a knife fighter
+
+// Critical hits (archers and ninjas): double damage
+const CRIT = { chance: 0.1, upgraded: 0.2, mult: 2 };
 
 // Giants
 const GIANT_SCALE = 2.1;          // base size; each Protein Diet tier adds 13%
@@ -169,6 +201,20 @@ const UPGRADES = {
     { key: 'arrows', name: 'Bodkin Arrows', cost: 175, mana: 0, time: 20, desc: 'Arrow damage 24 → 32, and the bodkin points ignore a third of the target’s armor.' },
     { key: 'fire', name: 'Flaming Arrows', cost: 225, mana: 75, time: 30, requires: 'arrows', desc: `Arrows set targets alight: ${BURN_DPS} damage per second for ${BURN_TIME}s on top of the hit.` },
     { key: 'quiver', name: 'Deep Quivers', cost: 150, mana: 50, time: 20, desc: 'Reload 30% faster.' },
+    { key: 'eye', name: 'Eagle Eye', cost: 175, mana: 50, time: 25, desc: `Critical hit chance ${CRIT.chance * 100}% → ${CRIT.upgraded * 100}%. A critical hit does double damage.` },
+  ],
+  ninja: [
+    { key: 'serrated', name: 'Serrated Blades', cost: 175, mana: 0, time: 20, desc: `Cuts through more armor: ignores ${NINJA_PIERCE[1] * 100}% of it instead of ${NINJA_PIERCE[0] * 100}%.` },
+    { key: 'parry', name: 'Parry', cost: 200, mana: 50, time: 25, desc: `Every ${PARRY_CD}s, the ninja blocks one attack completely. A melee attacker it parries is stunned for ${PARRY_STUN}s.` },
+    { key: 'focus', name: 'Focus', cost: 150, mana: 50, time: 20, desc: 'Ignores taunts: shield walls no longer draw its attacks.' },
+    { key: 'stars', name: 'Throwing Stars', cost: 225, mana: 75, time: 30, desc: `Throws stars from range (${STAR.range}, ${STAR.dmg} damage), which can hit Kestrels and disorient giants. Switch between stars and blade with M, or leave it on Auto.` },
+    { key: 'vital', name: 'Vital Points', cost: 175, mana: 50, time: 25, desc: `Critical hit chance ${CRIT.chance * 100}% → ${CRIT.upgraded * 100}%. A critical hit does double damage.` },
+  ],
+  flyer: [
+    { key: 'feather', name: 'Feather Fall', cost: 175, mana: 50, time: 25, desc: `When shot down, the Kestrel glides to the ground and fights on with a knife (${GROUNDED.hp} hp, weak). On the ground anyone can hit it.` },
+    { key: 'scope', name: 'Long Sights', cost: 175, mana: 0, time: 20, desc: 'Range 300 → 400.' },
+    { key: 'winch', name: 'Crank Winch', cost: 150, mana: 50, time: 20, desc: 'Reload 30% faster.' },
+    { key: 'barbs', name: 'Barbed Bolts', cost: 175, mana: 0, time: 20, desc: 'Bolt damage 15 → 21.' },
   ],
   spear: [
     { key: 'shield', name: 'Shields', cost: 175, mana: 0, time: 20, desc: '+20% armor and +40 hp, and unlocks Shield Wall (X): they stop attacking, take 60% less damage and draw enemy attacks.' },
@@ -243,6 +289,8 @@ const GEAR = {
   cleric: [['none'], ['none']],
   warlock: [['none'], ['none']],
   giant: [['none'], ['horns']],
+  ninja: [['ninja'], ['ninja']],
+  flyer: [['goggles'], ['goggles']],
 };
 
 const THEMES = [

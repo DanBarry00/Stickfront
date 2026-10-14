@@ -90,6 +90,20 @@ class Unit {
     this.stunT = 0;
     this.knockV = 0;
     this.jumpT = 0;
+    // ninjas: vanish while running, ambush blow, parry, star/blade mode ('auto' | 'melee' | 'ranged')
+    this.stealth = false;
+    this.vanishCd = 0;
+    this.lastStrikeT = -99;
+    this.ambushNext = false;
+    this.parryCd = 0;
+    this.starMode = 'auto';
+    this.starRanged = false;
+    this.lastTarget = null;
+    this.dropT = 0;      // dropping down off the rampart after training
+    // kestrels: height above the lane (eases to FLY_ALT), and whether Feather Fall has grounded it
+    this.alt = 0;
+    this.grounded = false;
+    this.glideT = 0;     // gliding down after being shot out of the sky
   }
 }
 
@@ -110,6 +124,8 @@ function applyPerks(u) {
   u.mineTime = MINE_SWING_TIME;
   u.manaMul = 1;
   u.panMul = 1;
+  u.pierceFrac = 0;    // share of the target's armor this unit's blows ignore
+  u.crit = 0;          // chance of a double-damage critical hit
   if (u.type === 'sword') {
     u.dmg = P.blades ? 18 : 12;
     u.armor = P.helm ? 0.25 : 0;
@@ -128,6 +144,25 @@ function applyPerks(u) {
     u.pierceHalf = !!P.arrows;   // bodkin points punch through a third of any armor
     u.fire = !!P.fire;
     u.atk = P.quiver ? 0.92 : d.atkTime;
+    u.crit = P.eye ? CRIT.upgraded : CRIT.chance;
+  } else if (u.type === 'ninja') {
+    u.pierceFrac = NINJA_PIERCE[P.serrated ? 1 : 0];
+    u.crit = P.vital ? CRIT.upgraded : CRIT.chance;
+    setNinjaMode(u, u.starRanged);
+  } else if (u.type === 'flyer') {
+    if (u.grounded) {
+      // shot down: a weak knife fighter on foot
+      u.maxHp = GROUNDED.hp;
+      u.dmg = GROUNDED.dmg;
+      u.range = GROUNDED.range;
+      u.atk = GROUNDED.atkTime;
+      u.aggro = 220;
+    } else {
+      u.range = P.scope ? 400 : d.range;
+      u.aggro = u.range + 40;
+      u.dmg = P.barbs ? 21 : d.dmg;
+      u.atk = P.winch ? d.atkTime * 0.7 : d.atkTime;
+    }
   } else if (u.type === 'spear') {
     u.armor = 0.1 + (P.shield ? 0.2 : 0) + (P.shield2 ? 0.1 : 0) + (P.helm ? 0.15 : 0);
     u.maxHp += (P.shield ? 40 : 0) + (P.shield2 ? 40 : 0);
@@ -148,11 +183,61 @@ function applyPerks(u) {
   if (u.hp !== undefined) u.hp = u.maxHp * frac;
 }
 
+// A ninja switches between its blade and Throwing Stars (stats swap with the mode).
+function setNinjaMode(u, ranged) {
+  ranged = !!ranged && !!u.perks.stars;
+  u.starRanged = ranged;
+  u.range = ranged ? STAR.range : u.def.range;
+  u.atk = ranged ? STAR.atkTime : u.def.atkTime;
+  u.dmg = ranged ? STAR.dmg : u.def.dmg;
+  u.aggro = ranged ? STAR.range + 60 : u.def.aggro;
+}
+
+// Auto mode: stars for targets the blade can't (or shouldn't) reach, and when badly hurt.
+function updateNinjaMode(u) {
+  if (!u.perks.stars) return;
+  if (u.starMode !== 'auto') return setNinjaMode(u, u.starMode === 'ranged');
+  if (u.swing >= 0) return;   // never switch mid-swing
+  const t = u.lastTarget;
+  const far = t && !t.dead && (isFlying(t) || isGiant(t));
+  setNinjaMode(u, far || u.hp < u.maxHp * 0.35);
+}
+
+// Vanish while running; any blow (or stopping) reveals the ninja and starts the cooldown.
+function updateStealth(u, dt) {
+  u.vanishCd -= dt;
+  if (u.stealth && (u.swing >= 0 || u.stillT > 0.3 || u.inside)) {
+    u.stealth = false;
+    u.vanishCd = NINJA_VANISH_CD;
+  } else if (!u.stealth && u.moving && u.vanishCd <= 0 && u.swing < 0 && !u.inside) {
+    u.stealth = true;
+  }
+}
+
 function isValidTarget(t) {
-  return !!t && !t.dead && !t.inside && (!t.isWall || t.progress >= 1);
+  return !!t && !t.dead && !t.inside && !t.stealth && (!t.isWall || t.progress >= 1);
+}
+
+// Who can hit flying units: ranged attackers (and castle archers, and a ninja that can switch to stars).
+const canHitAir = u => !u || u.castle || isRanged(u) || (u.type === 'ninja' && u.perks.stars && u.starMode === 'auto');
+
+// Can attacker u pick e as a target at all? (Vanished ninjas and, for melee, flyers are out of reach.)
+function canTarget(u, e) {
+  return !e.dead && !e.inside && !e.stealth && (!isFlying(e) || canHitAir(u));
+}
+
+// Lower is better. Taunts (shield walls) pull everyone except focused ninjas; ninjas hunt the
+// weakest enemy and go for archers first; ranged attackers shoot flyers first.
+function targetScore(u, e, d) {
+  const ninja = u && u.type === 'ninja';
+  let s = ninja ? e.hp + d * 0.25 - (e.type === 'archer' ? 300 : 0) : d;
+  if (!(ninja && u.perks.focus)) s -= tauntBias(e) * (ninja ? 4 : 1);
+  if (isFlying(e) && (!u || u.castle || isRanged(u))) s -= 400;
+  return s;
 }
 
 function inReach(u, t, slack) {
+  if (isFlying(t) && !isRanged(u)) return false;   // the blade can't reach the sky
   const bulk = isGiant(t) ? 8 * t.scale : 0;   // giants are wide targets
   const dx = Math.abs(t.x - u.x) - (t.isStructure ? t.halfW : 0) - bulk;
   if (isRanged(u)) return dx <= u.range + slack;
@@ -171,6 +256,7 @@ const wallHeight = w => (w.tier === 2 ? WALL_H[1] : WALL_H[0]);
 function armorOf(u, attacker) {
   const pierce = attacker && attacker.pierce;
   let a = pierce ? 0 : attacker && attacker.pierceHalf ? u.armor * (2 / 3) : u.armor;
+  if (attacker && attacker.pierceFrac) a *= 1 - attacker.pierceFrac;   // ninja blades slip through
   a += 0.03 * u.drillN;
   if (u.shieldWall) {
     const wall = u.perks.shield2 ? 0.75 : 0.6;
@@ -202,7 +288,7 @@ function moveTo(u, tx, ty, dt) {
   let nx = u.x + dx * k;
   const ny = u.y + dy * k;
   for (const w of G.walls) {
-    if (w.team === u.team || w.dead || w.progress < 1) continue;
+    if (w.team === u.team || w.dead || w.progress < 1 || isFlying(u)) continue;   // flyers glide over walls
     const lim = w.halfW + 8;
     if (u.x <= w.x - lim + 0.5 && nx > w.x - lim) { nx = w.x - lim; u.blockedBy = w; u.blockT = 0.4; }
     else if (u.x >= w.x + lim - 0.5 && nx < w.x + lim) { nx = w.x + lim; u.blockedBy = w; u.blockT = 0.4; }
@@ -221,7 +307,16 @@ function moveTo(u, tx, ty, dt) {
 function targetAimY(t) {
   if (t.isStatue) return LANE_TOP - 80;
   if (t.isWall) return LANE_TOP - 10;
-  return t.y - 38 * (isGiant(t) ? t.scale * 0.8 : 1) - (t.onWall ? wallHeight(t.onWall) : 0);
+  return t.y - 38 * (isGiant(t) ? t.scale * 0.8 : 1) - (t.onWall ? wallHeight(t.onWall) : 0) - (t.alt || 0);
+}
+
+// Roll a critical hit (archers and ninjas): double damage and a little "Crit!" over the target.
+function rollCrit(u, amt) {
+  if (!u.crit || !chance(u.crit)) return { amt, crit: false };
+  return { amt: amt * CRIT.mult, crit: true };
+}
+function showCrit(t) {
+  if (t && !t.isStructure) floatText(t.x, targetAimY(t) - 30, 'Crit!', '#ffd25a');
 }
 
 function startSwing(u, kind, target) {
@@ -240,8 +335,13 @@ function startSwing(u, kind, target) {
   u.atkCd = dur;
   u.leapSwing = kind === 'attack' && u.perks.leap && u.type === 'sword' && u.runDist > 140;
   if (u.leapSwing) u.runDist = 0;
+  if (u.type === 'ninja' && (kind === 'attack' || kind === 'shoot')) {
+    // the first blow of a fight, or one struck out of the shadows, is an ambush
+    u.ambushNext = kind === 'attack' && (u.stealth || G.time - u.lastStrikeT > NINJA_AMBUSH_GAP);
+    u.lastStrikeT = G.time;
+  }
   if (kind === 'shoot') {
-    const dx = target.x - u.x, dy = targetAimY(target) - (u.y - 46);
+    const dx = target.x - u.x, dy = targetAimY(target) - (u.y - 46 - (u.alt || 0));
     u.aimFa = Math.atan2(dy, Math.abs(dx)) - 0.3 * (Math.abs(dx) / u.range);
   }
 }
@@ -255,17 +355,24 @@ function onSwingHit(u) {
         amt *= 2;
         spawnBurst(u.x, u.y - 2, 6, { color: shade(G.map.theme.ground[0], 0.1), speed: 80, up: 30, g: 300, life: 0.5, size: 2.5 });
       }
-      damage(t, amt, u);
+      if (u.type === 'ninja' && u.ambushNext) {
+        amt *= NINJA_AMBUSH;
+        u.ambushNext = false;
+        spawnBurst(t.x, targetAimY(t), 8, { color: '#e8e0d0', speed: 140, up: 20, g: 200, life: 0.35, size: 1.8 });
+      }
+      const c = rollCrit(u, amt);
+      damage(t, c.amt, u);
+      if (c.crit) showCrit(t);
       if (isGiant(u)) giantImpact(u, t, amt);
       // a spear thrust runs on into a second enemy lined up behind the first
       if (u.type === 'spear' && !t.isStructure) {
         let next = null, nd = 1e9;
         for (const e of G.units) {
-          if (e === t || e.team === u.team || e.dead || e.inside || Math.abs(e.y - u.y) > 20) continue;
+          if (e === t || e.team === u.team || !canTarget(u, e) || Math.abs(e.y - u.y) > 20) continue;
           const d = (e.x - u.x) * u.facing;
           if (d > 0 && d <= u.range + 22 && d < nd) { nd = d; next = e; }
         }
-        if (next) damage(next, amt * 0.6, u);
+        if (next) damage(next, amt * 0.6, u, true);
       }
     }
   } else if (u.swingKind === 'cast') {
@@ -277,8 +384,10 @@ function onSwingHit(u) {
   } else if (u.swingKind === 'shoot') {
     if (isValidTarget(t)) {
       const aim = u.facing === 1 ? u.aimFa : Math.PI - u.aimFa;
-      const lift = u.onWall ? wallHeight(u.onWall) : 0;
-      fireArrow(u.team, u.x + Math.cos(aim) * 14 * u.scale, u.y - lift - 46 * u.scale + Math.sin(aim) * 14, t, u.dmg * dmgMult(u), u, u.fire);
+      const lift = (u.onWall ? wallHeight(u.onWall) : 0) + (u.alt || 0);
+      const c = rollCrit(u, u.dmg * dmgMult(u));
+      const kind = u.type === 'ninja' ? 'star' : u.type === 'flyer' ? 'bolt' : 'arrow';
+      fireArrow(u.team, u.x + Math.cos(aim) * 14 * u.scale, u.y - lift - 46 * u.scale + Math.sin(aim) * 14, t, c.amt, u, u.fire, { kind, crit: c.crit });
     }
   } else if (u.swingKind === 'gold') {
     const m = u.mine;
@@ -329,6 +438,7 @@ function buildHit(u, w) {
 // Move into reach of target and attack it (melee swing or bow shot).
 function engage(u, t, dt) {
   const ranged = isRanged(u);
+  if (!t.isStructure) u.lastTarget = t;
   if (inReach(u, t, 0)) {
     u.facing = t.x >= u.x ? 1 : -1;
     if (u.shieldWall) return; // shield wall: brace, never strike
@@ -348,7 +458,7 @@ function engage(u, t, dt) {
 
 // Units pressed against an enemy wall hack at it unless an enemy is right there.
 function handleBlocked(u, dt) {
-  if (u.blockT <= 0 || !isValidTarget(u.blockedBy)) return false;
+  if (u.blockT <= 0 || !isValidTarget(u.blockedBy) || isFlying(u)) return false;
   if (nearestEnemy(u, u.range + 25)) return false;
   if (inReach(u, u.blockedBy, 4)) u.blockT = 0.4;
   engage(u, u.blockedBy, dt);
@@ -362,10 +472,10 @@ function nearestEnemy(u, range, fromX) {
   const ox = fromX === undefined ? u.x : fromX;
   let best = null, bs = 1e9;
   for (const e of G.units) {
-    if (e.team === u.team || e.dead || e.inside) continue;
+    if (e.team === u.team || !canTarget(u, e)) continue;
     const d = Math.abs(e.x - ox) + Math.abs(e.y - u.y) * 0.5;
     if (d >= range) continue;
-    const s = d - tauntBias(e);
+    const s = targetScore(u, e, d);
     if (s < bs) { bs = s; best = e; }
   }
   return best;
@@ -376,11 +486,11 @@ function defendTarget(u, team, lineX) {
   let best = null, bs = 1e9;
   const reach = isRanged(u) ? u.range : 600;
   for (const e of G.units) {
-    if (e.team === u.team || e.dead || e.inside) continue;
+    if (e.team === u.team || !canTarget(u, e)) continue;
     if (team.dir * (e.x - lineX) > (isRanged(u) ? u.range - 60 : 230)) continue;
     const d = Math.abs(e.x - u.x) + Math.abs(e.y - u.y) * 0.5;
     if (d > reach + 300) continue;
-    const s = d - tauntBias(e);
+    const s = targetScore(u, e, d);
     if (s < bs) { bs = s; best = e; }
   }
   return best;
@@ -433,7 +543,7 @@ function doRefit(u, dt) {
 
 // Rank offsets from the front of a formation: spearton in front, swordwrath behind them,
 // archers and mages at the back.
-const RANK_OFF = { spear: 22, sword: 0, archer: -85, warlock: -95, cleric: -110 };
+const RANK_OFF = { spear: 22, sword: 0, ninja: -8, flyer: -60, archer: -85, warlock: -95, cleric: -110 };
 
 // Where the idx-th unit of a type stands: up to six abreast, extra units form more columns.
 function rankSlot(type, idx, count, frontX, dir) {
@@ -513,8 +623,8 @@ function doGroup(u, dt) {
   let t = nearestEnemy(u, reach + 10);
   if (t && !inReach(u, t, 0)) t = null;
   if (!t && g.mode === 'attack') t = nearestEnemy(u, isRanged(u) ? u.range : 140);
-  // swordwrath behind the spear line sprint out and leap over it once the enemy is close
-  if (!t && u.type === 'sword' && g.mode !== 'retreat') {
+  // swordwrath (and ninjas) behind the spear line sprint out and leap over it once the enemy is close
+  if (!t && (u.type === 'sword' || u.type === 'ninja') && g.mode !== 'retreat') {
     const near = nearestEnemy(u, 150);
     if (near) {
       if (!u.brokeOut) { u.brokeOut = true; u.jumpT = 0.5; u.runDist = 200; }   // a running jump: Running Jump perks apply
@@ -564,7 +674,7 @@ function updateFighter(u, dt) {
   if (o.type === 'manwall') return doManWall(u, team, dt);
   if (handleBlocked(u, dt)) return;
   if (o.type === 'attack') {
-    if (isValidTarget(o.target)) return engage(u, o.target, dt);
+    if (isValidTarget(o.target) && (o.target.isStructure || canTarget(u, o.target))) return engage(u, o.target, dt);
     u.order = { type: 'hold', x: u.x, y: u.y };
     return;
   }
@@ -836,7 +946,8 @@ function addDecal(x, y, r, a) {
   if (G.decals.length > 220) G.decals.shift();
 }
 
-function damage(t, amt, src) {
+// aoe: splash, blasts and pools (a Parry can't turn those aside)
+function damage(t, amt, src, aoe) {
   amt = Math.max(1, Math.round(amt));
   if (t.isStructure) {
     if (t.dead) return;
@@ -859,12 +970,18 @@ function damage(t, amt, src) {
   // archers are the giant-killers: extra damage, and a chance to send it into a confused rage
   if (isGiant(t) && src && src.type === 'archer') {
     amt = Math.round(amt * ARCHER_VS_GIANT);
-    const blind = t.perks.blinders ? BLINDERS_CONFUSE : { chance: 1, time: 1 };
-    if (!t.isStatueGiant && t.confuseCd <= 0 && chance(GIANT_CONFUSE.chance * blind.chance)) {
-      t.confusedT = GIANT_CONFUSE.time * blind.time;
-      t.confuseCd = GIANT_CONFUSE.cooldown;
-      floatText(t.x, t.y - 80 * t.scale, 'Confused!', '#e0bf5a');
+    confuseGiant(t, GIANT_CONFUSE.chance);
+  }
+  // Parry: a ninja turns aside one blow every few seconds, stunning a melee attacker
+  if (t.perks.parry && t.parryCd <= 0 && src && !aoe) {
+    t.parryCd = PARRY_CD;
+    floatText(t.x, t.y - 70, 'Parry!', '#d8e4f0');
+    spawnBurst(t.x + t.facing * 10, t.y - 40, 6, { color: '#e8eef4', speed: 120, up: 20, g: 200, life: 0.3, size: 1.6 });
+    if (!src.isStructure && !src.castle && !isRanged(src) && !src.dead) {
+      src.stunT = Math.max(src.stunT || 0, PARRY_STUN);
+      src.swing = -1;
     }
+    return;
   }
   // a Sanctuary shield soaks up damage before anything else
   if (t.fx.shield > 0) {
@@ -907,6 +1024,17 @@ function fallUnit(u, src) {
     u.hp = 0.01;
     u.burnT = 0;
     if (u.team === 0) floatText(u.x, u.y - 90, 'Last stand!', '#e0503a');
+    return;
+  }
+  // Feather Fall: a Kestrel shot out of the sky glides down and fights on with a knife
+  if (u.type === 'flyer' && u.perks.feather && !u.grounded) {
+    u.grounded = true;
+    u.burnT = 0;
+    u.swing = -1;
+    applyPerks(u);
+    u.hp = u.maxHp;
+    spawnBurst(u.x, u.y - u.alt - 40, 10, { color: '#d8cfbc', speed: 90, up: 20, g: 120, life: 1.2, size: 2 });
+    if (u.team === 0) floatText(u.x, u.y - u.alt - 70, 'Feather fall!', '#d8cfbc');
     return;
   }
   killUnit(u, src);
@@ -1001,6 +1129,16 @@ function updateUnit(u, dt) {
   for (const k of ['haste', 'slow', 'empower', 'enfeeble']) if (fx[k] > 0) fx[k] -= dt;
   if (fx.shieldT > 0) { fx.shieldT -= dt; if (fx.shieldT <= 0) fx.shield = 0; }
   if (u.jumpT > 0) u.jumpT -= dt;
+  if (u.dropT > 0) u.dropT -= dt;
+  if (u.type === 'ninja') {
+    u.parryCd -= dt;
+    updateNinjaMode(u);
+  } else if (u.type === 'flyer') {
+    // climb to cruising height (or glide down after Feather Fall)
+    const want = isFlying(u) ? FLY_ALT + Math.sin(RT * 1.7 + u.seed) * 4 : 0;
+    u.alt += (want - u.alt) * Math.min(1, dt * (u.grounded ? 3 : 2));
+    if (u.grounded && u.alt < 0.5) u.alt = 0;
+  }
   // knocked back by a giant: slide, then lie stunned
   if (u.knockV) {
     u.x += u.knockV * dt;
@@ -1016,8 +1154,9 @@ function updateUnit(u, dt) {
   else updateFighter(u, dt);
   if (!u.praying) u.pray = -1;
   if (u.type === 'miner' && !u.panUsed) freePanSlot(u);
+  if (u.type === 'ninja') updateStealth(u, dt);
   if (u.moving) {
-    u.walk += dt * (u.type === 'sword' && !u.slow ? 13 : u.type === 'miner' ? 7 : 9) * u.speedMul;
+    u.walk += dt * ((u.type === 'sword' || u.type === 'ninja') && !u.slow ? 13 : u.type === 'miner' ? 7 : 9) * u.speedMul;
     u.stillT = 0;
   } else {
     u.stillT += dt;
@@ -1039,7 +1178,7 @@ function separate(dt) {
     const a = us[i];
     for (let j = i + 1; j < us.length; j++) {
       const b = us[j];
-      if (a.team !== b.team) continue;
+      if (a.team !== b.team || isFlying(a) !== isFlying(b)) continue;   // the air and the ground don't jostle
       const dx = b.x - a.x, dy = b.y - a.y;
       if (Math.abs(dx) < 14 && Math.abs(dy) < 10) {
         const s = dy !== 0 ? Math.sign(dy) : a.id < b.id ? 1 : -1;

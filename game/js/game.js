@@ -90,6 +90,9 @@ function spawnUnit(team, type, x, y) {
   const u = new Unit(type, team.id, x, y === undefined ? rnd(LANE_TOP + 10, LANE_BOT - 10) : y, fromDoor ? team.upgrades[type] : null);
   if (fromDoor) {
     u.slotY = rnd(LANE_TOP + 10, LANE_BOT - 10);
+    // ninjas drop off the rampart by the Dojo; Kestrels launch from the Aerie and glide down
+    if (type === 'ninja') u.dropT = 0.5;
+    if (type === 'flyer') u.alt = LANE_TOP - WALL_TOP + 20;
     if (type === 'miner') {
       // the small mine / pray / pan toggle decides where fresh miners head
       if (team.minerDefault === 'pray') u.order = { type: 'mana' };
@@ -367,14 +370,14 @@ function updateCastleArcher(team, a, dt, garrisoned) {
   const S = castleArcherStats(team);
   let best = null, bs = 1e9;
   for (const e of G.units) {
-    if (e.team === team.id || e.dead || e.inside) continue;
+    if (e.team === team.id || !canTarget(team.castleSrc, e)) continue;
     const d = Math.abs(e.x - a.x);
     if (d >= S.range) continue;
-    const s = d - tauntBias(e);
+    const s = targetScore(team.castleSrc, e, d);
     if (s < bs) { bs = s; best = e; }
   }
   if (best) {
-    const dx = best.x - a.x, dy = best.y - 40 - (a.y - 45);
+    const dx = best.x - a.x, dy = targetAimY(best) - (a.y - 45);
     a.f = dx >= 0 ? 1 : -1;
     const want = Math.atan2(dy, Math.abs(dx)) - 0.35 * (Math.abs(dx) / S.range);
     a.fa += (want - a.fa) * Math.min(1, dt * 8);
@@ -405,14 +408,15 @@ function updateArchers(team, dt) {
   for (const a of team.archers) updateCastleArcher(team, a, dt, garrisoned);
 }
 
-function fireArrow(team, x, y, target, dmg, src, fire) {
+// opts.kind: 'arrow' | 'star' (ninja) | 'bolt' (kestrel crossbow); opts.crit marks a critical hit
+function fireArrow(team, x, y, target, dmg, src, fire, opts = {}) {
   // lead a moving target by the arrow's actual flight time
   const v = !target.isStructure && target.moving ? target.facing * unitSpeed(target) : 0;
   let T = 0.6 + Math.abs(target.x - x) / 900;
   T = 0.6 + Math.abs(target.x + v * T - x) / 900;
   const tx = target.x + v * T, ty = targetAimY(target);
   const g = 500;
-  G.projectiles.push({ x, y, vx: (tx - x) / T, vy: (ty - y - 0.5 * g * T * T) / T, g, t: 0, T, target, team, dmg, src, fire: !!fire });
+  G.projectiles.push({ x, y, vx: (tx - x) / T, vy: (ty - y - 0.5 * g * T * T) / T, g, t: 0, T, target, team, dmg, src, fire: !!fire, kind: opts.kind || 'arrow', crit: !!opts.crit });
 }
 
 function updateProjectiles(dt) {
@@ -430,9 +434,11 @@ function updateProjectiles(dt) {
       const src = p.src && !p.src.dead ? p.src : null;
       if (hit) {
         damage(t, p.dmg * rnd(0.85, 1.15), src);
+        if (p.crit) showCrit(t);
         if (p.fire && !t.isStructure && !t.dead) { t.burnT = BURN_TIME; t.burnSrc = src; }
+        if (p.kind === 'star' && isGiant(t) && !t.dead) confuseGiant(t, STAR.confuse);   // stars disorient giants
       }
-      else G.particles.push({ kind: 'stuck', x: p.x, y: Math.max(p.y, LANE_TOP), ang: Math.atan2(p.vy, p.vx), life: 6, max: 6 });
+      else if (p.kind !== 'star') G.particles.push({ kind: 'stuck', x: p.x, y: Math.max(p.y, LANE_TOP), ang: Math.atan2(p.vy, p.vx), life: 6, max: 6 });
       p.done = true;
     }
   }

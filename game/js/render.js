@@ -200,7 +200,19 @@ function drawUnitBody(ctx, u) {
   if (!dying) drawBuffsUnder(ctx, u);
   const leapLift = !dying && u.leapSwing && u.swing >= 0 && u.swing < 0.6 ? Math.sin((u.swing / 0.6) * Math.PI) * 16 : 0;
   const jumpLift = !dying && u.jumpT > 0 ? Math.sin((1 - u.jumpT / 0.5) * Math.PI) * 26 : 0;   // leaping out over the spear line
-  const lift = Math.max(leapLift, jumpLift);
+  const dropLift = !dying && u.dropT > 0 ? (u.dropT / 0.5) ** 2 * (LANE_TOP - WALL_TOP) : 0;    // ninja dropping off the rampart
+  const lift = Math.max(leapLift, jumpLift, dropLift);
+  // flyers: everything from here on (body, buffs, health bar) is drawn up in the air
+  const alt = dying ? u.alt * Math.max(0, 1 - u.deathT / 0.6) : u.alt;
+  ctx.save();
+  if (alt) ctx.translate(0, -alt);
+  drawUnitInAir(ctx, u, dying, fall, alpha, lift);
+  ctx.restore();
+}
+
+function drawUnitInAir(ctx, u, dying, fall, alpha, lift) {
+  // a vanished ninja is a faint shimmer (your own are a little easier to see)
+  if (u.stealth && !dying) alpha *= u.team === 0 ? 0.35 : 0.18;
   drawStickman(ctx, {
     x: u.x, y: u.y, facing: u.facing, scale: u.scale, team: u.team, type: u.type,
     walk: u.walk, moving: u.moving && !dying, swing: dying ? -1 : u.swing, carry: u.carry, carryCap: u.carryCap,
@@ -209,6 +221,7 @@ function drawUnitBody(ctx, u) {
     flash: u.lastStand > 0 ? (Math.sin(RT * 30) > 0 ? 1 : 0) : u.flash,
     wall: u.shieldWall, arch: u.type === 'archer' ? archPose(u, dying) : null, cast: u.swingKind === 'cast',
     chains: isGiant(u) ? giantChains(u) : 0, stone: u.isStatueGiant ? G.teams[u.team].statue.stone : null,
+    starRanged: u.starRanged, grounded: u.grounded, aimFa: u.aimFa,
   });
   if (dying) return;
   drawBuffsOver(ctx, u);
@@ -443,6 +456,21 @@ function drawProjectiles(ctx) {
   ctx.lineCap = 'round';
   for (const p of G.projectiles) {
     const a = Math.atan2(p.vy, p.vx), c = Math.cos(a), s = Math.sin(a);
+    if (p.kind === 'star') { drawStar(ctx, p.x, p.y, 4, p.t * 25); continue; }
+    if (p.kind === 'bolt') {
+      // a short, heavy crossbow bolt
+      ctx.strokeStyle = '#3a2a1a';
+      ctx.lineWidth = 2.4;
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y);
+      ctx.lineTo(p.x - c * 12, p.y - s * 12);
+      ctx.stroke();
+      ctx.fillStyle = '#9aa0a6';
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 1.6, 0, TAU);
+      ctx.fill();
+      continue;
+    }
     ctx.strokeStyle = '#2b1d10';
     ctx.lineWidth = 1.8;
     ctx.beginPath();
@@ -607,13 +635,15 @@ function render(ctx) {
   ctx.globalAlpha = 1;
 
   if (UI.hoverBuilding && G.state === 'play') {
-    const type = UI.hoverBuilding, bx = type === 'castle' ? 250 : BUILD_X[type];
+    const type = UI.hoverBuilding, hall = RAMPART_HALL_X[type];
+    const bx = type === 'castle' ? 250 : hall || BUILD_X[type] || GIANT_PIT_X;
+    const ly = type === 'castle' ? WALL_TOP - 40 : hall ? WALL_TOP - 115 : LANE_TOP - 135;
     ctx.font = '600 13px "Segoe UI", sans-serif';
     ctx.textAlign = 'center';
     ctx.fillStyle = 'rgba(0,0,0,0.7)';
-    ctx.fillRect(bx - 80, (type === 'castle' ? WALL_TOP - 40 : LANE_TOP - 135) - 15, 160, 20);
+    ctx.fillRect(bx - 80, ly - 15, 160, 20);
     ctx.fillStyle = '#e6d6aa';
-    ctx.fillText(`${buildingName(type)} — click for upgrades`, bx, type === 'castle' ? WALL_TOP - 40 : LANE_TOP - 135);
+    ctx.fillText(`${buildingName(type)} — click for upgrades`, bx, ly);
   }
   if (UI.placing) drawPlacing(ctx);
 

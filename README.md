@@ -1,6 +1,6 @@
 # Stickfront (prototype)
 
-A Stick War 2–style side-scrolling battle game. It's a test build with randomly generated maps (each with its own lane depth, gold layout and sometimes a Shrine to fight over), a castle you can garrison, statues with health and mana, gold mines, miners, five soldier types plus giants, tiered upgrades, and a computer opponent with three difficulty levels.
+A Stick War 2–style side-scrolling battle game. It's a test build with randomly generated maps (each with its own lane depth, gold layout and sometimes a Shrine to fight over), a castle you can garrison, statues with health and mana, gold mines, miners, seven soldier types plus giants (including vanishing ninjas and flying Kestrels), tiered upgrades, and a computer opponent with three difficulty levels.
 
 ## Run it
 Double-click **`Play Stickfront.bat`**. It opens the game in its own Microsoft Edge app window. If Edge isn't installed, it opens in your default browser. Nothing else needs to be installed.
@@ -10,11 +10,13 @@ Double-click **`Play Stickfront.bat`**. It opens the game in its own Microsoft E
 |---|---|---|---|
 | Miner | 150 | Miners' Lodge | Mines gold, prays for mana, or pans the castle stream. Fights back weakly |
 | Swordwrath | 125 | Barracks | Fast melee. Starts with a club |
-| Archer | 160 | Archery Range | Ranged, and can shoot over walls. Fragile up close |
+| Archer | 160 | Archery Range | Ranged, and can shoot over walls. Fragile up close. 10% chance to crit for double damage |
 | Spearton | 225 | Spear Hall | Armored front line. Each thrust also hits a second enemy (2 population) |
 | Cleric | 175 + 60 mana | Chapel (on the rampart) | Heals the most wounded nearby ally for 20. Never attacks |
 | Warlock | 175 + 60 mana | Sanctum (on the rampart) | Ranged bolt for 20 damage |
 | Giant | 450 + 120 mana | Giant Pit | 900 hp, heavy club with splash (4 population). Can't be commanded directly |
+| Ninja | 150 | Dojo (on the rampart) | Fast, fragile assassin. Triple-damage first blow, cuts through armor, can't be targeted while running. Hunts the weakest enemy, archers first |
+| Kestrel | 175 | Aerie (on the rampart) | Flies over the battle with a small crossbow. Only ranged attacks can hit it |
 
 ## Giants
 - **Targeting:** a giant always goes for the enemy with the most health, ignoring taunts. Each blow also splashes the 2 enemies beside its target, unless the target is another giant.
@@ -27,8 +29,36 @@ Double-click **`Play Stickfront.bat`**. It opens the game in its own Microsoft E
   - **Protein Diet I–III:** each tier makes giants bigger, tougher and stronger.
 - **Statue giant:** each statue holds a giant. When a statue is destroyed, its giant breaks free. It has every upgrade and is one size beyond Protein III. It can't be controlled and attacks relentlessly. Its first blow is a huge sweep that knocks back and stuns everything around it. **To win, destroy the enemy statue and then kill its giant.**
 
+## Ninjas
+75 hp, very fast, 15 damage per quick cut. Trained at the **Dojo** on the rampart; they drop straight down into the castle.
+- **Ambush:** the first blow of a fight (after 2.5s without striking), or any blow struck while vanished, deals **triple damage**.
+- **Vanish:** while running, a ninja can't be targeted by anything: arrows already in the air miss, and spells can't be aimed at it. Area damage (fireballs, giant splash) still hits. Striking or stopping reveals it, and it can't vanish again for **5 seconds**.
+- **Targeting:** it goes for the enemy with the least health nearby, and archers before anyone else. Shield walls still draw it in, unless it has Focus.
+- **Native pierce:** its blade ignores 30% of the target's armor.
+- **Crits:** 10% chance of a double-damage critical hit.
+- **Upgrades (Dojo):**
+  - **Serrated Blades:** ignores 65% of armor instead of 30%.
+  - **Parry:** every 6s, blocks one attack completely (not area damage) and stuns a melee attacker for 1.5s.
+  - **Focus:** ignores taunts.
+  - **Throwing Stars:** a ranged attack (range 230, 11 damage) that can hit Kestrels and sometimes disorients giants (15% chance per star, reduced by Blinders). **M** switches the selected ninjas between **Auto** (stars against Kestrels and giants, or when below 35% health; blade otherwise), **Blade** and **Stars**. The ambush only works with the blade.
+  - **Vital Points:** crit chance 10% → 20%.
+
+## Kestrels (flyers)
+70 hp, 15 damage crossbow bolts at range 300 (an archer does 24 at 380). Trained at the **Aerie** on the rampart; they launch off it and glide down to cruising height.
+- **Only ranged attacks can hit them:** archers, warlocks, castle archers, ninja stars and other Kestrels. Spells reach them too, but blight and healing pools on the ground don't. Melee units and giants can't touch them.
+- **Ranged units shoot them first** whenever one is in range, and the AI trains extra archers when you field them.
+- They fly over walls.
+- **Upgrades (Aerie):**
+  - **Feather Fall:** when shot down, the Kestrel glides to the ground and fights on with a knife (45 hp, 6 damage). On the ground anything can hit it.
+  - **Long Sights:** range 300 → 400.
+  - **Crank Winch:** reload 30% faster.
+  - **Barbed Bolts:** damage 15 → 21.
+
+## Critical hits
+Archers and ninjas have a 10% chance to land a critical hit for double damage, shown as "Crit!". **Eagle Eye** (Archery Range) and **Vital Points** (Dojo) raise it to 20%. Castle archers don't crit.
+
 ## Formations
-Attack together and Advance together march with Spearton in front, Swordwrath behind and archers and mages at the back. When the enemy is close, the Swordwrath leap out from behind the spears to fight while the shield wall holds the line.
+Attack together and Advance together march with Spearton in front, Swordwrath and ninjas behind, Kestrels overhead and archers and mages at the back. When the enemy is close, the Swordwrath and ninjas leap out from behind the spears to fight while the shield wall holds the line.
 
 ## Difficulty
 Choose it on the title screen. The pause menu shows the current setting.
@@ -95,7 +125,8 @@ The Cleric and Warlock are exact opposites. They have the same cost, health, ran
 | I / O | Miners: mine / pray |
 | B / J / N | Build wall / Fortify wall / Replenish deposit |
 | G / Z | Muster point / miners-only retreat |
-| 1 – 6, − | Train Miner / Swordwrath / Archer / Spearton / Cleric / Warlock / Giant |
+| 1 – 6, −, =, [ | Train Miner / Swordwrath / Archer / Spearton / Cleric / Warlock / Giant / Ninja / Kestrel |
+| M | Ninjas with Throwing Stars: weapon Auto / Blade / Stars |
 | 7 8 9 0 / L | Cast mage spells / toggle auto-cast |
 | U | Cycle upgrade panels |
 | A / D, arrows, mouse wheel | Scroll |
