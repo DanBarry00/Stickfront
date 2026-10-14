@@ -24,6 +24,8 @@ class Unit {
     this.seed = rnd(0, 100);
     this.walk = rnd(0, TAU);
     this.moving = false;
+    this.stepDist = 0;   // distance walked this frame
+    this.pace = 0;       // smoothed share of full speed actually walked (slows the legs in formation)
     this.slow = false;
     this.swing = -1;
     this.swingDur = 1;
@@ -227,12 +229,11 @@ function canTarget(u, e) {
 }
 
 // Lower is better. Taunts (shield walls) pull everyone except focused ninjas; ninjas hunt the
-// weakest enemy and go for archers first; ranged attackers shoot flyers first.
+// weakest enemy and go for archers first; flyers get no special priority.
 function targetScore(u, e, d) {
   const ninja = u && u.type === 'ninja';
   let s = ninja ? e.hp + d * 0.25 - (e.type === 'archer' ? 300 : 0) : d;
   if (!(ninja && u.perks.focus)) s -= tauntBias(e) * (ninja ? 4 : 1);
-  if (isFlying(e) && (!u || u.castle || isRanged(u))) s -= 400;
   return s;
 }
 
@@ -265,8 +266,11 @@ function armorOf(u, attacker) {
   return Math.min(0.9, a);
 }
 
+// Natural walking speed before any slows, buffs or formation pace.
+const baseSpeed = u => (u.grounded ? GROUNDED.speed : u.def.speed) * u.speedMul;
+
 function unitSpeed(u) {
-  let s = u.def.speed * u.speedMul;
+  let s = baseSpeed(u);
   if (u.type === 'miner') s *= 1 - 0.22 * (u.carry / u.carryCap);
   if (u.shieldWall) s *= 0.45;
   if (u.slow) s *= 0.45;
@@ -299,6 +303,7 @@ function moveTo(u, tx, ty, dt) {
   if (moved > 0.01) {
     u.moving = true;
     u.runDist += moved;
+    u.stepDist += moved;   // drives the leg animation, so legs match the real pace
   }
   if (Math.abs(dx) > 4) u.facing = dx > 0 ? 1 : -1;
   return false;
@@ -411,7 +416,7 @@ function onSwingHit(u) {
   }
 }
 
-// One hammer blow on a wall: raises a new wall, or builds a second tier onto it.
+// One spade-load on a trench: digs a new one, raises its palisade, or repairs a damaged one.
 function buildHit(u, w) {
   if (!w || w.dead) return;
   spawnBurst(u.x + u.facing * 18, u.y - 20, 3, { color: w.stone, speed: 60, up: 60, g: 400, life: 0.5, size: 2 });
@@ -420,7 +425,7 @@ function buildHit(u, w) {
     w.hp = Math.max(1, w.max * w.progress);
     if (w.progress >= 1) {
       w.hp = w.max;
-      if (w.team === 0) toast('Wall complete');
+      if (w.team === 0) toast('Trench complete');
     }
   } else if (w.reinforcing) {
     const step = Math.min(WALL_BUILD_PER_HIT, 1 - w.rprog);
@@ -430,9 +435,24 @@ function buildHit(u, w) {
     if (w.rprog >= 1) {
       w.tier = 2;
       w.reinforcing = false;
-      if (w.team === 0) toast('Wall fortified');
+      if (w.team === 0) toast('Palisade raised');
     }
+  } else if (w.hp < w.max) {
+    w.hp = Math.min(w.max, w.hp + w.max * WALL_REPAIR);
+    if (w.hp >= w.max && w.team === 0) floatText(w.x, LANE_TOP - 50, 'Trench repaired', '#c9b27a');
   }
+}
+
+// A trench needs work: unfinished, palisade under way, or damaged.
+const trenchNeedsWork = w => !!w && !w.dead && (w.progress < 1 || w.reinforcing || w.hp < w.max);
+
+// Send builders to repair the most damaged of the team's finished trenches. Returns the trench.
+function repairTrenches(team, builders) {
+  const hurt = G.walls.filter(w => w.team === team.id && !w.dead && w.progress >= 1 && w.hp < w.max);
+  if (!hurt.length) return null;
+  const w = hurt.sort((a, b) => a.hp / a.max - b.hp / b.max)[0];
+  for (const u of builders) setOrder(u, { type: 'build', wall: w });
+  return w;
 }
 
 // Move into reach of target and attack it (melee swing or bow shot).
@@ -445,8 +465,15 @@ function engage(u, t, dt) {
     if (u.swing < 0 && u.atkCd <= 0) startSwing(u, ranged ? 'shoot' : 'attack', t);
     return;
   }
-  if (u.swing >= 0) return; // finish the current swing before chasing
   const side = t.x >= u.x ? -1 : 1;
+  if (u.swing >= 0) {
+    // lunge: during the wind-up a melee attacker keeps stepping after a target that is
+    // backing away, so the blow still lands on a fleeing unit (otherwise finish the swing first)
+    if (!ranged && u.swingKind === 'attack' && u.swingTarget === t && u.swing < 0.5 && !t.isStructure) {
+      moveTo(u, t.x + side * u.range * 0.5, clamp(t.y, LANE_TOP, LANE_BOT), dt);
+    }
+    return;
+  }
   if (ranged) {
     moveTo(u, t.x + side * (u.range * 0.85 + (t.isStructure ? t.halfW : 0)), u.slotY, dt);
     return;
@@ -584,16 +611,18 @@ function updateGroups(dt) {
     for (const u of g.members.slice().sort((a, b) => a.id - b.id)) (byType[u.type] = byType[u.type] || []).push(u);
     for (const [type, list] of Object.entries(byType)) list.forEach((u, i) => { u.groupSlot = rankSlot(type, i, list.length, g.anchor, dir); });
     // the formation moves at its slowest member's pace; a raised shield wall slows everyone
-    let sp = Math.min(...g.members.map(u => u.def.speed * u.speedMul * spellSpeed(u)));
+    let sp = Math.min(...g.members.map(u => baseSpeed(u) * spellSpeed(u)));
     if (g.members.some(u => u.shieldWall)) sp *= 0.45;
     if (g.mode === 'advance') sp *= 0.75;
     if (g.mode === 'retreat') sp *= 0.7;
     g.speed = sp;
     const es = G.teams[1 - g.team].statue;
     const goal = g.mode === 'retreat' ? team.gateX + dir * 40 : es.x - dir * (es.halfW + 30);
-    // halt while the line is fighting (except when retreating) or while stragglers catch up
-    const fighting = g.mode !== 'retreat' && g.members.some(u => u.grpFighting);
-    const behind = g.members.some(u => Math.abs(u.x - u.groupSlot.x) > (g.mode === 'retreat' ? 120 : 70));
+    // halt while the front line is in melee (except when retreating) or while stragglers catch up.
+    // Archers, warlocks and Kestrels shooting from the back don't stop the march: they fire and
+    // then hurry back into rank, and the line only waits if one falls far behind.
+    const fighting = g.mode !== 'retreat' && g.members.some(u => u.grpFighting && !isRanged(u));
+    const behind = g.members.some(u => Math.abs(u.x - u.groupSlot.x) > (g.mode === 'retreat' ? 120 : isRanged(u) ? 200 : 70));
     const prev = g.anchor;
     // form up first (spearton to the front, archers to the back), then march
     if (g.forming === undefined) g.forming = g.mode === 'retreat' ? 0 : 4;
@@ -606,6 +635,7 @@ function updateGroups(dt) {
       g.anchor = Math.abs(d) <= step ? goal : g.anchor + Math.sign(d) * step;
     }
     g.marching = g.anchor !== prev;
+    g.march = Math.sign(g.anchor - prev);   // which way the line is moving (0 when halted)
     if (g.mode === 'retreat' && Math.abs(goal - g.anchor) < 1 && !behind) {
       for (const u of g.members) setOrder(u, { type: 'hold', x: u.groupSlot.x, y: u.groupSlot.y });
       g.done = true;
@@ -616,13 +646,15 @@ function updateGroups(dt) {
 
 // One member of a marching formation.
 function doGroup(u, dt) {
-  const g = u.order.g, team = G.teams[u.team], slot = u.groupSlot;
+  const g = u.order.g, slot = u.groupSlot;
   u.grpFighting = false;
   if (!slot) return;
   const reach = isRanged(u) ? u.range : u.range + 10;
-  let t = nearestEnemy(u, reach + 10);
+  // while the line marches, a shooter that has dropped well behind its rank catches up before firing again
+  const lagging = isRanged(u) && g.marching && g.march * (slot.x - u.x) > 90;
+  let t = lagging ? null : nearestEnemy(u, reach + 10);
   if (t && !inReach(u, t, 0)) t = null;
-  if (!t && g.mode === 'attack') t = nearestEnemy(u, isRanged(u) ? u.range : 140);
+  if (!t && g.mode === 'attack' && !lagging) t = nearestEnemy(u, isRanged(u) ? u.range : 140);
   // swordwrath (and ninjas) behind the spear line sprint out and leap over it once the enemy is close
   if (!t && (u.type === 'sword' || u.type === 'ninja') && g.mode !== 'retreat') {
     const near = nearestEnemy(u, 150);
@@ -636,12 +668,29 @@ function doGroup(u, dt) {
   if (!t && g.mode !== 'retreat' && !es.dead && inReach(u, es, 0)) t = es;
   if (t) {
     u.grpFighting = true;
+    // shooters reload on the move: they only stop for the shot itself
+    if (isRanged(u) && g.marching && u.swing < 0 && u.atkCd > 0 && inReach(u, t, 0)) return keepRank(u, g, dt);
     return engage(u, t, dt);
   }
   if (u.swing >= 0) return;
+  keepRank(u, g, dt);
+}
+
+// Walk with the formation. While the line marches, aim a little ahead of the rank slot so the
+// unit never "arrives" and stops, and match the line's pace: a bit faster when behind, slower
+// when ahead. Faster units simply walk slower (their legs slow down to match).
+function keepRank(u, g, dt) {
+  const team = G.teams[u.team], slot = u.groupSlot;
   const off = Math.abs(u.x - slot.x) + Math.abs(u.y - slot.y);
-  u.capSpeed = off > 30 ? null : g.speed * 1.1;   // catch up at full speed, then keep pace
-  if (g.marching) u.settled = false;               // keep step with a moving line, no stop-start
+  if (g.marching && off < 120) {
+    const lag = g.march * (slot.x - u.x);
+    u.capSpeed = g.speed * clamp(1 + lag / 40, 0.6, 1.8);
+    u.settled = false;
+    moveTo(u, slot.x + g.march * 24, slot.y, dt);
+    u.facing = g.mode === 'retreat' ? team.dir : g.march;
+    return;
+  }
+  u.capSpeed = null;   // forming up, halted, or far out of place: full speed to the slot
   if (moveTo(u, slot.x, slot.y, dt) || g.mode === 'retreat') u.facing = team.dir;
 }
 
@@ -653,7 +702,7 @@ function doManWall(u, team, dt) {
     return;
   }
   const slot = Math.max(0, w.guards.indexOf(u));
-  const sx = w.x - team.dir * 3, sy = wallSegY(slot) + 1;
+  const sx = w.x - team.dir * (3 + (slot - (WALL_SEGS - 1) / 2) * 5), sy = wallSegY(slot) + 1;   // on the crest of this row
   if (!u.onWall) {
     if (u.swing < 0 && moveTo(u, sx, sy, dt)) u.onWall = w;
     return;
@@ -885,7 +934,7 @@ function doMana(u, team, dt) {
 
 function doBuild(u, team, dt) {
   const w = u.order.wall;
-  if (!w || w.dead || (w.progress >= 1 && !w.reinforcing)) { setOrder(u, { type: 'stance' }); return; }
+  if (!trenchNeedsWork(w)) { setOrder(u, { type: 'stance' }); return; }
   if (u.swing >= 0) return;
   const wx = w.x - team.dir * 22, wy = LANE_TOP + 8 + (u.id % 4) * 24;
   if (moveTo(u, wx, wy, dt)) {
@@ -1066,7 +1115,7 @@ function destroyWall(w) {
   w.hp = 0;
   for (let k = 0; k < WALL_SEGS; k++) spawnBurst(w.x, wallSegY(k) - 30, 6, { color: w.stone, speed: 160, up: 120, g: 650, life: 1.1, size: 4 });
   for (const g of w.guards) g.onWall = null;
-  if (w.team === 0) toast('A wall has fallen', 'warn');
+  if (w.team === 0) toast('A trench has been overrun', 'warn');
 }
 
 // Recompute aura buffs: sword Military Training (allies nearby) and spearton inspiration stacks.
@@ -1121,6 +1170,7 @@ function updateUnit(u, dt) {
   }
   u.capSpeed = null;
   u.moving = false;
+  u.stepDist = 0;
   u.praying = false;
   u.panning = false;
   u.panUsed = false;
@@ -1155,8 +1205,13 @@ function updateUnit(u, dt) {
   if (!u.praying) u.pray = -1;
   if (u.type === 'miner' && !u.panUsed) freePanSlot(u);
   if (u.type === 'ninja') updateStealth(u, dt);
+  // legs move in step with the distance actually covered, so a fast unit held to a slow
+  // formation pace walks slowly instead of sprinting on the spot; sprinters drop to a walk
+  const inst = dt > 0 ? Math.min(1.6, u.stepDist / (dt * baseSpeed(u))) : 0;
+  u.pace += (inst - u.pace) * Math.min(1, dt * 8);
   if (u.moving) {
-    u.walk += dt * ((u.type === 'sword' || u.type === 'ninja') && !u.slow ? 13 : u.type === 'miner' ? 7 : 9) * u.speedMul;
+    const sprinter = (u.type === 'sword' || u.type === 'ninja') && !u.slow && u.pace > 0.8;
+    u.walk += dt * (sprinter ? 13 : u.type === 'miner' ? 7 : 9) * u.speedMul * Math.max(0.35, u.pace);
     u.stillT = 0;
   } else {
     u.stillT += dt;

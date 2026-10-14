@@ -575,7 +575,7 @@ function drawStickman(ctx, o) {
   const panning = !!o.panning;
   const kneel = praying || panning;
   const wall = isSpear && o.wall;
-  const run = (isSword || isNinja) && o.moving;
+  const run = (isSword || isNinja) && o.moving && !(o.pace < 0.8);   // in a slow formation they walk
   const walk = o.moving && !run;
 
   // ---- hips and legs
@@ -2478,73 +2478,136 @@ function drawCastle(ctx, team, hoverKey) {
   }
 }
 
-// ---------------------------------------------------------------- defensive walls
+// ---------------------------------------------------------------- defensive trenches
 
+// A defensive trench, drawn one slice per lane row: a dug ditch on the enemy side, an earth
+// rampart piled up behind it with sharpened stakes jutting toward the enemy, and (Palisade) a
+// row of pointed logs along the top. Defenders stand on the rampart.
 function drawWallSeg(ctx, w, k) {
-  const st = TEAM_STYLE[w.team];
-  const y = wallSegY(k);
-  const x = w.x + (k - (WALL_SEGS - 1) / 2) * 3 * (w.team === 0 ? -1 : 1);
-  const stone = G.map.castles[w.team].stone, dark = shade(stone, -0.6);
-  const full = 64, h = Math.max(6, full * Math.min(1, w.progress));
-  ctx.fillStyle = 'rgba(0,0,0,0.3)';
-  ellipse(ctx, x, y + 1, 18, 4);
-  ctx.fill();
-  if (w.progress < 1) {
-    ctx.strokeStyle = '#4a3622';
-    ctx.lineWidth = 2;
+  const st = TEAM_STYLE[w.team], th = G.map.theme;
+  const f = w.team === 0 ? 1 : -1;   // the enemy is this way
+  const last = WALL_SEGS - 1, k1 = Math.min(last, k + 1);
+  const segX = i => w.x + (i - last / 2) * 5 * -f;   // the far end leans back a little (perspective)
+  const y0 = wallSegY(k), y1 = wallSegY(k1), x0 = segX(k), x1 = segX(k1);
+  const earth = shade(mixHex('#6b5338', th.ground[0], 0.3), (k % 2) * 0.03);
+  const dark = shade(earth, -0.55);
+  const dmg = w.progress >= 1 ? 1 - w.hp / w.max : 0;
+  const h = Math.max(4, WALL_H[0] * Math.min(1, w.progress) - dmg * 7);   // earth slumps as it's hacked at
+  // cross-section of the bank at a row: back foot, top back, top front, front foot
+  const prof = (x, y) => ({ back: [x - f * 36, y], topB: [x - f * 10, y - h], topF: [x + f * 3, y - h], front: [x + f * 12, y] });
+  const A = prof(x0, y0), B = prof(x1, y1);
+  const quad = (p, q, r, s, col) => {
+    ctx.fillStyle = col;
     ctx.beginPath();
-    ctx.moveTo(x - 15, y);
-    ctx.lineTo(x - 15, y - full - 6);
-    ctx.moveTo(x + 15, y);
-    ctx.lineTo(x + 15, y - full - 6);
-    ctx.moveTo(x - 17, y - full * 0.6);
-    ctx.lineTo(x + 17, y - full * 0.6);
-    ctx.moveTo(x - 15, y - full - 2);
-    ctx.lineTo(x + 15, y - full * 0.6);
+    ctx.moveTo(...p); ctx.lineTo(...q); ctx.lineTo(...r); ctx.lineTo(...s);
+    ctx.closePath();
+    ctx.fill();
+  };
+
+  // the ditch in front, running the depth of the lane
+  const depth = 3 + 4 * Math.min(1, w.progress), dx0 = x0 + f * 22, dx1 = x1 + f * 22;
+  quad([dx0 - f * 10, y0 - 2], [dx0 + f * 10, y0 - 2], [dx1 + f * 10, y1 + depth], [dx1 - f * 10, y1 + depth], shade(earth, -0.72));
+  if (k === last) {
+    quad([dx0 - f * 10, y0 - 2], [dx0 + f * 10, y0 - 2], [dx0 + f * 7, y0 + depth + 2], [dx0 - f * 7, y0 + depth + 2], shade(earth, -0.6));
+  }
+
+  // the bank between this row and the next: back slope, top and the steep face toward the enemy
+  if (k < last) {
+    quad(A.back, A.topB, B.topB, B.back, shade(earth, -0.12));
+    quad(A.topB, A.topF, B.topF, B.topB, shade(earth, 0.12));
+    quad(A.topF, A.front, B.front, B.topF, shade(earth, -0.3));
+    ctx.strokeStyle = rgba(dark, 0.6);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(...A.topB); ctx.lineTo(...B.topB);
+    ctx.moveTo(...A.topF); ctx.lineTo(...B.topF);
+    ctx.stroke();
+  } else {
+    // the near end of the bank: its cross-section
+    ctx.fillStyle = earth;
+    ctx.beginPath();
+    ctx.moveTo(...A.back);
+    ctx.quadraticCurveTo(x0 - f * 24, y0 - h * 0.85, ...A.topB);
+    ctx.lineTo(...A.topF);
+    ctx.lineTo(...A.front);
+    ctx.closePath();
+    ctx.fill();
+    texFill(ctx, Math.min(A.back[0], A.front[0]), y0 - h, 48, h, 0.6);
+    ctx.strokeStyle = dark;
+    ctx.lineWidth = 1.4;
+    ctx.stroke();
+    ctx.strokeStyle = rgba(dark, 0.45);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (const s of [0.35, 0.68]) {
+      ctx.moveTo(lerp(A.back[0], A.topB[0], s) + f * 2, y0 - h * s);
+      ctx.lineTo(lerp(A.front[0], A.topF[0], s) - f, y0 - h * s);
+    }
     ctx.stroke();
   }
-  ctx.fillStyle = shade(stone, -0.1 + (k % 2) * 0.05);
-  ctx.fillRect(x - 12, y - h, 24, h);
-  texFill(ctx, x - 12, y - h, 24, h, 0.8);
-  drawBricks(ctx, x - 12, y - h, x + 12, y, dark, 0.6);
-  ctx.strokeStyle = dark;
-  ctx.lineWidth = 1.5;
-  ctx.strokeRect(x - 12, y - h, 24, h);
-  // Fortification: a darker, iron-banded course built on top of the original wall
+  if (w.progress >= 1) {
+    // a little grass along the crest
+    ctx.strokeStyle = shade(th.grass, -0.1);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let i = 0; i < 3; i++) {
+      const gx = lerp(A.topB[0], A.topF[0], i / 2) + (i - 1) * 0.5;
+      ctx.moveTo(gx, y0 - h);
+      ctx.lineTo(gx + (i % 2 ? 2 : -2), y0 - h - 3);
+    }
+    ctx.stroke();
+  }
+
+  // sharpened stakes jutting from the face toward the enemy (knocked out as it's damaged)
+  const stakes = w.progress < 0.5 ? 0 : dmg > 0.66 ? 0 : dmg > 0.33 ? 1 : 2;
+  ctx.strokeStyle = '#5a4026';
+  ctx.lineWidth = 2.2;
+  ctx.beginPath();
+  for (let i = 0; i < stakes; i++) {
+    const s = 0.35 + i * 0.3, sx = lerp(A.front[0], A.topF[0], s), sy = y0 - h * s;
+    ctx.moveTo(sx - f * 3, sy + 2);
+    ctx.lineTo(sx + f * 12, sy - 5);
+  }
+  if (dmg > 0.33) {   // a broken stake lying in the ditch
+    ctx.moveTo(dx0 - 6, y0 - 1);
+    ctx.lineTo(dx0 + 5, y0 + 1);
+  }
+  ctx.stroke();
+
+  // Palisade: pointed logs along the crest
   const extra = (WALL_H[1] - WALL_H[0]) * (w.tier === 2 ? 1 : w.reinforcing ? w.rprog : 0);
   if (extra > 0) {
-    const ty = y - h - extra;
-    ctx.fillStyle = shade(stone, -0.25);
-    ctx.fillRect(x - 13, ty, 26, extra);
-    texFill(ctx, x - 13, ty, 26, extra, 0.8);
-    drawBricks(ctx, x - 13, ty, x + 13, y - h, dark, 0.7);
-    ctx.fillStyle = '#3d4044';
-    ctx.fillRect(x - 13, y - h - 2, 26, 2.5);
-    if (extra > 8) ctx.fillRect(x - 13, ty + 2, 26, 2);
-    ctx.strokeRect(x - 13, ty, 26, extra);
-  }
-  if (w.progress >= 1) {
-    const ht = h + extra;   // crenellations sit on the top course
-    ctx.fillStyle = shade(stone, -0.1);
-    ctx.fillRect(x - 13, y - ht - 8, 9, 8);
-    ctx.fillRect(x + 4, y - ht - 8, 9, 8);
-    ctx.strokeRect(x - 13, y - ht - 8, 9, 8);
-    ctx.strokeRect(x + 4, y - ht - 8, 9, 8);
-    const dmg = 1 - w.hp / w.max;
-    if (dmg > 0.25) {
-      ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+    for (let i = 0; i < 3; i++) {
+      const lx = lerp(A.topB[0], A.topF[0], i / 2), top = y0 - h - extra - (i % 2) * 2;
+      ctx.fillStyle = i % 2 ? '#6a4a2c' : '#5a3e24';
       ctx.beginPath();
-      ctx.moveTo(x - 6, y - h + 6);
-      ctx.lineTo(x - 1, y - h + 20);
-      ctx.lineTo(x - 5, y - h + 32);
-      if (dmg > 0.6) {
-        ctx.moveTo(x + 7, y - 6);
-        ctx.lineTo(x + 2, y - 22);
-      }
+      ctx.moveTo(lx - 2.6, y0 - h + 1);
+      ctx.lineTo(lx - 2.6, top);
+      ctx.lineTo(lx, top - 5);
+      ctx.lineTo(lx + 2.6, top);
+      ctx.lineTo(lx + 2.6, y0 - h + 1);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = '#2a1c10';
+      ctx.lineWidth = 0.8;
       ctx.stroke();
     }
-    if (k === 0) drawBanner(ctx, x - 6, y - ht - 4, 12, 24, 'plain', st);
+    ctx.fillStyle = '#3a3a3e';
+    ctx.fillRect(Math.min(A.topB[0], A.topF[0]) - 2, y0 - h - extra * 0.45, 16, 1.6);   // lashing
   }
+
+  // under construction: a spade stuck in the spoil heap
+  if (w.progress < 1 && k === last) {
+    ctx.strokeStyle = '#5a4026';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(A.back[0] + f * 2, y0 - 2);
+    ctx.lineTo(A.back[0] - f * 6, y0 - 22);
+    ctx.stroke();
+    ctx.fillStyle = '#8a8d90';
+    ctx.fillRect(A.back[0] - 2, y0 - 4, 5, 6);
+  }
+  if (w.progress >= 1 && k === 0) drawBanner(ctx, A.topB[0], y0 - h - extra - 2, 10, 20, 'plain', st);
 }
 
 // ---------------------------------------------------------------- mines
@@ -2861,51 +2924,95 @@ function grainOver(c, w, h, alpha) {
   c.restore();
 }
 
-// Close-up bust of a unit for the training buttons. Reflects researched upgrades.
-function drawPortrait(cv, type, perks) {
-  const c = cv.getContext('2d'), W = cv.width, H = cv.height;
-  c.setTransform(1, 0, 0, 1, 0, 0);
-  c.clearRect(0, 0, W, H);
-  const bg = c.createRadialGradient(W * 0.6, H * 0.35, 4, W * 0.5, H * 0.5, W * 0.8);
-  bg.addColorStop(0, type === 'miner' ? '#5a4a30' : '#4e3a2c');
+// Small symbolic unit icons for the training bar, on a dark tile tinted with the group color.
+function drawUnitIcon(cv, type) {
+  const c = cv.getContext('2d'), W = cv.width;
+  c.setTransform(W / 40, 0, 0, W / 40, 0, 0);
+  c.clearRect(0, 0, 40, 40);
+  const gc = groupOf(type).color;
+  const bg = c.createRadialGradient(20, 18, 2, 20, 20, 26);
+  bg.addColorStop(0, shade(gc, -0.55));
   bg.addColorStop(1, '#0d0a08');
   c.fillStyle = bg;
-  c.fillRect(0, 0, W, H);
-  c.save();
-  c.scale(W / 100, H / 100);
-  if (type === 'miner') {
-    const g = c.createRadialGradient(76, 26, 0, 76, 26, 40);
-    g.addColorStop(0, 'rgba(240,200,110,0.35)');
-    g.addColorStop(1, 'rgba(240,200,110,0)');
-    c.fillStyle = g;
-    c.fillRect(0, 0, 100, 100);
+  c.fillRect(0, 0, 40, 40);
+  c.lineCap = 'round';
+  c.lineJoin = 'round';
+  const steel = '#c3c9cf', wood = '#7a5432', gold = '#d8ac2c', ink = '#141210';
+  const head = (x, y, r = 4.5) => { c.fillStyle = '#e8dcc0'; c.beginPath(); c.arc(x, y, r, 0, TAU); c.fill(); };
+  const line = (col, w, pts) => { c.strokeStyle = col; c.lineWidth = w; c.beginPath(); pts.forEach(([x, y], i) => (i ? c.lineTo(x, y) : c.moveTo(x, y))); c.stroke(); };
+  switch (type) {
+    case 'miner':
+      line(wood, 3.2, [[9, 33], [26, 12]]);
+      line(steel, 3.6, [[15, 8], [24, 7], [34, 15]]);
+      c.fillStyle = gold;
+      for (const [x, y, r] of [[27, 31, 3.4], [33, 28, 2.6], [31, 34, 2.4]]) { c.beginPath(); c.arc(x, y, r, 0, TAU); c.fill(); }
+      break;
+    case 'sword':
+      line(ink, 5, [[10, 30], [31, 9]]);
+      line(steel, 2.6, [[12, 28], [31, 9]]);
+      line(gold, 3, [[9, 23], [17, 31]]);
+      line(wood, 3, [[11, 29], [6, 34]]);
+      break;
+    case 'spear':
+      line(wood, 2.6, [[8, 35], [32, 6]]);
+      c.fillStyle = steel; c.beginPath(); c.moveTo(35, 3); c.lineTo(28, 7); c.lineTo(32, 11); c.closePath(); c.fill();
+      c.fillStyle = '#5a4430'; c.strokeStyle = '#8d939a'; c.lineWidth = 1.6;
+      c.beginPath(); c.ellipse(15, 24, 8, 10, 0, 0, TAU); c.fill(); c.stroke();
+      c.fillStyle = gold; c.beginPath(); c.arc(15, 24, 2.2, 0, TAU); c.fill();
+      break;
+    case 'ninja':
+      c.fillStyle = ink; c.beginPath(); c.arc(17, 20, 10, 0, TAU); c.fill();
+      c.fillStyle = '#d8c08a'; c.fillRect(9, 17, 17, 3.2);
+      line('#7a2a1e', 1.8, [[8, 18], [3, 21], [5, 26]]);
+      drawStar(c, 31, 30, 6, 0.4);
+      break;
+    case 'archer':
+      c.strokeStyle = '#3a2410'; c.lineWidth = 3; c.beginPath(); c.moveTo(13, 4); c.quadraticCurveTo(34, 20, 13, 36); c.stroke();
+      line('#d8cfbc', 0.9, [[13, 4], [13, 36]]);
+      line(wood, 1.8, [[6, 20], [33, 20]]);
+      c.fillStyle = steel; c.beginPath(); c.moveTo(37, 20); c.lineTo(31, 17); c.lineTo(31, 23); c.closePath(); c.fill();
+      break;
+    case 'flyer':
+      c.fillStyle = shade('#c49a2c', -0.35); c.strokeStyle = ink; c.lineWidth = 1.2;
+      c.beginPath(); c.moveTo(3, 18); c.quadraticCurveTo(20, 0, 37, 14); c.quadraticCurveTo(20, 10, 3, 18); c.closePath(); c.fill(); c.stroke();
+      head(21, 18, 3.6);
+      line('#e8dcc0', 2.2, [[20, 21], [16, 31]]);
+      line('#e8dcc0', 1.8, [[16, 31], [11, 36]]);
+      line('#6a4a2a', 2.6, [[20, 25], [32, 30]]);
+      line('#2a1c10', 1.6, [[31, 25], [33, 35]]);
+      break;
+    case 'cleric': {
+      const g = c.createRadialGradient(27, 10, 0, 27, 10, 13);
+      g.addColorStop(0, 'rgba(255,240,180,0.9)'); g.addColorStop(1, 'rgba(255,240,180,0)');
+      c.fillStyle = g; c.fillRect(12, 0, 28, 26);
+      line('#8a6a3a', 3, [[10, 36], [26, 11]]);
+      c.strokeStyle = '#f2dc8a'; c.lineWidth = 1.6; c.beginPath(); c.arc(27, 10, 4, 0, TAU);
+      for (let i = 0; i < 8; i++) { const a = (i / 8) * TAU; c.moveTo(27 + Math.cos(a) * 6, 10 + Math.sin(a) * 6); c.lineTo(27 + Math.cos(a) * 9, 10 + Math.sin(a) * 9); }
+      c.stroke();
+      break;
+    }
+    case 'warlock': {
+      const g = c.createRadialGradient(27, 10, 0, 27, 10, 13);
+      g.addColorStop(0, 'rgba(176,77,255,0.9)'); g.addColorStop(1, 'rgba(176,77,255,0)');
+      c.fillStyle = g; c.fillRect(12, 0, 28, 26);
+      line('#3a2a30', 3, [[10, 36], [26, 12]]);
+      c.fillStyle = '#d8b0ff'; c.beginPath(); c.arc(27, 10, 4, 0, TAU); c.fill();
+      c.fillStyle = '#bdb5a2'; c.beginPath(); c.arc(13, 26, 3.2, 0, TAU); c.fill();
+      break;
+    }
+    case 'giant':
+      line('#4e3620', 8, [[9, 35], [27, 11]]);
+      c.fillStyle = '#9a9da0';
+      for (const [x, y] of [[22, 13], [28, 18], [26, 8], [32, 13], [30, 6]]) c.fillRect(x - 1.8, y - 1.8, 3.6, 3.6);
+      c.strokeStyle = '#b8b2a6'; c.lineWidth = 1.6; c.beginPath(); c.arc(9, 35, 4, 0, TAU); c.stroke();
+      break;
   }
-  const pose = {
-    miner: { x: 30, y: 108, scale: 1.6, gear: 'lamp' },
-    sword: { x: 38, y: 114, scale: 1.55, gear: 'band' },
-    archer: { x: 36, y: 114, scale: 1.5, gear: 'hood', arch: { phase: 'draw', k: 0.85, fa: -0.15 } },
-    spear: { x: 34, y: 112, scale: 1.45, gear: 'band' },
-    cleric: { x: 40, y: 116, scale: 1.5, gear: 'none' },
-    warlock: { x: 40, y: 116, scale: 1.5, gear: 'none' },
-    giant: { x: 42, y: 106, scale: 1.45, gear: 'none', chains: 3 },
-    ninja: { x: 38, y: 112, scale: 1.55, gear: 'ninja' },
-    flyer: { x: 50, y: 108, scale: 1.25, gear: 'goggles' },
-  }[type];
-  drawStickman(c, {
-    ...pose, facing: 1, team: 0, type, walk: 0, moving: false, swing: -1,
-    carry: type === 'miner' ? 12 : 0, carryCap: 35, flash: 0, seed: 0, perks,
-  });
-  c.restore();
-  grainOver(c, W, H, 0.12);
-  const v = c.createRadialGradient(W / 2, H / 2, W * 0.3, W / 2, H / 2, W * 0.75);
-  v.addColorStop(0, 'rgba(0,0,0,0)');
-  v.addColorStop(1, 'rgba(0,0,0,0.6)');
-  c.fillStyle = v;
-  c.fillRect(0, 0, W, H);
+  c.setTransform(1, 0, 0, 1, 0, 0);
+  grainOver(c, W, W, 0.08);
 }
 
 // Second-tier upgrades reuse their first tier's art with a "II" badge.
-const TIER2_ICON = { rage2: 'rage', bag2: 'bag', pick2: 'pick', devout2: 'devout', walls2: 'walls', shield2: 'shield', tithe2: 'tithe', pan2: 'pan1', protein2: 'protein', protein3: 'protein' };
+const TIER2_ICON = { rage2: 'rage', bag2: 'bag', pick2: 'pick', devout2: 'devout', shield2: 'shield', tithe2: 'tithe', pan2: 'pan1', protein2: 'protein', protein3: 'protein' };
 
 function drawUpgradeIcon(cv, type, key) {
   if (type === 'spear' && key === 'helm') key = 'shelm';
@@ -2975,12 +3082,23 @@ function drawUpgradeIcon(cv, type, key) {
       c.strokeStyle = '#9aa3ad'; c.lineWidth = 2.5; c.beginPath(); c.moveTo(13, 27); c.lineTo(27, 13); c.moveTo(13, 13); c.lineTo(27, 27); c.stroke();
       break;
     case 'walls':
-      c.fillStyle = '#6e6862'; c.strokeStyle = dark; c.lineWidth = 1;
-      for (let row = 0; row < 4; row++) for (let i = -1; i < 4; i++) {
-        const x = 5 + i * 10 + (row % 2) * 5, y = 30 - row * 7;
-        c.fillRect(Math.max(5, x), y, Math.min(9, 35 - x), 6); c.strokeRect(Math.max(5, x), y, Math.min(9, 35 - x), 6);
+      // an earth rampart with stakes, the ditch in front, and a spade
+      c.fillStyle = '#6a5440'; c.strokeStyle = dark; c.lineWidth = 1.2;
+      c.beginPath(); c.moveTo(3, 32); c.quadraticCurveTo(8, 18, 13, 16); c.lineTo(22, 16); c.lineTo(26, 32); c.closePath(); c.fill(); c.stroke();
+      c.fillStyle = '#251c14'; c.beginPath(); c.moveTo(26, 30); c.lineTo(38, 30); c.lineTo(36, 36); c.lineTo(28, 36); c.closePath(); c.fill();
+      c.strokeStyle = '#8a6a44'; c.lineWidth = 2; c.beginPath(); c.moveTo(21, 24); c.lineTo(32, 18); c.moveTo(23, 29); c.lineTo(34, 24); c.stroke();
+      c.strokeStyle = wood; c.lineWidth = 2; c.beginPath(); c.moveTo(16, 4); c.lineTo(10, 15); c.stroke();
+      c.fillStyle = steel; c.fillRect(7, 13, 6, 6);
+      break;
+    case 'walls2':
+      // pointed logs lashed along the top of a rampart
+      c.fillStyle = '#6a5440'; c.beginPath(); c.moveTo(2, 36); c.lineTo(8, 26); c.lineTo(32, 26); c.lineTo(38, 36); c.closePath(); c.fill();
+      for (let i = 0; i < 5; i++) {
+        const x = 8 + i * 6;
+        c.fillStyle = i % 2 ? '#6a4a2c' : '#5a3e24';
+        c.beginPath(); c.moveTo(x - 2.6, 27); c.lineTo(x - 2.6, 9 + (i % 2) * 2); c.lineTo(x, 4 + (i % 2) * 2); c.lineTo(x + 2.6, 9 + (i % 2) * 2); c.lineTo(x + 2.6, 27); c.closePath(); c.fill();
       }
-      c.fillRect(5, 4, 7, 5); c.fillRect(17, 4, 7, 5); c.fillRect(29, 4, 6, 5);
+      c.fillStyle = '#3a3a3e'; c.fillRect(5, 17, 30, 2);
       break;
     case 'drill':
       // three ranked helmets behind a raised blade

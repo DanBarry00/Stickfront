@@ -10,7 +10,7 @@ Double-click **`Play Stickfront.bat`**. It opens the game in its own Microsoft E
 |---|---|---|---|
 | Miner | 150 | Miners' Lodge | Mines gold, prays for mana, or pans the castle stream. Fights back weakly |
 | Swordwrath | 125 | Barracks | Fast melee. Starts with a club |
-| Archer | 160 | Archery Range | Ranged, and can shoot over walls. Fragile up close. 10% chance to crit for double damage |
+| Archer | 160 | Archery Range | Ranged, and can shoot over trenches. Fragile up close. 10% chance to crit for double damage |
 | Spearton | 225 | Spear Hall | Armored front line. Each thrust also hits a second enemy (2 population) |
 | Cleric | 175 + 60 mana | Chapel (on the rampart) | Heals the most wounded nearby ally for 20. Never attacks |
 | Warlock | 175 + 60 mana | Sanctum (on the rampart) | Ranged bolt for 20 damage |
@@ -46,8 +46,8 @@ Double-click **`Play Stickfront.bat`**. It opens the game in its own Microsoft E
 ## Kestrels (flyers)
 70 hp, 15 damage crossbow bolts at range 300 (an archer does 24 at 380). Trained at the **Aerie** on the rampart; they launch off it and glide down to cruising height.
 - **Only ranged attacks can hit them:** archers, warlocks, castle archers, ninja stars and other Kestrels. Spells reach them too, but blight and healing pools on the ground don't. Melee units and giants can't touch them.
-- **Ranged units shoot them first** whenever one is in range, and the AI trains extra archers when you field them.
-- They fly over walls.
+- Ranged units treat them like any other target (no special priority). The AI trains extra archers when you field them.
+- They fly over trenches.
 - **Upgrades (Aerie):**
   - **Feather Fall:** when shot down, the Kestrel glides to the ground and fights on with a knife (45 hp, 6 damage). On the ground anything can hit it.
   - **Long Sights:** range 300 → 400.
@@ -60,11 +60,13 @@ Archers and ninjas have a 10% chance to land a critical hit for double damage, s
 ## Formations
 Attack together and Advance together march with Spearton in front, Swordwrath and ninjas behind, Kestrels overhead and archers and mages at the back. When the enemy is close, the Swordwrath and ninjas leap out from behind the spears to fight while the shield wall holds the line.
 
+The whole formation walks smoothly at the pace of its slowest member: faster troops simply walk slower (their legs slow down to match) instead of hurrying ahead and stopping. Archers, warlocks and Kestrels at the back fire on the move, stopping only for the shot itself and then hurrying back into rank, so their shooting never halts the march. The line only stops when its front-line troops are fighting in melee, or if someone falls far behind.
+
 ## Difficulty
 Choose it on the title screen. The pause menu shows the current setting.
 - **Easy:** the old distractible opponent. Meant for learning the game.
 - **Normal:** a steady economy, a mixed army and tier-1 research. It holds its line in front of its mines, pulls its miners inside when raided, attacks when it has the edge (castle archers count as defenders) and falls back when it is losing. Meant to need some strategy and formations to beat.
-- **Hard:** researches everything it uses (all but Masonry, Fortification and Prospecting), uses mana, mages and giants, refits veterans, braces shield walls against archers, and attacks and retreats in formation. Meant to challenge a good player who still wins most of the time.
+- **Hard:** researches everything it uses (all but Earthworks, Palisade and Prospecting), uses mana, mages and giants, refits veterans, braces shield walls against archers, and attacks and retreats in formation. Meant to challenge a good player who still wins most of the time.
 
 Both Normal and Hard claim the Shrine when their army is strong enough, and save up for research when they've gone too long without any (unless they're behind). A harder level above Hard is planned.
 
@@ -97,6 +99,11 @@ The Cleric and Warlock are exact opposites. They have the same cost, health, ran
 - **Forcing a spell:** click a spell on the command card (or press 7 / 8 / 9 / 0), then click where to cast it. It works even with auto on. The nearest ready mage walks into range and casts. With both mage types selected, Shift + 7–0 casts the Warlock's spells.
 - **L** toggles auto-cast for the selected mages.
 
+## Defences
+- **Trenches** (Earthworks, Miners' Lodge): miners dig a ditch across the lane and pile an earth rampart behind it, with sharpened stakes facing the enemy. Enemies on foot can't pass until they hack it down (Kestrels fly over). 100 gold each, up to 3. **Palisade** adds a row of pointed logs along the top: taller, +800 hp. Builders can **repair** a damaged trench for free: right-click it with them, or press **Y** to send them to the most damaged one. Stakes get knocked out and the earth slumps as a trench takes damage.
+- **Castle archers** reach out to just past where an enemy archer has to stand to shoot your statue (assuming the same bow upgrades as yours), so an archer attacking your statue is always under fire. Recurve Bows extend their reach by the same 120 as your archers'.
+- **Chasing:** melee troops lunge after a target that backs away during their swing, so they can cut down a slower unit (like a miner) running for the castle.
+
 ## Economy
 - **Mining** about 2.3 gold/s per miner. **Praying** at the statue about 2.3 mana/s (4 at a time).
 - **Panning:** garrisoned miners (up to 5) kneel at the stream inside the castle and get 1 gold + 1 mana per tick, about 1.1 of each per second. That's half of prayer's mana rate, and it's completely safe.
@@ -104,15 +111,15 @@ The Cleric and Warlock are exact opposites. They have the same cost, health, ran
 - The statue earns no passive gold until you buy the **Statue Offerings** / **Golden Idol** castle upgrades.
 
 ## Controls
-- **Training** is on the bottom-left. The ⚒ next to each unit opens its building's upgrades, and the castle button at the end opens castle upgrades.
+- **Training** is on the bottom-left, as small icon buttons staggered over two rows in five colour-coded groups: **Workers** (Miner), **Infantry** (Swordwrath, Spearton, Ninja), **Ranged** (Archer, Kestrel), **Mages** (Cleric, Warlock) and **Giants**. Each group trains **one unit at a time** from a shared queue, in the order you click: a Spearton queued behind a Swordwrath waits for it. Click to train, right-click to cancel one (refunded). The small ⚒ in each button's corner opens its building's upgrades, and the castle button at the end opens castle upgrades.
 - **The command card** on the bottom-right shows upgrades when a building is open. Otherwise it shows orders for whatever units you have selected:
   - Attack together, Advance together, Retreat together: a formation march with Spearton in front, Swordwrath behind and archers and mages at the back, at the pace of the slowest unit (slower still behind a raised shield wall)
   - Defend, Garrison
   - Hold
-  - Defend Wall (needs Military Training from the Barracks or Rallying Cry from the Spear Hall): one row of melee troops stands on a wall, and blows against them are split half to the wall
+  - Defend Trench (needs Military Training from the Barracks or Rallying Cry from the Spear Hall): one row of melee troops stands on the rampart, and blows against them are split half to the trench
   - Shield Wall
   - Mine, Pray, Pan
-  - Build wall, Fortify wall, Replenish
+  - Dig trench, Palisade, Repair, Replenish
   - Refit
 - **Top-right buttons** command the **whole army**: Garrison / Defend / Attack (Q / W / E), **Muster** (G: where newly trained soldiers gather and where the defend line forms), and **Miners** (Z: miners only retreat inside and pan).
 
@@ -121,9 +128,9 @@ The Cleric and Warlock are exact opposites. They have the same cost, health, ran
 | Q / W / E | Whole army: Garrison / Defend / Attack |
 | Shift + Q / W / E | Selected units only |
 | Shift + E / C / Shift + C | Selected units attack / advance / retreat together |
-| S / K / X / R | Hold / Defend wall / Shield wall / Refit |
+| S / K / X / R | Hold / Defend trench / Shield wall / Refit |
 | I / O | Miners: mine / pray |
-| B / J / N | Build wall / Fortify wall / Replenish deposit |
+| B / J / Y / N | Dig trench / Palisade / Repair trenches / Replenish deposit |
 | G / Z | Muster point / miners-only retreat |
 | 1 – 6, −, =, [ | Train Miner / Swordwrath / Archer / Spearton / Cleric / Warlock / Giant / Ninja / Kestrel |
 | M | Ninjas with Throwing Stars: weapon Auto / Blade / Stars |
@@ -137,9 +144,9 @@ The Cleric and Warlock are exact opposites. They have the same cost, health, ran
 ## Code layout (`game/js`)
 - `config.js`: balance numbers, unit stats, upgrades and visual themes
 - `map.js`: generates the map from a seed (scenery, lane depth, gold layout, Shrine)
-- `draw.js`: stick figures and their animations, statues, the castle (with its stream), walls, mines, props, portraits and icons
-- `units.js`: unit behaviour (mining, praying, panning, building, combat, wall defense, refit, buffs)
-- `game.js`: game state, training, research, walls, castle archers, the Shrine, projectiles
+- `draw.js`: stick figures and their animations, statues, the castle (with its stream), trenches, mines, props and icons
+- `units.js`: unit behaviour (mining, praying, panning, building, combat, trench defense, refit, buffs)
+- `game.js`: game state, training queues, research, trenches, castle archers, the Shrine, projectiles
 - `giants.js`: giant obedience, targeting, splash, knockback and the statue giant
 - `ai.js`: the computer opponents (Easy, Normal, Hard)
 - `stats.js`: the battle timeline and end-screen charts, the debug overlay, autopilot and the headless balance test

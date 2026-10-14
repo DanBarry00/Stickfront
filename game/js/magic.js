@@ -257,11 +257,7 @@ function updateCleric(u, dt) {
   if (o.type === 'hold') { moveTo(u, o.x, o.y, dt); return; }
   if (o.type === 'group') {
     // marching with a formation: stay in the back rank and keep pace
-    const g = o.g, slot = u.groupSlot;
-    if (!slot) return;
-    u.capSpeed = Math.abs(u.x - slot.x) + Math.abs(u.y - slot.y) > 30 ? null : g.speed * 1.1;
-    if (g.marching) u.settled = false;
-    if (moveTo(u, slot.x, slot.y, dt) || g.mode === 'retreat') u.facing = team.dir;
+    if (u.groupSlot) keepRank(u, o.g, dt);
     return;
   }
   const stance = u.ownStance || team.stance;

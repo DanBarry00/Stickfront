@@ -21,7 +21,7 @@ class PoorAI {
     const army = mine.filter(u => u.type !== 'miner');
 
     // Economy: wants a few miners, then buys a random mix of soldiers.
-    if (miners.length + team.queues.miner.length < this.minerGoal) {
+    if (miners.length + queuedCount(team, 'miner') < this.minerGoal) {
       if (chance(0.75)) queueUnit(team, 'miner');
     } else if (chance(0.65)) {
       const r = Math.random();
@@ -111,7 +111,7 @@ class SmartAI {
   pickUnit(team) {
     const c = this.cfg;
     const army = G.units.filter(u => u.team === this.id && !u.dead && u.type !== 'miner');
-    const count = t => army.filter(u => u.type === t).length + team.queues[t].length;
+    const count = t => army.filter(u => u.type === t).length + queuedCount(team, t);
     // aim for a mixed army: a spear wall, plenty of swords, archers behind, some magic and a giant
     const n = army.length + 1;
     if (c.giants && n >= 6 && count('giant') < 1 + Math.floor(n / 14) && team.mana > 200 && team.gold >= UNIT_TYPES.giant.cost) return 'giant';
@@ -164,7 +164,7 @@ class SmartAI {
   economy(team, miners, armySize) {
     const c = this.cfg;
     const goal = armySize >= 4 ? c.miners : Math.min(c.miners, 6);   // a few soldiers before the full workforce
-    if (miners.length + team.queues.miner.length < goal) queueUnit(team, 'miner');
+    if (miners.length + queuedCount(team, 'miner') < goal) queueUnit(team, 'miner');
     const praying = miners.filter(u => u.order.type === 'mana').length;
     const panning = miners.filter(u => u.order.type === 'pan').length;
     const free = miners.filter(u => u.order.type === 'stance' || u.order.type === 'work');

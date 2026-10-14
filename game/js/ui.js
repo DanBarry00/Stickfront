@@ -4,7 +4,7 @@
 const VIEW = { w: 1280, cssScale: 1, dpr: 1 };
 const UI = {
   keys: {}, mouse: { x: 0, y: 0, in: false }, mouseWorld: [0, 0], drag: null,
-  hoverMine: null, hoverBuilding: null, placing: null, panel: null, portraitsDirty: true,
+  hoverMine: null, hoverBuilding: null, placing: null, panel: null,
   last: {}, toastT: 0, cardMode: '',
 };
 const $ = id => document.getElementById(id);
@@ -152,6 +152,12 @@ function issueCommand(wx, wy) {
       marker(wall.x, LANE_BOT, '#c9b27a');
       return;
     }
+    if (wall.progress >= 1 && wall.hp < wall.max && builders.length) {
+      // damaged: builders shovel the earth back up
+      for (const u of builders) setOrder(u, { type: 'build', wall });
+      marker(wall.x, LANE_BOT, '#c9b27a');
+      return;
+    }
     const fort = sel.filter(u => u.type === 'miner' && u.perks.walls2);
     if (wall.progress >= 1 && fort.length && wall.tier !== 2) {
       if (reinforceWall(me, wall, fort)) marker(wall.x, LANE_BOT, '#c9b27a');
@@ -214,8 +220,8 @@ function startPlacing(mode) {
     toast(me.upgrades.miner[key] ? `Select miners with ${name} (refit older ones with R)` : `Research ${name} at the Miners' Lodge first`);
     return false;
   };
-  if (mode === 'wall' && !need(builderSelection, 'walls', 'Masonry')) return;
-  if (mode === 'reinforce' && !need(fortifierSelection, 'walls2', 'Fortification')) return;
+  if (mode === 'wall' && !need(builderSelection, 'walls', 'Earthworks')) return;
+  if (mode === 'reinforce' && !need(fortifierSelection, 'walls2', 'Palisade')) return;
   if (mode === 'replenish' && !need(prospectorSelection, 'prospect', 'Prospecting')) return;
   UI.placing = mode;
 }
@@ -315,8 +321,9 @@ const ICONS = {
   mine: '<path d="M4 8c4-5 11-5 16 0" stroke-width="2.4"/><path d="M12 5L6 21" stroke-width="2"/>',
   pray: '<path d="M12 2l6 9-6 11-6-11z" fill="currentColor" stroke="none"/>',
   pan: '<ellipse cx="12" cy="13" rx="9" ry="4" fill="currentColor" stroke="none"/><path d="M2 20c3-2 5 2 8 0s5 2 8 0 3-1 4 0" stroke-width="1.6"/>',
-  wall: '<path d="M3 21h18M3 16h18M3 11h18M8 21v-5M16 21v-5M12 16v-5M5 11V6h3v2h3V6h2v2h3V6h3v5" stroke-width="1.6"/>',
-  reinforce: '<path d="M3 21h18M3 16h18M8 21v-5M16 21v-5" stroke-width="1.6"/><path d="M12 13V3M8 7l4-4 4 4" stroke-width="2"/>',
+  wall: '<path d="M2 20h5l3-9h5l3 9h4" stroke-width="1.8"/><path d="M15 15l6-4M13 12l5-4" stroke-width="1.6"/><path d="M3 20l2 2h0" stroke-width="1.4"/>',
+  reinforce: '<path d="M6 21V9l2-3 2 3v12M11 21V8l2-3 2 3v13M16 21V9l2-3 2 3v12" stroke-width="1.6"/><path d="M4 15h18" stroke-width="1.4"/>',
+  repair: '<path d="M14 3l-8 14" stroke-width="2"/><path d="M4 15l4 3-2 4-4-3z" fill="currentColor" stroke="none"/><path d="M13 21h9l-3-6h-4z" stroke-width="1.6"/>',
   replenish: '<path d="M4 21l4-7h8l4 7z" fill="currentColor" stroke="none"/><path d="M12 11V3M8 7l4-4 4 4" stroke-width="2"/>',
   refit: '<path d="M4 18h16M7 18v-4h10v4M9 14V9h6v5M12 9V4" stroke-width="2"/>',
   stars: '<path d="M12 2l2.2 7.8L22 12l-7.8 2.2L12 22l-2.2-7.8L2 12l7.8-2.2z" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="2" fill="#120d0a" stroke="none"/>',
@@ -330,13 +337,14 @@ const COMMANDS = [
   { id: 'advance', label: 'Advance', key: 'C', show: s => s.mil, run: () => formGroup(G.teams[0], milSel(), 'advance'), on: () => inGroup('advance') },
   { id: 'retreat', label: 'Retreat', key: '⇧C', show: s => s.mil, run: () => formGroup(G.teams[0], milSel(), 'retreat'), on: () => inGroup('retreat') },
   { id: 'hold', label: 'Hold', key: 'S', show: () => true, run: stopSelected },
-  { id: 'manwall', label: 'Defend wall', key: 'K', show: s => s.melee && s.canWall, run: () => manWall(G.teams[0], meleeSel(), null), on: () => meleeSel().every(u => u.order.type === 'manwall') },
+  { id: 'manwall', label: 'Defend trench', key: 'K', show: s => s.melee && s.canWall, run: () => manWall(G.teams[0], meleeSel(), null), on: () => meleeSel().every(u => u.order.type === 'manwall') },
   { id: 'shield', label: 'Shield wall', key: 'X', show: s => s.shield, run: toggleShieldWall, on: () => shieldSelection().every(u => u.shieldWall) },
   { id: 'mine', label: 'Mine', key: 'I', show: s => s.miner, run: () => minerSel().forEach(u => setOrder(u, { type: 'stance' })) },
   { id: 'pray', label: 'Pray', key: 'O', show: s => s.miner, run: () => minerSel().forEach(u => setOrder(u, { type: 'mana' })) },
   { id: 'pan', label: 'Pan', key: '⇧Q', show: s => s.miner && s.mil, run: () => minerSel().forEach(u => setOrder(u, { type: 'pan' })) },
-  { id: 'wall', label: 'Build wall', key: 'B', show: s => s.build, run: () => startPlacing('wall') },
-  { id: 'reinforce', label: 'Fortify wall', key: 'J', show: s => s.fort, run: () => startPlacing('reinforce') },
+  { id: 'wall', label: 'Dig trench', key: 'B', show: s => s.build, run: () => startPlacing('wall') },
+  { id: 'reinforce', label: 'Palisade', key: 'J', show: s => s.fort, run: () => startPlacing('reinforce') },
+  { id: 'repair', label: 'Repair', key: 'Y', show: s => s.build, run: () => { const w = repairTrenches(G.teams[0], builderSelection()); if (w) G.markers.push({ x: w.x, y: LANE_BOT, t: 0, color: '#c9b27a' }); else toast('None of your trenches need repair'); } },
   { id: 'replenish', label: 'Replenish', key: 'N', show: s => s.prosp, run: () => startPlacing('replenish') },
   { id: 'refit', label: 'Refit', key: 'R', show: () => true, run: refitSelected },
   { id: 'auto', label: 'Auto-cast', key: 'L', show: s => s.mage, run: toggleAutoCast, on: () => mageSel().every(u => u.auto) },
@@ -501,6 +509,7 @@ function initInput() {
       case 'KeyS': stopSelected(); break;
       case 'KeyB': startPlacing('wall'); break;
       case 'KeyJ': startPlacing('reinforce'); break;
+      case 'KeyY': runCommand('repair'); break;
       case 'KeyN': startPlacing('replenish'); break;
       case 'KeyX': toggleShieldWall(); break;
       case 'KeyR': refitSelected(); break;
@@ -594,13 +603,14 @@ const CMD_TIPS = {
   advance: 'March forward together in formation, holding ranks and fighting only what is in reach. The line halts while it fights.',
   retreat: 'Fall back toward the castle together, facing the enemy and still fighting anything in reach.',
   hold: 'Stop and hold this spot, fighting anything that comes close.',
-  manwall: 'Melee troops climb onto your nearest finished wall (one row, 4 per wall). Blows against them are split half to the wall.',
+  manwall: `Melee troops climb onto the rampart of your nearest finished trench (one row, ${WALL_GUARDS} per trench). Blows against them are split half to the rampart.`,
   shield: 'Spearton brace behind their shields: no attacks, big damage reduction, enemies prefer to hit them.',
   mine: 'Go back to mining gold.',
   pray: 'Kneel at the statue and pray for mana (4 at a time).',
   pan: 'Go into the castle and pan the stream for gold and mana (5 at a time).',
-  wall: `Place a wall (${WALL_COST} gold). Miners with Masonry build it.`,
-  reinforce: `Build a second, taller tier onto a finished wall (${WALL_COST} gold, +${WALL_HP2} hp).`,
+  wall: `Mark out a trench (${WALL_COST} gold). Miners with Earthworks dig it and pile up an earth rampart behind it.`,
+  repair: 'Send the selected builders to shovel your most damaged trench back into shape.',
+  reinforce: `Raise a sharpened log palisade on a finished trench (${WALL_COST} gold, +${WALL_HP2} hp).`,
   replenish: 'Restore a gold deposit, even an exhausted one.',
   refit: `Walk back to their building and take every upgrade they're missing (${REFIT_COST} gold and ${REFIT_TIME}s each).`,
   auto: `When on, mages cast their spells on their own and answer enemy spells with the opposite one. They keep ${SPELL_RESERVE} mana in reserve. You can still force any spell yourself.`,
@@ -611,7 +621,7 @@ function tipHTML(el) {
   const me = G.teams[0];
   if (el.dataset.unit) {
     const d = UNIT_TYPES[el.dataset.unit];
-    return `<b>${d.name}</b><span class="cost"><i class="ico gold"></i>${d.cost}${d.mana ? ` <i class="ico mana"></i>${d.mana}` : ''} · pop ${d.pop} · key ${d.hotkey}</span><p>${d.desc}</p><em>Trained at the ${d.building}. Click to train · × or right-click cancels</em>`;
+    return `<b>${d.name}</b><span class="cost"><i class="ico gold"></i>${d.cost}${d.mana ? ` <i class="ico mana"></i>${d.mana}` : ''} · pop ${d.pop} · key ${d.hotkey}</span><p>${d.desc}</p><em>Trained at the ${d.building} (${groupOf(d.key).name}: one unit at a time). Click to train · right-click cancels · ⚒ upgrades</em>`;
   }
   if (el.dataset.upg) {
     const [type, key] = el.dataset.upg.split(':');
@@ -648,27 +658,41 @@ function hideTip() { $('tip').classList.add('hidden'); }
 // ---------------------------------------------------------------- HUD
 
 function buildHUD() {
+  // Training bar: one color-coded block per training group, its unit buttons staggered over two
+  // rows. Each group trains one unit at a time. Click to train, right-click to cancel one,
+  // the small ⚒ opens that unit's building upgrades.
   const bar = $('train');
   bar.innerHTML = '';
-  for (const type of UNIT_ORDER) {
-    const def = UNIT_TYPES[type];
+  const BTN = 42, STEP = 24, ROW = BTN + 3;
+  for (const g of TRAIN_GROUPS) {
     const grp = document.createElement('div');
-    grp.className = 'tgroup';
-    grp.innerHTML = `
-      <button class="train" data-type="${type}" data-tip="" data-unit="${type}">
-        <canvas width="104" height="104"></canvas>
-        <kbd>${def.hotkey}</kbd><span class="badge"></span><span class="cx" data-tip="Cancel one">×</span>
-        <span class="cost"><i class="ico gold"></i>${def.cost}${def.mana ? `<i class="ico mana"></i>${def.mana}` : ''}</span>
+    grp.className = 'tgrp';
+    grp.style.setProperty('--gc', g.color);
+    grp.style.width = BTN + (g.types.length - 1) * STEP + 'px';
+    grp.dataset.tip = `<b>${g.name}</b><p>Trains one unit at a time, in the order you queue them.</p>`;
+    g.types.forEach((type, i) => {
+      const def = UNIT_TYPES[type];
+      const b = document.createElement('div');
+      b.className = 'tb';
+      b.dataset.type = type;
+      b.dataset.unit = type;
+      b.dataset.tip = '';
+      b.style.left = i * STEP + 'px';
+      b.style.top = (g.types.length === 1 ? ROW / 2 : (i % 2) * ROW) + 'px';
+      b.innerHTML = `
+        <canvas width="84" height="84"></canvas>
+        <kbd>${def.hotkey}</kbd><span class="badge"></span>
+        <button class="ub" data-tip="${def.building} upgrades (U)">⚒</button>
         <div class="prog"><i></i></div>
-      </button>
-      <button class="upgbtn" data-tip="${def.building} upgrades (U)">⚒</button>`;
-    const b = grp.querySelector('.train');
-    b.addEventListener('click', e => {
-      if (e.target.closest('.cx')) dequeueUnit(G.teams[0], type);
-      else queueUnit(G.teams[0], type);
+        <span class="cost">${def.cost}${def.mana ? `<i class="ico mana"></i>${def.mana}` : ''}</span>`;
+      drawUnitIcon(b.querySelector('canvas'), type);
+      b.addEventListener('click', e => {
+        if (e.target.closest('.ub')) return UI.panel === type ? closePanel() : openPanel(type);
+        queueUnit(G.teams[0], type);
+      });
+      b.addEventListener('contextmenu', e => { e.preventDefault(); dequeueUnit(G.teams[0], type); });
+      grp.appendChild(b);
     });
-    b.addEventListener('contextmenu', e => { e.preventDefault(); dequeueUnit(G.teams[0], type); });
-    grp.querySelector('.upgbtn').addEventListener('click', () => (UI.panel === type ? closePanel() : openPanel(type)));
     bar.appendChild(grp);
   }
   const cb = document.createElement('button');
@@ -677,7 +701,6 @@ function buildHUD() {
   cb.innerHTML = '<svg viewBox="0 0 24 24"><path d="M3 22V9h3V6h3v3h2V3h2v6h2V6h3v3h3v13h-6v-5a2 2 0 0 0-4 0v5z"/></svg>';
   cb.addEventListener('click', () => (UI.panel === 'castle' ? closePanel() : openPanel('castle')));
   bar.appendChild(cb);
-  UI.portraitsDirty = true;
 
   document.querySelectorAll('#stances button[data-stance]').forEach(b => {
     b.addEventListener('click', () => setStance(G.teams[0], b.dataset.stance));
@@ -798,7 +821,7 @@ function unitJob(u, me) {
   if (u.pendingCast) return `Moving to cast ${SPELLS[u.pendingCast.k].name}`;
   if (u.type === 'miner') {
     if (u.panning) return 'Panning the stream';
-    return ({ mana: 'Praying for mana', pan: 'Going to pan', build: 'Building a wall', replenish: 'Replenishing a deposit', refit: 'Going to refit', garrison: 'Garrisoned', move: 'Moving', hold: 'Holding', attack: 'Fighting' }[u.order.type]
+    return ({ mana: 'Praying for mana', pan: 'Going to pan', build: 'Working on a trench', replenish: 'Replenishing a deposit', refit: 'Going to refit', garrison: 'Garrisoned', move: 'Moving', hold: 'Holding', attack: 'Fighting' }[u.order.type]
       || (u.retaliateT > 0 ? 'Defending itself' : u.praying ? 'Praying for mana' : u.carry >= u.carryCap ? 'Returning gold' : u.mine ? 'Mining gold' : 'Idle'));
   }
   if (u.shieldWall) return 'Shield wall';
@@ -807,7 +830,7 @@ function unitJob(u, me) {
     return { garrison: 'Garrisoned', defend: 'Defending', attack: 'Attacking' }[s] + (u.ownStance ? ' (own order)' : '');
   }
   if (u.order.type === 'group') return { attack: 'Attacking together', advance: 'Advancing together', retreat: 'Retreating together' }[u.order.g.mode];
-  return { move: 'Moving', hold: 'Holding', attack: 'Attacking a target', garrison: 'Garrisoned', refit: 'Going to refit', manwall: u.onWall ? 'Defending the wall' : 'Climbing the wall' }[u.order.type] || '';
+  return { move: 'Moving', hold: 'Holding', attack: 'Attacking a target', garrison: 'Garrisoned', refit: 'Going to refit', manwall: u.onWall ? 'Defending the trench' : 'Climbing the rampart' }[u.order.type] || '';
 }
 
 function selectionInfoHTML(me) {
@@ -820,7 +843,7 @@ function selectionInfoHTML(me) {
     if (u.drillN) buffs.push(`Drilled +${u.drillN}`);
     if (rageOf(u) > 0.2) buffs.push('Adrenaline');
     if (u.burnT > 0) buffs.push('Burning');
-    if (u.onWall) buffs.push('On the wall');
+    if (u.onWall) buffs.push('On the rampart');
     if (u.fx.shield > 0) buffs.push(`Shielded (${Math.ceil(u.fx.shield)})`);
     if (u.fx.haste > 0) buffs.push('Hasted');
     if (u.fx.slow > 0) buffs.push('Slowed');
@@ -857,22 +880,21 @@ function updateHUD(dt) {
   setText('manaTxt', String(Math.floor(me.mana)));
   setText('popTxt', `${popUsed(me)}/${POP_CAP}`);
   setHTML('prio', { mine: '⛏ Mine', pray: '◆ Pray', pan: '≈ Pan' }[me.minerDefault]);
-  if (UI.portraitsDirty) {
-    UI.portraitsDirty = false;
-    document.querySelectorAll('#train .train').forEach(b => drawPortrait(b.querySelector('canvas'), b.dataset.type, me.upgrades[b.dataset.type]));
-  }
-  document.querySelectorAll('#train .train').forEach(b => {
-    const type = b.dataset.type, q = me.queues[type], def = UNIT_TYPES[type];
+  document.querySelectorAll('#train .tb').forEach(b => {
+    const type = b.dataset.type, def = UNIT_TYPES[type], q = me.queues[groupOf(type).key];
+    const n = queuedCount(me, type), training = q.length > 0 && q[0].type === type;
     b.classList.toggle('poor', me.gold < def.cost || me.mana < (def.mana || 0));
-    b.classList.toggle('queued', q.length > 0);
-    b.querySelector('.badge').textContent = q.length ? q.length : '';
-    b.querySelector('.prog i').style.width = q.length ? ((q[0].t / def.time) * 100).toFixed(1) + '%' : '0%';
+    b.classList.toggle('queued', n > 0);
+    b.classList.toggle('training', training);
+    b.querySelector('.badge').textContent = n ? n : '';
+    b.querySelector('.prog i').style.width = training ? ((q[0].t / def.time) * 100).toFixed(1) + '%' : '0%';
+    const ub = b.querySelector('.ub');
+    ub.classList.toggle('busy', !!me.research[type]);
+    ub.classList.toggle('on', UI.panel === type);
   });
-  document.querySelectorAll('#train .upgbtn').forEach((b, i) => {
-    const type = RESEARCH_TYPES[i];   // the last ⚒ is the castle button
-    b.classList.toggle('busy', !!me.research[type]);
-    b.classList.toggle('on', UI.panel === type);
-  });
+  const cb = document.querySelector('#train .castlebtn');
+  cb.classList.toggle('busy', !!me.research.castle);
+  cb.classList.toggle('on', UI.panel === 'castle');
   document.querySelectorAll('#stances button[data-stance]').forEach(b => b.classList.toggle('on', b.dataset.stance === me.stance));
   $('btnFlag').classList.toggle('on', UI.placing === 'flag' || me.musterX !== null);
   $('btnMiners').classList.toggle('on', me.minersIn);
@@ -1068,7 +1090,6 @@ function startBattle() {
   $('debug').classList.toggle('hidden', !G.dbg.on);
   UI.last = {};
   UI.placing = null;
-  UI.portraitsDirty = true;
   UI.panel = null;
   UI.cardMode = '';
   toast(`Battle of ${G.map.name}`);
