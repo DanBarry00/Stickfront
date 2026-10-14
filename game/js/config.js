@@ -18,7 +18,9 @@ const STATUE_X = 800;        // distance of each statue from its world edge
 const GATE_X = 560;          // castle front wall (gate) distance from world edge
 const BUILD_X = { sword: 95, spear: 215, archer: 335, miner: 455 };   // building centers inside the castle
 const ARCHER_XS = [520, 400, 280];   // castle archer spots on the rampart (extra ones are castle upgrades)
-const ARCHER_RANGE = 560;
+// Castle archers cover the ground out to just past where an enemy archer with the same bow
+// upgrades has to stand to shoot the statue: statue + its half-width + archer range + this margin.
+const CASTLE_REACH_PAD = 60;
 const TITHE_GOLD = [0, 1, 2.5];      // statue income per second: none / Offerings / Golden Idol
 const LEVY_INTERVAL = 60;    // seconds between free Swordwrath with the Levy castle upgrade
 const DEFEND_OFFSET = 250;   // defend line distance in front of statue
@@ -45,7 +47,8 @@ const WALL_BUILD_PER_HIT = 0.07;
 const WALL_SEGS = 5;         // a wall is built from this many stone columns across the lane
 const wallSegY = k => LANE_TOP + 4 + k * ((LANE_BOT - LANE_TOP - 8) / (WALL_SEGS - 1));
 const WALL_GUARDS = WALL_SEGS; // one row of melee defenders can stand on a wall
-const WALL_H = [64, 82];     // wall height for tier 1 / reinforced
+const WALL_H = [24, 38];     // height of a trench's earth rampart / with a palisade (where defenders stand)
+const WALL_REPAIR = 0.035;   // share of a trench's max hp restored by each spade-load when repairing
 
 const BURN_DPS = 4;          // Flaming Arrows damage over time
 const BURN_TIME = 3;
@@ -68,7 +71,7 @@ const UNIT_TYPES = {
   archer: {
     key: 'archer', name: 'Archer', building: 'Archery Range', cost: 160, time: 4.5, hp: 95, speed: 80, pop: 1,
     dmg: 24, range: 380, atkTime: 1.3, aggro: 420, hotkey: '3',
-    desc: 'Shoots from range, even over walls. Fragile up close; keep them behind your line.',
+    desc: 'Shoots from range, even over trenches. Fragile up close; keep them behind your line.',
   },
   spear: {
     key: 'spear', name: 'Spearton', building: 'Spear Hall', cost: 225, time: 6, hp: 320, speed: 70, pop: 2,
@@ -102,10 +105,20 @@ const UNIT_TYPES = {
   flyer: {
     key: 'flyer', name: 'Kestrel', building: 'Aerie', cost: 175, time: 6, hp: 70, speed: 95, pop: 1,
     dmg: 15, range: 300, atkTime: 1.15, aggro: 340, hotkey: '[', code: 'BracketLeft',
-    desc: 'Glides above the battle with a small crossbow, over walls and out of reach of melee: only archers, warlocks, castle archers, thrown stars and other Kestrels can hit it. Weaker shots than an archer. Enemy ranged units shoot at it first.',
+    desc: 'Glides above the battle with a small crossbow, over trenches and out of reach of melee: only archers, warlocks, castle archers, thrown stars and other Kestrels can hit it. Weaker shots than an archer.',
   },
 };
 const UNIT_ORDER = ['miner', 'sword', 'archer', 'spear', 'cleric', 'warlock', 'giant', 'ninja', 'flyer'];
+// Training groups: each group trains one unit at a time from a shared queue (so a Swordwrath
+// waits for the Spearton ahead of it). Colors tint the training bar.
+const TRAIN_GROUPS = [
+  { key: 'workers', name: 'Workers', color: '#c9a23a', types: ['miner'] },
+  { key: 'infantry', name: 'Infantry', color: '#c0503a', types: ['sword', 'spear', 'ninja'] },
+  { key: 'ranged', name: 'Ranged', color: '#7aa84a', types: ['archer', 'flyer'] },
+  { key: 'mages', name: 'Mages', color: '#9a62d8', types: ['cleric', 'warlock'] },
+  { key: 'giants', name: 'Giants', color: '#8f8a80', types: ['giant'] },
+];
+const groupOf = type => TRAIN_GROUPS.find(g => g.types.includes(type));
 const isMage = u => u.type === 'cleric' || u.type === 'warlock';
 const isGiant = u => u.type === 'giant';
 // Kestrels are airborne until Feather Fall drops them to the ground (then they fight with a knife).
@@ -180,7 +193,7 @@ const UPGRADES = {
     { key: 'leap', name: 'Running Jump', cost: 150, mana: 50, time: 20, desc: 'After a sprint, the first strike is a leaping blow that deals double damage.' },
     { key: 'rage', name: 'Adrenaline', cost: 150, mana: 75, time: 25, desc: 'The more wounded they are, the faster and harder they hit.' },
     { key: 'rage2', name: 'Last Stand', cost: 175, mana: 100, time: 30, requires: 'rage', desc: `When struck down they keep fighting at full fury for ${LAST_STAND} more seconds, then fall.` },
-    { key: 'drill', name: 'Military Training', cost: 175, mana: 50, time: 25, desc: '+4% damage and +3% damage reduction for each nearby ally, up to 5. Also unlocks Defend Wall.' },
+    { key: 'drill', name: 'Military Training', cost: 175, mana: 50, time: 25, desc: '+4% damage and +3% damage reduction for each nearby ally, up to 5. Also unlocks Defend Trench.' },
   ],
   miner: [
     { key: 'bag', name: 'Bigger Bags', cost: 150, mana: 0, time: 20, desc: 'Carry 35 → 56 gold per trip.' },
@@ -192,12 +205,12 @@ const UPGRADES = {
     { key: 'pan1', name: 'Iron Pans', cost: 150, mana: 0, time: 20, desc: 'Pan the castle stream 35% faster.' },
     { key: 'pan2', name: 'Sluice Boxes', cost: 225, mana: 50, time: 25, requires: 'pan1', desc: 'Pan the castle stream 75% faster than plain pans.' },
     { key: 'defense', name: 'Self-Defense Training', cost: 125, mana: 0, time: 15, desc: 'Sturdier miners who hit back much harder.' },
-    { key: 'walls', name: 'Masonry', cost: 175, mana: 50, time: 25, desc: `Miners can build defensive walls (B). ${WALL_COST} gold each, up to ${WALL_MAX}.` },
-    { key: 'walls2', name: 'Fortification', cost: 200, mana: 50, time: 25, requires: 'walls', desc: `Miners can build onto an existing wall (J or right-click it) for ${WALL_COST} gold: taller, +${WALL_HP2} hp.` },
+    { key: 'walls', name: 'Earthworks', cost: 175, mana: 50, time: 25, desc: `Miners can dig defensive trenches behind an earth rampart (B), and repair damaged ones (Y or right-click). ${WALL_COST} gold each, up to ${WALL_MAX}.` },
+    { key: 'walls2', name: 'Palisade', cost: 200, mana: 50, time: 25, requires: 'walls', desc: `Miners can raise a sharpened log palisade on a finished trench (J or right-click it) for ${WALL_COST} gold: taller, +${WALL_HP2} hp.` },
     { key: 'prospect', name: 'Prospecting', cost: 150, mana: 50, time: 25, desc: 'Miners can replenish gold deposits (N), even exhausted ones, twice as fast as they could mine them.' },
   ],
   archer: [
-    { key: 'bow', name: 'Recurve Bows', cost: 175, mana: 0, time: 20, desc: 'Range 380 → 500.' },
+    { key: 'bow', name: 'Recurve Bows', cost: 175, mana: 0, time: 20, desc: 'Range 380 → 500. Castle archers reach just as much further.' },
     { key: 'arrows', name: 'Bodkin Arrows', cost: 175, mana: 0, time: 20, desc: 'Arrow damage 24 → 32, and the bodkin points ignore a third of the target’s armor.' },
     { key: 'fire', name: 'Flaming Arrows', cost: 225, mana: 75, time: 30, requires: 'arrows', desc: `Arrows set targets alight: ${BURN_DPS} damage per second for ${BURN_TIME}s on top of the hit.` },
     { key: 'quiver', name: 'Deep Quivers', cost: 150, mana: 50, time: 20, desc: 'Reload 30% faster.' },
@@ -220,7 +233,7 @@ const UPGRADES = {
     { key: 'shield', name: 'Shields', cost: 175, mana: 0, time: 20, desc: '+20% armor and +40 hp, and unlocks Shield Wall (X): they stop attacking, take 60% less damage and draw enemy attacks.' },
     { key: 'shield2', name: 'Tower Shields', cost: 200, mana: 50, time: 25, requires: 'shield', desc: '+10% more armor and +40 hp; Shield Wall blocks 75% and draws attackers even harder.' },
     { key: 'helm', name: 'Crested Helmets', cost: 150, mana: 0, time: 20, desc: '+15% armor.' },
-    { key: 'inspire', name: 'Rallying Cry', cost: 200, mana: 100, time: 30, desc: 'Inspires up to 8 nearby allies: +10% damage and 8% faster attacks per stack, up to 3 stacks. Every ally nearby gets one stack before anyone gets a second. Also unlocks Defend Wall.' },
+    { key: 'inspire', name: 'Rallying Cry', cost: 200, mana: 100, time: 30, desc: 'Inspires up to 8 nearby allies: +10% damage and 8% faster attacks per stack, up to 3 stacks. Every ally nearby gets one stack before anyone gets a second. Also unlocks Defend Trench.' },
     { key: 'halberd', name: 'Halberds', cost: 200, mana: 50, time: 25, desc: 'Armor piercing: ignores enemy armor and halves shield wall protection. Damage 18 → 28.' },
   ],
   // Castle upgrades are bought from the castle itself (click the rampart/tower or the castle button).

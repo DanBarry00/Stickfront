@@ -74,27 +74,44 @@ button { font-family: inherit; cursor: pointer; }
 #stances button.on kbd { color: #2e2208; border-color: rgba(46, 34, 8, 0.5); background: transparent; }
 
 /* compact training bar */
-#train { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; padding: 5px; }
-.tgroup { display: flex; gap: 2px; }
-.train {
-  position: relative; width: 56px; height: 64px; padding: 0;
-  background: #0d0a08; border: 1px solid rgba(140, 112, 70, 0.5); border-radius: 3px; color: var(--text); overflow: hidden;
+#train { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; padding: 8px; }
+/* training bar: one color-coded block per training group, buttons staggered over two rows */
+.tgrp {
+  position: relative; height: 87px; flex: none;
+  outline: 1px solid color-mix(in srgb, var(--gc) 55%, transparent); outline-offset: 2px; border-radius: 3px;
+  background: color-mix(in srgb, var(--gc) 12%, transparent);
 }
-.train:hover { border-color: var(--edge-hi); }
-.train:active { transform: translateY(1px); }
-.train canvas { position: absolute; top: 0; left: 0; width: 54px; height: 54px; }
-.train .cost {
-  position: absolute; bottom: 0; left: 0; right: 0; height: 13px; display: flex; justify-content: center; align-items: center; gap: 3px;
-  font-size: 10px; font-weight: 600; background: rgba(0, 0, 0, 0.75);
+.tb {
+  position: absolute; width: 42px; height: 42px; cursor: pointer;
+  background: #0d0a08; border: 1px solid color-mix(in srgb, var(--gc) 70%, #000); border-radius: 3px; overflow: hidden;
 }
-.train .cost .ico { width: 8px; height: 8px; }
-.train.poor .cost { color: var(--red); }
-.train.poor canvas { opacity: 0.5; filter: grayscale(0.6); }
-.train kbd { position: absolute; top: 2px; left: 2px; }
-.train .badge { position: absolute; top: 2px; right: 2px; min-width: 14px; font-size: 10px; font-weight: 700; color: #1a1206; background: var(--gold); border-radius: 2px; padding: 0 3px; }
-.train .badge:empty { display: none; }
-.train .prog { position: absolute; left: 0; right: 0; bottom: 13px; height: 2px; background: rgba(0, 0, 0, 0.5); }
-.train .prog i { display: block; height: 100%; width: 0; background: var(--gold); }
+.tb:hover { border-color: color-mix(in srgb, var(--gc) 60%, #fff); z-index: 1; }
+.tb:active { transform: translateY(1px); }
+.tb canvas { position: absolute; inset: 0; width: 40px; height: 40px; }
+.tb kbd { position: absolute; top: 1px; left: 1px; font-size: 8px; padding: 0 2px; line-height: 10px; }
+.tb .ub {
+  position: absolute; top: 0; right: 0; width: 13px; height: 13px; padding: 0; font-size: 8px; line-height: 11px;
+  color: var(--dim); background: rgba(0, 0, 0, 0.7); border: none; border-left: 1px solid rgba(140, 112, 70, 0.4);
+  border-bottom: 1px solid rgba(140, 112, 70, 0.4); border-radius: 0 0 0 3px; cursor: pointer;
+}
+.tb .ub:hover, .tb .ub.on { color: var(--text); background: rgba(60, 46, 26, 0.9); }
+.tb .ub.busy { color: var(--gold); animation: pulse 1.2s infinite; }
+.tb .badge {
+  position: absolute; bottom: 12px; right: 1px; min-width: 11px; font-size: 9px; font-weight: 700; line-height: 11px; text-align: center;
+  color: #1a1206; background: var(--gc); border-radius: 2px; padding: 0 2px;
+}
+.tb .badge:empty { display: none; }
+.tb .cost {
+  position: absolute; bottom: 0; left: 0; right: 0; height: 11px; display: flex; justify-content: center; align-items: center; gap: 1px;
+  font-size: 8.5px; font-weight: 600; background: rgba(0, 0, 0, 0.78);
+}
+.tb .cost .ico.mana { width: 6px; height: 6px; margin: 0 1px 0 3px; }
+.tb .prog { position: absolute; left: 0; right: 0; bottom: 11px; height: 2px; background: rgba(0, 0, 0, 0.5); }
+.tb .prog i { display: block; height: 100%; width: 0; background: var(--gc); }
+.tb.poor .cost { color: var(--red); }
+.tb.poor canvas { opacity: 0.5; filter: grayscale(0.6); }
+.tb.training { box-shadow: 0 0 0 1px var(--gc), 0 0 8px color-mix(in srgb, var(--gc) 60%, transparent); }
+.tb.queued:not(.training) canvas { opacity: 0.8; }
 .upgbtn {
   width: 18px; height: 64px; padding: 0; font-size: 11px; color: var(--dim);
   background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(140, 112, 70, 0.35); border-radius: 3px;
@@ -208,13 +225,6 @@ button { font-family: inherit; cursor: pointer; }
   #minimap { top: 56px; width: 320px; }
 }
 
-/* cancel-one × on queued unit buttons */
-.train .cx {
-  display: none; position: absolute; top: 14px; right: 2px; width: 14px; height: 14px; line-height: 12px;
-  font-size: 12px; font-weight: 700; color: #f0c8b8; background: rgba(110, 24, 16, 0.85); border: 1px solid #c0432f; border-radius: 2px;
-}
-.train.queued .cx { display: block; }
-.train .cx:hover { background: #a82a24; color: #fff; }
 
 /* miner priority toggle in the resource bar */
 #prio {
@@ -234,7 +244,7 @@ button { font-family: inherit; cursor: pointer; }
 #stances #btnFlag.on { color: var(--gold); border-color: var(--edge-hi); }
 
 /* castle upgrade button at the end of the unit bar */
-.upgbtn.castlebtn { width: 30px; display: flex; align-items: center; justify-content: center; }
+.upgbtn.castlebtn { width: 26px; height: 87px; display: flex; align-items: center; justify-content: center; }
 .upgbtn.castlebtn svg { width: 20px; height: 20px; fill: currentColor; }
 #stances #btnMiners.on { color: #1a1206; background: linear-gradient(#b8923a, #7a5c18); border-color: #d8b860; }
 
@@ -284,7 +294,6 @@ button { font-family: inherit; cursor: pointer; }
 #card .cmd.spell .cdshade { position: absolute; left: 0; right: 0; bottom: 0; height: 0; background: rgba(0, 0, 0, 0.62); pointer-events: none; }
 #card .cmd.spell .mc { position: absolute; top: 1px; left: 2px; font-size: 8px; color: var(--mana); font-weight: 700; }
 #card .cmd.spell.poor .mc { color: var(--red); }
-.train .cost .ico.mana { width: 7px; height: 7px; margin-left: 2px; }
 
 /* pause menu */
 #pauseMenu { position: fixed; inset: 0; z-index: 4; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.55); }

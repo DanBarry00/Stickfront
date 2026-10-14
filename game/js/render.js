@@ -221,7 +221,7 @@ function drawUnitInAir(ctx, u, dying, fall, alpha, lift) {
     flash: u.lastStand > 0 ? (Math.sin(RT * 30) > 0 ? 1 : 0) : u.flash,
     wall: u.shieldWall, arch: u.type === 'archer' ? archPose(u, dying) : null, cast: u.swingKind === 'cast',
     chains: isGiant(u) ? giantChains(u) : 0, stone: u.isStatueGiant ? G.teams[u.team].statue.stone : null,
-    starRanged: u.starRanged, grounded: u.grounded, aimFa: u.aimFa,
+    starRanged: u.starRanged, grounded: u.grounded, aimFa: u.aimFa, pace: u.pace,
   });
   if (dying) return;
   drawBuffsOver(ctx, u);
@@ -542,7 +542,7 @@ function drawPlacing(ctx) {
     const w = wallAt(x, y);
     const ok = w && w.team === 0 && w.progress >= 1 && w.tier !== 2;
     ctx.fillStyle = ok ? '#d8f0c8' : '#9c8f76';
-    ctx.fillText(ok ? `Fortify this wall (${w.reinforcing ? 'resume' : WALL_COST + ' gold'})` : 'Click one of your finished walls', x, y - 24);
+    ctx.fillText(ok ? `Raise a palisade here (${w.reinforcing ? 'resume' : WALL_COST + ' gold'})` : 'Click one of your finished trenches', x, y - 24);
   } else if (UI.placing === 'replenish') {
     const m = mineAt(x, y, true);
     ctx.fillStyle = m ? '#e0bf5a' : '#9c8f76';
@@ -555,15 +555,16 @@ function drawWallGhost(ctx) {
   const ok = wallSpotOk(me, x) && me.gold >= WALL_COST;
   ctx.globalAlpha = 0.45;
   for (let k = 0; k < WALL_SEGS; k++) {
-    const y = wallSegY(k), wx = x + (k - (WALL_SEGS - 1) / 2) * -3;
+    const y = wallSegY(k), wx = x + (k - (WALL_SEGS - 1) / 2) * -5;
     ctx.fillStyle = ok ? '#8fbf6a' : '#b5402f';
-    ctx.fillRect(wx - 12, y - 64, 24, 64);
+    ctx.beginPath(); ctx.moveTo(wx - 36, y); ctx.lineTo(wx - 10, y - WALL_H[0]); ctx.lineTo(wx + 3, y - WALL_H[0]); ctx.lineTo(wx + 12, y); ctx.closePath(); ctx.fill();
+    ctx.fillRect(wx + 12, y - 2, 19, 5);
   }
   ctx.globalAlpha = 1;
   ctx.font = '600 13px "Segoe UI", sans-serif';
   ctx.textAlign = 'center';
   ctx.fillStyle = ok ? '#d8f0c8' : '#ffb3a8';
-  ctx.fillText(ok ? `Place wall (${WALL_COST} gold)` : me.gold < WALL_COST ? 'Not enough gold' : 'Cannot build here', x, LANE_TOP - 80);
+  ctx.fillText(ok ? `Dig a trench here (${WALL_COST} gold)` : me.gold < WALL_COST ? 'Not enough gold' : 'Cannot dig here', x, LANE_TOP - 80);
 }
 
 function render(ctx) {

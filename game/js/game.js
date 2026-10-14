@@ -31,7 +31,7 @@ function makeTeam(id, map) {
     musterX: null,            // where newly trained soldiers gather; null = follow the stance
     minerDefault: 'mine',     // what newly trained miners go do: 'mine' | 'pray' | 'pan'
     panSlots: new Array(PAN_SLOTS).fill(null),
-    queues: perType(() => []),
+    queues: Object.fromEntries(TRAIN_GROUPS.map(g => [g.key, []])),   // per training group: [{ type, t }]
     upgrades: perType(() => ({}), RESEARCH_TYPES),
     research: perType(() => null, RESEARCH_TYPES),
     minersIn: false,          // miners-only garrison recall
@@ -109,40 +109,46 @@ function spawnUnit(team, type, x, y) {
 
 function popUsed(team) {
   let n = 0;
-  for (const type of UNIT_ORDER) n += team.queues[type].length * UNIT_TYPES[type].pop;
+  for (const g of TRAIN_GROUPS) for (const item of team.queues[g.key]) n += UNIT_TYPES[item.type].pop;
   for (const u of G.units) if (u.team === team.id && !u.dead) n += u.def.pop;
   return n;
 }
 
+// How many of this unit type are waiting in (or at the head of) its group's queue.
+const queuedCount = (team, type) => team.queues[groupOf(type).key].filter(item => item.type === type).length;
+
 function queueUnit(team, type) {
-  const def = UNIT_TYPES[type], q = team.queues[type];
+  const def = UNIT_TYPES[type], q = team.queues[groupOf(type).key];
   const say = msg => { if (team.id === 0) toast(msg); return false; };
   if (G.over) return false;
   if (team.gold < def.cost) return say('Not enough gold');
   if (team.mana < (def.mana || 0)) return say('Not enough mana');
   if (popUsed(team) + def.pop > POP_CAP) return say('Population limit reached');
-  if (q.length >= QUEUE_MAX) return say('Training queue is full');
+  if (q.length >= QUEUE_MAX) return say(`The ${groupOf(type).name} queue is full`);
   team.gold -= def.cost;
   team.mana -= def.mana || 0;
-  q.push({ t: 0 });
+  q.push({ type, t: 0 });
   return true;
 }
 
+// Cancel the most recently queued unit of this type (refunds it, even if it was in training).
 function dequeueUnit(team, type) {
-  const q = team.queues[type];
-  if (!q.length) return;
-  q.pop();
+  const q = team.queues[groupOf(type).key];
+  const i = q.map(item => item.type).lastIndexOf(type);
+  if (i < 0) return;
+  q.splice(i, 1);
   team.gold += UNIT_TYPES[type].cost;
   team.mana = Math.min(MAX_MANA, team.mana + (UNIT_TYPES[type].mana || 0));
 }
 
+// Each group trains the unit at the head of its queue; the rest wait their turn.
 function updateQueues(team, dt) {
-  for (const type of UNIT_ORDER) {
-    const q = team.queues[type];
+  for (const g of TRAIN_GROUPS) {
+    const q = team.queues[g.key];
     if (!q.length) continue;
     q[0].t += dt;
-    if (q[0].t >= UNIT_TYPES[type].time) {
-      q.shift();
+    if (q[0].t >= UNIT_TYPES[q[0].type].time) {
+      const { type } = q.shift();
       spawnUnit(team, type);
       G.stats[team.id].trained++;
     }
@@ -190,7 +196,6 @@ function updateResearch(team, dt) {
     if ((def.key === 'archer2' || def.key === 'archer3') && team.archers.length < ARCHER_XS.length) team.archers.push(makeCastleArcher(team, team.archers.length));
     if (team.id === 0) {
       toast(def.team ? `${def.name} is ready` : `${def.name} researched — new ${UNIT_TYPES[type].name}s get it; refit veterans (R)`);
-      UI.portraitsDirty = true;
     }
   }
 }
@@ -206,13 +211,13 @@ function wallSpotOk(team, x) {
 
 function placeWall(team, x, builders) {
   const say = msg => { if (team.id === 0) toast(msg); return null; };
-  if (G.walls.filter(w => w.team === team.id && !w.dead).length >= WALL_MAX) return say(`Wall limit reached (${WALL_MAX})`);
-  if (!wallSpotOk(team, x)) return say('Cannot build a wall there');
+  if (G.walls.filter(w => w.team === team.id && !w.dead).length >= WALL_MAX) return say(`Trench limit reached (${WALL_MAX})`);
+  if (!wallSpotOk(team, x)) return say('Cannot dig a trench there');
   if (team.gold < WALL_COST) return say('Not enough gold');
   team.gold -= WALL_COST;
   const w = {
     isWall: true, isStructure: true, team: team.id, x, y: LANE_BOT, halfW: 12,
-    hp: 1, max: WALL_HP, progress: 0, dead: false, flash: 0, stone: team.castle.stone,
+    hp: 1, max: WALL_HP, progress: 0, dead: false, flash: 0, stone: mixHex('#6b5338', G.map.theme.ground[0], 0.3),   // earth (for dirt sprays)
     tier: 1, reinforcing: false, rprog: 0, guards: [],
   };
   G.walls.push(w);
@@ -223,8 +228,8 @@ function placeWall(team, x, builders) {
 // Fortification: build a second tier onto a finished wall.
 function reinforceWall(team, w, builders) {
   const say = msg => { if (team.id === 0) toast(msg); return false; };
-  if (!w || w.dead || w.team !== team.id || w.progress < 1) return say('Choose one of your finished walls');
-  if (w.tier === 2) return say('That wall is already fortified');
+  if (!w || w.dead || w.team !== team.id || w.progress < 1) return say('Choose one of your finished trenches');
+  if (w.tier === 2) return say('That trench already has a palisade');
   if (!w.reinforcing) {
     if (team.gold < WALL_COST) return say('Not enough gold');
     team.gold -= WALL_COST;
@@ -239,9 +244,9 @@ function reinforceWall(team, w, builders) {
 const canManWalls = team => !!(team.upgrades.sword.drill || team.upgrades.spear.inspire);
 function manWall(team, units, wall) {
   const say = msg => { if (team.id === 0) toast(msg); return 0; };
-  if (!canManWalls(team)) return say('Research Military Training (Barracks) or Rallying Cry (Spear Hall) to defend walls');
+  if (!canManWalls(team)) return say('Research Military Training (Barracks) or Rallying Cry (Spear Hall) to defend trenches');
   const walls = G.walls.filter(w => w.team === team.id && !w.dead && w.progress >= 1);
-  if (!walls.length) return say('You need a finished wall');
+  if (!walls.length) return say('You need a finished trench');
   let n = 0;
   for (const u of units) {
     if (u.type !== 'sword' && u.type !== 'spear') continue;
@@ -253,7 +258,7 @@ function manWall(team, units, wall) {
     w.guards.push(u);
     n++;
   }
-  if (!n) say(`That wall is full (${WALL_GUARDS} defenders max)`);
+  if (!n) say(`That trench is full (${WALL_GUARDS} defenders max)`);
   return n;
 }
 
@@ -357,8 +362,9 @@ const ARCHER_PHASES = { idle: 0.45, nock: 0.4, draw: 0.5, aim: 0.3, release: 0.3
 // Castle archers automatically benefit from whatever archer upgrades the team has researched.
 function castleArcherStats(team) {
   const up = team.upgrades.archer;
+  const archerRange = up.bow ? 500 : UNIT_TYPES.archer.range;   // same as a trained archer's
   return {
-    range: ARCHER_RANGE + (up.bow ? 120 : 0),
+    reach: STATUE_X + team.statue.halfW + archerRange + CASTLE_REACH_PAD,   // distance from our edge of the world
     dmg: up.arrows ? 16 : 11,
     rate: up.quiver ? 1.35 : 1,
     fire: !!up.fire,
@@ -368,18 +374,19 @@ function castleArcherStats(team) {
 
 function updateCastleArcher(team, a, dt, garrisoned) {
   const S = castleArcherStats(team);
+  const line = team.edge(S.reach), range = Math.abs(line - a.x);   // farther-back archers need a longer shot
   let best = null, bs = 1e9;
   for (const e of G.units) {
     if (e.team === team.id || !canTarget(team.castleSrc, e)) continue;
+    if (team.dir * (e.x - line) > 0) continue;   // beyond the line the rampart covers
     const d = Math.abs(e.x - a.x);
-    if (d >= S.range) continue;
     const s = targetScore(team.castleSrc, e, d);
     if (s < bs) { bs = s; best = e; }
   }
   if (best) {
     const dx = best.x - a.x, dy = targetAimY(best) - (a.y - 45);
     a.f = dx >= 0 ? 1 : -1;
-    const want = Math.atan2(dy, Math.abs(dx)) - 0.35 * (Math.abs(dx) / S.range);
+    const want = Math.atan2(dy, Math.abs(dx)) - 0.35 * Math.min(1, Math.abs(dx) / range);
     a.fa += (want - a.fa) * Math.min(1, dt * 8);
     a.target = best;
   } else {
