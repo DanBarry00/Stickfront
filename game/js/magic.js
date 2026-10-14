@@ -131,7 +131,7 @@ function autoCast(u) {
   if (u.gcd > 0 || u.swing >= 0) return;
   const team = G.teams[u.team];
   const allies = G.units.filter(o => o.team === u.team && !o.dead && !o.inside);
-  const foes = G.units.filter(o => o.team !== u.team && !o.dead && !o.inside);
+  const foes = G.units.filter(o => o.team !== u.team && !o.dead && !o.inside && !o.stealth);   // vanished ninjas can't be aimed at
   let best = null;
   for (const k of castableSpells(u)) {
     const S = SPELLS[k];
@@ -164,7 +164,7 @@ function explodeFireball(s) {
   const S = SPELLS.fireball, src = s.src && !s.src.dead ? s.src : null;
   const x = s.tx, y = s.ty + 20;
   for (const e of G.units.slice()) {
-    if (e.team !== s.team && !e.dead && !e.inside && inArea(e, x, y, S.r)) damage(e, S.power, src);
+    if (e.team !== s.team && !e.dead && !e.inside && inArea(e, x, y, S.r)) damage(e, S.power, src, true);
   }
   const enemy = G.teams[1 - s.team];
   if (!enemy.statue.dead && Math.abs(enemy.statue.x - x) < S.r + enemy.statue.halfW) damage(enemy.statue, S.power / 2, src);
@@ -184,9 +184,9 @@ function updateSpellWorld(dt) {
     p.tick -= 0.5;
     const amt = p.power * 0.5, src = p.src && !p.src.dead ? p.src : null;
     for (const o of G.units.slice()) {
-      if (o.dead || o.inside || !inArea(o, p.x, p.y, p.r)) continue;
+      if (o.dead || o.inside || isFlying(o) || !inArea(o, p.x, p.y, p.r)) continue;   // pools lie on the ground
       if (p.kind === 'healpool' && o.team === p.team) healUnit(o, amt, null);
-      else if (p.kind === 'blight' && o.team !== p.team) damage(o, amt, src);
+      else if (p.kind === 'blight' && o.team !== p.team) damage(o, amt, src, true);
     }
   }
   G.pools = G.pools.filter(p => p.t > 0);

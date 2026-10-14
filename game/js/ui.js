@@ -45,9 +45,9 @@ function unitAt(wx, wy, team) {
   let best = null, bd = 1e9;
   for (const u of G.units) {
     if (u.dead || (team !== undefined && u.team !== team)) continue;
-    if (u.inside && u.team !== 0) continue;
+    if ((u.inside || u.stealth) && u.team !== 0) continue;   // vanished ninjas can't be clicked on
     if (team === 0 && !selectable(u)) continue;   // giants can't be picked without blinders
-    const s = u.scale, uy = u.y - (u.onWall ? wallHeight(u.onWall) : 0);
+    const s = u.scale, uy = u.y - (u.onWall ? wallHeight(u.onWall) : 0) - u.alt;
     if (Math.abs(wx - u.x) < 14 * s && wy < uy + 8 && wy > uy - 74 * s) {
       const d = Math.abs(wx - u.x) + Math.abs(wy - (uy - 35)) * 0.3;
       if (d < bd) { bd = d; best = u; }
@@ -77,11 +77,11 @@ function wallAt(wx, wy) {
   return G.walls.find(w => !w.dead && Math.abs(wx - w.x) < 20 && wy > LANE_TOP - 90 && wy < LANE_BOT + 6) || null;
 }
 
-// Player's buildings inside the castle. On the rampart, the mage halls open their own
-// upgrades and the rest of the rampart and tower open the castle's upgrades.
+// Player's buildings inside the castle. On the rampart, the mage halls, Dojo and Aerie open their
+// own upgrades and the rest of the rampart and tower open the castle's upgrades.
 function buildingAt(wx, wy) {
   if (wx < GATE_X + 14 && wy > WALL_TOP - 240 && wy < WALL_TOP + 16) {
-    for (const [type, hx] of Object.entries(MAGE_HALL_X)) if (Math.abs(wx - hx) < 30 && wy > WALL_TOP - 90) return type;
+    for (const [type, hx] of Object.entries(RAMPART_HALL_X)) if (Math.abs(wx - hx) < 28 && wy > WALL_TOP - 90) return type;
     return 'castle';
   }
   if (Math.abs(wx - GIANT_PIT_X) < 52 && wy > LANE_TOP - 100 && wy < LANE_TOP + 2) return 'giant';
@@ -115,6 +115,18 @@ const fortifierSelection = () => minerSel().filter(u => u.perks.walls2);
 const prospectorSelection = () => minerSel().filter(u => u.perks.prospect);
 const shieldSelection = () => liveSel().filter(u => u.type === 'spear' && u.perks.shield);
 const refitSelection = () => liveSel().filter(u => missingUpgrades(u).length);
+const starSelection = () => liveSel().filter(u => u.type === 'ninja' && u.perks.stars);
+
+// Ninjas with Throwing Stars: Auto (they pick) → Blade only → Stars only → Auto.
+const STAR_MODES = ['auto', 'melee', 'ranged'];
+const STAR_MODE_NAMES = { auto: 'Auto', melee: 'Blade', ranged: 'Stars' };
+function cycleStarMode() {
+  const sel = starSelection();
+  if (!sel.length) return;
+  const next = STAR_MODES[(STAR_MODES.indexOf(sel[0].starMode) + 1) % STAR_MODES.length];
+  for (const u of sel) u.starMode = next;
+  toast(`Ninja weapon: ${STAR_MODE_NAMES[next]}${next === 'auto' ? ' (stars for flyers, giants and when wounded)' : ''}`);
+}
 
 function issueCommand(wx, wy) {
   const sel = liveSel();
@@ -307,6 +319,7 @@ const ICONS = {
   reinforce: '<path d="M3 21h18M3 16h18M8 21v-5M16 21v-5" stroke-width="1.6"/><path d="M12 13V3M8 7l4-4 4 4" stroke-width="2"/>',
   replenish: '<path d="M4 21l4-7h8l4 7z" fill="currentColor" stroke="none"/><path d="M12 11V3M8 7l4-4 4 4" stroke-width="2"/>',
   refit: '<path d="M4 18h16M7 18v-4h10v4M9 14V9h6v5M12 9V4" stroke-width="2"/>',
+  stars: '<path d="M12 2l2.2 7.8L22 12l-7.8 2.2L12 22l-2.2-7.8L2 12l7.8-2.2z" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="2" fill="#120d0a" stroke="none"/>',
   auto: '<circle cx="12" cy="12" r="8" stroke-width="2"/><path d="M12 7v5l3 3" stroke-width="2"/><path d="M19 4l-2 3M5 4l2 3" stroke-width="1.6"/>',
 };
 
@@ -327,6 +340,7 @@ const COMMANDS = [
   { id: 'replenish', label: 'Replenish', key: 'N', show: s => s.prosp, run: () => startPlacing('replenish') },
   { id: 'refit', label: 'Refit', key: 'R', show: () => true, run: refitSelected },
   { id: 'auto', label: 'Auto-cast', key: 'L', show: s => s.mage, run: toggleAutoCast, on: () => mageSel().every(u => u.auto) },
+  { id: 'stars', label: s => `Weapon: ${STAR_MODE_NAMES[s.stars]}`, key: 'M', show: s => !!s.stars, run: cycleStarMode, on: () => starSelection().every(u => u.starMode === 'ranged') },
 ];
 
 // Are all selected soldiers marching in a formation with this mode?
@@ -354,6 +368,7 @@ function selectionCaps() {
     fort: fortifierSelection().length > 0,
     prosp: prospectorSelection().length > 0,
     mage: mageSel().length > 0,
+    stars: starSelection().length ? starSelection()[0].starMode : null,
     spells: Object.keys(SPELLS).filter(k => mageSel().some(u => u.type === SPELLS[k].owner && u.perks[SPELLS[k].perk])),
   };
 }
@@ -421,7 +436,7 @@ function initInput() {
       const xa = Math.min(d.x0, d.x1), xb = Math.max(d.x0, d.x1), ya = Math.min(d.y0, d.y1), yb = Math.max(d.y0, d.y1);
       const hit = G.units.filter(u => {
         if (u.team !== 0 || u.dead || !selectable(u)) return false;
-        const uy = u.y - (u.onWall ? wallHeight(u.onWall) : 0);
+        const uy = u.y - (u.onWall ? wallHeight(u.onWall) : 0) - u.alt;
         return u.x >= xa && u.x <= xb && uy >= ya && uy - 30 <= yb;
       });
       select(hit, d.shift);
@@ -477,6 +492,7 @@ function initInput() {
       case 'KeyC': runCommand('advance'); break;
       case 'KeyK': runCommand('manwall'); break;
       case 'KeyL': runCommand('auto'); break;
+      case 'KeyM': runCommand('stars'); break;
       case 'Digit7': case 'Digit8': case 'Digit9': case 'Digit0': spellHotkey(e.code, e.shiftKey); break;
       case 'KeyI': runCommand('mine'); break;
       case 'KeyO': runCommand('pray'); break;
@@ -588,6 +604,7 @@ const CMD_TIPS = {
   replenish: 'Restore a gold deposit, even an exhausted one.',
   refit: `Walk back to their building and take every upgrade they're missing (${REFIT_COST} gold and ${REFIT_TIME}s each).`,
   auto: `When on, mages cast their spells on their own and answer enemy spells with the opposite one. They keep ${SPELL_RESERVE} mana in reserve. You can still force any spell yourself.`,
+  stars: 'Switch the selected ninjas between Auto (stars against Kestrels and giants, or when badly wounded; blade otherwise), Blade only and Stars only. The ambush blow only works with the blade.',
 };
 
 function tipHTML(el) {
@@ -811,7 +828,13 @@ function selectionInfoHTML(me) {
     if (u.fx.enfeeble > 0) buffs.push('Enfeebled');
     if (u.inside && u.hp < u.maxHp) buffs.push('Healing');
     if (isMage(u)) buffs.push(u.auto ? 'Auto-cast on' : 'Auto-cast off');
-    const club = u.type === 'sword' && !u.perks.blades ? ' (club)' : '';
+    if (u.type === 'ninja') {
+      buffs.push(u.stealth ? 'Vanished' : u.vanishCd > 0 ? `Can vanish in ${Math.ceil(u.vanishCd)}s` : 'Can vanish');
+      if (u.perks.parry) buffs.push(u.parryCd > 0 ? `Parry in ${Math.ceil(u.parryCd)}s` : 'Parry ready');
+      if (u.perks.stars) buffs.push(`Weapon: ${STAR_MODE_NAMES[u.starMode]}${u.starMode === 'auto' ? ` (${u.starRanged ? 'stars' : 'blade'})` : ''}`);
+    }
+    if (u.crit) buffs.push(`${Math.round(u.crit * 100)}% crit`);
+    const club = u.type === 'sword' && !u.perks.blades ? ' (club)' : u.grounded ? ' (grounded)' : '';
     return `<b>${u.def.name}${club}</b><span>HP ${Math.ceil(Math.max(0, u.hp))}/${Math.round(u.maxHp)} · ${unitJob(u, me)}</span>` +
       (perks.length ? `<span class="perks">${perks.join(' · ')}</span>` : '') +
       (buffs.length ? `<span class="buffs">${buffs.join(' · ')}</span>` : '');

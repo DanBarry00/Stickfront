@@ -361,9 +361,203 @@ function drawGiant(ctx, o) {
   ctx.restore();
 }
 
+// Kestrel in flight: hanging under a glider wing, legs trailing, small crossbow aimed with the
+// front arm. Feather Fall gives the wing a feathered trailing edge.
+function drawFlyer(ctx, o) {
+  const st = TEAM_STYLE[o.team], f = o.facing, P = o.perks || NO_PERKS;
+  ctx.save();
+  ctx.translate(o.x, o.y - (o.lift || 0));
+  if (o.fall) ctx.rotate(-f * o.fall * 1.5);
+  if (o.alpha !== undefined) ctx.globalAlpha *= o.alpha;
+  ctx.scale(o.scale, o.scale);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  const col = o.flash > 0 ? '#6e1510' : st.body, t = RT + o.seed;
+  const sway = Math.sin(t * 2.2) * 1.5;
+
+  // the glider wing
+  const wy = -66 + sway * 0.5;
+  const back = [-36 * f, wy + 10], top = [-4 * f, wy - 6], front = [32 * f, wy + 4];
+  ctx.fillStyle = shade(st.accent, -0.45);
+  ctx.strokeStyle = '#1a1612';
+  ctx.lineWidth = 1.6;
+  ctx.beginPath();
+  ctx.moveTo(front[0], front[1]);
+  ctx.quadraticCurveTo(top[0], top[1] - 10, back[0], back[1]);
+  if (P.feather) {
+    // feathered trailing edge
+    for (let i = 1; i <= 6; i++) {
+      const k = i / 6;
+      const x = lerp(back[0], front[0], k), y = lerp(back[1], front[1], k) + 2;
+      ctx.quadraticCurveTo(x - 4 * f, y + 7, x, y);
+    }
+  } else {
+    ctx.quadraticCurveTo(-2 * f, wy + 2, front[0], front[1]);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.strokeStyle = rgba(st.accent2, 0.5);
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (const k of [0.25, 0.5, 0.75]) {
+    ctx.moveTo(-4 * f, wy - 2);
+    ctx.lineTo(lerp(back[0], front[0], k), lerp(back[1], front[1], k) + 2);
+  }
+  ctx.stroke();
+
+  // body hangs from the wing bar, leaning into the glide
+  const hip = [-3 * f, -26 + sway], sh = [4 * f, -45 + sway];
+  const head = [8 * f, -54 + sway];
+  const legSway = Math.sin(t * 3) * 3;
+  ctx.strokeStyle = col;
+  ctx.fillStyle = col;
+  ctx.lineWidth = 3.3;
+  ctx.beginPath();
+  // legs trailing behind
+  ctx.moveTo(hip[0], hip[1]);
+  ctx.lineTo(hip[0] - 7 * f, hip[1] + 10 + legSway);
+  ctx.lineTo(hip[0] - 15 * f, hip[1] + 17 + legSway);
+  ctx.moveTo(hip[0], hip[1]);
+  ctx.lineTo(hip[0] - 3 * f, hip[1] + 12 - legSway);
+  ctx.lineTo(hip[0] - 11 * f, hip[1] + 21 - legSway);
+  // spine
+  ctx.moveTo(hip[0], hip[1]);
+  ctx.lineTo(sh[0], sh[1]);
+  // back arm up to the wing bar
+  ctx.moveTo(sh[0], sh[1]);
+  ctx.lineTo(-2 * f, wy + 8);
+  ctx.stroke();
+  // harness straps
+  ctx.strokeStyle = '#3a2a1a';
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.moveTo(sh[0], sh[1]);
+  ctx.lineTo(top[0], wy + 2);
+  ctx.moveTo(hip[0], hip[1]);
+  ctx.lineTo(top[0] - 2 * f, wy + 4);
+  ctx.stroke();
+  // head and goggles
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  ctx.arc(head[0], head[1], 7, 0, TAU);
+  ctx.fill();
+  drawGear(ctx, 'goggles', head[0], head[1], f, st, t, o.team);
+
+  // crossbow in the front hand, aimed down at the target
+  const shooting = o.swing >= 0;
+  const aim = shooting ? clamp(o.aimFa || 0.6, -0.3, 1.3) : 0.55 + Math.sin(t * 2) * 0.05;
+  const [ex, ey] = polar(sh[0], sh[1] + 1, aim + 0.4, 8, f);
+  const [hx, hy] = polar(ex, ey, aim, 8, f);
+  drawCrossbow(ctx, hx, hy, aim, f, P, !shooting || o.swing < 0.8);
+  ctx.strokeStyle = col;
+  ctx.lineWidth = 3.3;
+  ctx.beginPath();
+  ctx.moveTo(sh[0], sh[1] + 1);
+  ctx.lineTo(ex, ey);
+  ctx.lineTo(hx, hy);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawCrossbow(ctx, x, y, ang, f, P, loaded) {
+  const [tx, ty] = polar(x, y, ang, 13, f);
+  const [bx, by] = polar(x, y, ang + Math.PI, 5, f);
+  ctx.strokeStyle = '#4a3220';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(bx, by);
+  ctx.lineTo(tx, ty);
+  ctx.stroke();
+  // limbs across the front of the stock (Crank Winch adds a small crank)
+  const [l1x, l1y] = polar(tx, ty, ang + Math.PI / 2 + 0.35, 8, f);
+  const [l2x, l2y] = polar(tx, ty, ang - Math.PI / 2 - 0.35, 8, f);
+  ctx.strokeStyle = '#2a1c10';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(l1x, l1y);
+  ctx.quadraticCurveTo(tx, ty, l2x, l2y);
+  ctx.stroke();
+  const [sx, sy] = polar(x, y, ang, loaded ? 4 : 9, f);
+  ctx.strokeStyle = '#d8cfbc';
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.moveTo(l1x, l1y);
+  ctx.lineTo(sx, sy);
+  ctx.lineTo(l2x, l2y);
+  ctx.stroke();
+  if (loaded) {
+    const [hx, hy] = polar(sx, sy, ang, 14, f);
+    ctx.strokeStyle = P.barbs ? '#8a9096' : '#6a5a44';
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    ctx.lineTo(hx, hy);
+    ctx.stroke();
+  }
+  if (P.winch) {
+    ctx.fillStyle = '#8a9096';
+    ctx.beginPath();
+    ctx.arc(bx, by, 2, 0, TAU);
+    ctx.fill();
+  }
+}
+
+// A slim, slightly curved ninja blade with a round guard and a wrapped grip.
+function drawKatana(ctx, x, y, ang, f, P, swing) {
+  swingTrail(ctx, x, y, ang, 26, f, swing);
+  const [mx, my] = polar(x, y, ang + 0.06, 14, f);
+  const [tx, ty] = polar(x, y, ang + 0.14, 27, f);
+  const [px, py] = polar(x, y, ang + Math.PI, 7, f);
+  ctx.strokeStyle = '#1a1414';
+  ctx.lineWidth = 2.8;
+  ctx.beginPath();
+  ctx.moveTo(px, py);
+  ctx.lineTo(x, y);
+  ctx.stroke();
+  ctx.strokeStyle = P.serrated ? '#c8ccd0' : '#a9b0b6';
+  ctx.lineWidth = 1.8;
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.quadraticCurveTo(mx, my, tx, ty);
+  ctx.stroke();
+  if (P.serrated) {
+    ctx.strokeStyle = '#7a8086';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let k = 0.35; k < 0.95; k += 0.15) {
+      const [sx, sy] = polar(x, y, ang + 0.1, 27 * k, f);
+      const [nx, ny] = polar(sx, sy, ang + 0.1 + Math.PI / 2, 2, f);
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(nx, ny);
+    }
+    ctx.stroke();
+  }
+  ctx.fillStyle = '#6a5a3a';
+  ctx.beginPath();
+  ctx.arc(x, y, 2.2, 0, TAU);
+  ctx.fill();
+}
+
+// A four-pointed throwing star, spinning.
+function drawStar(ctx, x, y, r, spin) {
+  ctx.fillStyle = '#b8bec4';
+  ctx.strokeStyle = '#2a2a2e';
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  for (let i = 0; i < 8; i++) {
+    const a = spin + (i / 8) * TAU, rr = i % 2 ? r * 0.35 : r;
+    ctx.lineTo(x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+}
+
 function drawStickman(ctx, o) {
   if (o.type === 'giant') return drawGiant(ctx, o);
   if (o.type === 'cleric' || o.type === 'warlock') return drawMage(ctx, o);
+  if (o.type === 'flyer' && !o.grounded) return drawFlyer(ctx, o);
   const st = TEAM_STYLE[o.team], f = o.facing, P = o.perks || NO_PERKS;
   ctx.save();
   ctx.translate(o.x, o.y - (o.lift || 0));
@@ -376,12 +570,13 @@ function drawStickman(ctx, o) {
 
   const t = RT + o.seed, ph = o.walk;
   const isMiner = o.type === 'miner', isArcher = o.type === 'archer', isSword = o.type === 'sword', isSpear = o.type === 'spear';
+  const isNinja = o.type === 'ninja', isKnife = o.type === 'flyer';   // a grounded Kestrel fights with a knife
   const praying = o.pray !== undefined && o.pray >= 0;
   const panning = !!o.panning;
   const kneel = praying || panning;
   const wall = isSpear && o.wall;
-  const run = isSword && o.moving;
-  const walk = o.moving && !isSword;
+  const run = (isSword || isNinja) && o.moving;
+  const walk = o.moving && !run;
 
   // ---- hips and legs
   let hipY;
@@ -455,7 +650,11 @@ function drawStickman(ctx, o) {
     if (wall) th = -0.25;
     else if (o.swing >= 0) th = 0.1;
     else th = 0.55 + (walk ? Math.sin(ph + Math.PI) * 0.12 : Math.sin(t * 2) * 0.04);
-  } else if (isSword) {
+  } else if (isNinja && o.starRanged && o.swing >= 0) {
+    // throwing a star: draw the arm back, then whip it forward (release at 0.8)
+    const s = o.swing;
+    th = s < 0.65 ? lerp(0.5, -2.3, easeOut(s / 0.65)) : lerp(-2.3, 0.4, Math.min(1, (s - 0.65) / 0.2));
+  } else if (isSword || isNinja || isKnife) {
     if (o.swing >= 0) th = swingAngle(o.swing, 0.45);
     else if (run) th = 1.75 + Math.sin(ph + Math.PI) * 0.45;
     else th = 0.45 + Math.sin(t * 2) * 0.05;
@@ -566,7 +765,7 @@ function drawStickman(ctx, o) {
   ctx.stroke();
 
   // ragged waist cloth on fighters
-  if (isSword || isArcher || isSpear) {
+  if (isSword || isArcher || isSpear || isNinja || isKnife) {
     const wave = Math.sin(t * (run ? 14 : 4)) * (run ? 3 : 1.2);
     ctx.strokeStyle = CLOTH[o.team];
     ctx.lineWidth = 2.2;
@@ -666,7 +865,32 @@ function drawStickman(ctx, o) {
   }
 
   // weapon, then the front arm over it
-  if (isSword) {
+  if (isNinja) {
+    if (o.starRanged) {
+      // blade sheathed across the back, a star in the throwing hand until it flies
+      drawKatana(ctx, sx - 8 * f, sy - 6, 2.3, f, P, -1);
+      if (o.swing < 0 || o.swing < 0.8) drawStar(ctx, hx2, hy2, 4, t * (o.swing >= 0 ? 0 : 2));
+    } else {
+      drawKatana(ctx, hx2, hy2, run && o.swing < 0 ? th + 0.8 : th - 1.0, f, P, o.swing);
+    }
+  } else if (isKnife) {
+    // a torn glider wing still strapped to the back, and a short knife
+    ctx.fillStyle = shade(st.accent, -0.5);
+    ctx.beginPath();
+    ctx.moveTo(sx - 2 * f, sy);
+    ctx.lineTo(sx - 16 * f, sy - 10);
+    ctx.lineTo(sx - 12 * f, sy + 2);
+    ctx.lineTo(sx - 18 * f, sy + 8);
+    ctx.closePath();
+    ctx.fill();
+    const [kx, ky] = polar(hx2, hy2, th - 1.0, 11, f);
+    ctx.strokeStyle = '#a9b0b6';
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.moveTo(hx2, hy2);
+    ctx.lineTo(kx, ky);
+    ctx.stroke();
+  } else if (isSword) {
     const bladeAng = run && o.swing < 0 ? th + 0.6 : th - 1.0;
     if (P.blades) drawSword(ctx, hx2, hy2, bladeAng, f, st, o.swing);
     else drawClub(ctx, hx2, hy2, bladeAng, f, o.swing);
@@ -917,6 +1141,41 @@ function drawGear(ctx, g, hx, hy, f, st, t, team) {
       ctx.fill();
       break;
     }
+    case 'ninja': {
+      // a dark wrap over the head, an eye slit, and long tails streaming behind
+      ctx.fillStyle = '#0e0c0c';
+      ctx.beginPath();
+      ctx.arc(hx, hy, 7.6, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = team === 1 ? '#c0432f' : '#d8c08a';
+      ctx.fillRect(hx + (f > 0 ? -1 : -6), hy - 2.6, 7, 2);
+      ctx.strokeStyle = team === 1 ? '#7a1e16' : '#5a4a2a';
+      ctx.lineWidth = 1.6;
+      const bx = hx - 6 * f, by = hy - 3;
+      ctx.beginPath();
+      ctx.moveTo(bx, by);
+      ctx.quadraticCurveTo(bx - 8 * f, by - 1, bx - 16 * f, by + 2 + Math.sin(t * 11) * 3);
+      ctx.moveTo(bx, by);
+      ctx.quadraticCurveTo(bx - 7 * f, by + 3, bx - 13 * f, by + 8 + Math.sin(t * 11 + 1.3) * 3);
+      ctx.stroke();
+      break;
+    }
+    case 'goggles':
+      ctx.strokeStyle = '#4a3420';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(hx - 6.8, hy - 2);
+      ctx.lineTo(hx + 6.8, hy - 2);
+      ctx.stroke();
+      ctx.fillStyle = '#9a8a5a';
+      ctx.beginPath();
+      ctx.arc(hx + 3.5 * f, hy - 2, 2.6, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(160,210,230,0.8)';
+      ctx.beginPath();
+      ctx.arc(hx + 3.5 * f, hy - 2, 1.5, 0, TAU);
+      ctx.fill();
+      break;
     case 'hood':
       ctx.fillStyle = '#3d3022';
       ctx.beginPath();
@@ -1892,6 +2151,107 @@ function drawSanctum(ctx, x, base, hover) {
   ctx.fill();
 }
 
+// Ninja Dojo on the rampart: dark timber, a sweeping two-tier roof and a paper screen door.
+function drawDojo(ctx, x, base, st, hover) {
+  const w = 50, L = x - w / 2, h = 34;
+  if (hover) { ctx.shadowColor = 'rgba(230,220,200,0.9)'; ctx.shadowBlur = 14; }
+  ctx.fillStyle = '#2e2420';
+  ctx.fillRect(L, base - h, w, h);
+  ctx.shadowBlur = 0;
+  texFill(ctx, L, base - h, w, h, 0.7);
+  ctx.strokeStyle = '#140e0c';
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(L, base - h, w, h);
+  // paper screen door with a lattice
+  ctx.fillStyle = '#d8ccb0';
+  ctx.fillRect(x - 10, base - 26, 20, 26);
+  ctx.strokeStyle = '#3a2a20';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (const dx of [-5, 0, 5]) { ctx.moveTo(x + dx, base - 26); ctx.lineTo(x + dx, base); }
+  for (const dy of [-19, -12, -6]) { ctx.moveTo(x - 10, base + dy); ctx.lineTo(x + 10, base + dy); }
+  ctx.stroke();
+  // two sweeping roofs, the eaves curling up
+  const roof = (y, half, rise) => {
+    ctx.beginPath();
+    ctx.moveTo(x - half - 6, y - 4);
+    ctx.quadraticCurveTo(x - half * 0.5, y, x - half * 0.4, y - rise);
+    ctx.lineTo(x + half * 0.4, y - rise);
+    ctx.quadraticCurveTo(x + half * 0.5, y, x + half + 6, y - 4);
+    ctx.lineTo(x + half, y + 2);
+    ctx.lineTo(x - half, y + 2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  };
+  ctx.fillStyle = '#1a1414';
+  ctx.strokeStyle = '#0a0808';
+  roof(base - h, w / 2 + 4, 12);
+  ctx.fillStyle = '#2a2020';
+  ctx.fillRect(x - 12, base - h - 22, 24, 10);
+  ctx.fillStyle = '#1a1414';
+  roof(base - h - 20, 18, 10);
+  // a red sun disc on a banner
+  ctx.fillStyle = shade(st.accent, -0.2);
+  ctx.fillRect(L + 3, base - h + 4, 7, 14);
+  ctx.fillStyle = '#b83a2a';
+  ctx.beginPath();
+  ctx.arc(L + 6.5, base - h + 10, 2.4, 0, TAU);
+  ctx.fill();
+}
+
+// Kestrel Aerie on the rampart: a timber launch ramp with a glider wing hanging from a perch.
+function drawAerie(ctx, x, base, st, hover) {
+  const L = x - 26;
+  if (hover) { ctx.shadowColor = 'rgba(200,230,255,0.9)'; ctx.shadowBlur = 14; }
+  // the perch tower
+  ctx.fillStyle = '#5a4630';
+  ctx.fillRect(L, base - 44, 16, 44);
+  ctx.shadowBlur = 0;
+  texFill(ctx, L, base - 44, 16, 44, 0.6);
+  ctx.strokeStyle = '#22180e';
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(L, base - 44, 16, 44);
+  // launch ramp sloping out toward the gate
+  ctx.strokeStyle = '#3a2a1a';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(L + 8, base - 40);
+  ctx.lineTo(x + 30, base - 14);
+  ctx.moveTo(x + 6, base - 25);
+  ctx.lineTo(x + 6, base);
+  ctx.moveTo(x + 22, base - 18);
+  ctx.lineTo(x + 22, base);
+  ctx.stroke();
+  // a spare wing hanging from the perch
+  ctx.fillStyle = shade(st.accent, -0.45);
+  ctx.strokeStyle = '#1a1612';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(L + 2, base - 48);
+  ctx.quadraticCurveTo(L + 20, base - 66, L + 40, base - 52);
+  ctx.quadraticCurveTo(L + 20, base - 54, L + 2, base - 48);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  // wind sock
+  ctx.strokeStyle = '#2a1c10';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(L + 8, base - 44);
+  ctx.lineTo(L + 8, base - 70);
+  ctx.stroke();
+  const flap = Math.sin(RT * 4) * 2;
+  ctx.fillStyle = '#c0432f';
+  ctx.beginPath();
+  ctx.moveTo(L + 8, base - 70);
+  ctx.lineTo(L - 6, base - 67 + flap);
+  ctx.lineTo(L - 6, base - 62 + flap);
+  ctx.lineTo(L + 8, base - 64);
+  ctx.closePath();
+  ctx.fill();
+}
+
 // The giant pit just outside the gate: a spiked palisade with a barred gate and hanging chains.
 function drawGiantPit(ctx, x, base, st, hover) {
   const w = 96, L = x - w / 2, h = 74;
@@ -2071,8 +2431,10 @@ function drawCastle(ctx, team, hoverKey) {
     ctx.strokeRect(x, ceilTop - 14, 14, 14);
   }
   // the mages' halls stand on the rampart
-  drawChapel(ctx, MAGE_HALL_X.cleric, ceilTop, st, hoverKey === 'cleric');
-  drawSanctum(ctx, MAGE_HALL_X.warlock, ceilTop, hoverKey === 'warlock');
+  drawChapel(ctx, RAMPART_HALL_X.cleric, ceilTop, st, hoverKey === 'cleric');
+  drawSanctum(ctx, RAMPART_HALL_X.warlock, ceilTop, hoverKey === 'warlock');
+  drawDojo(ctx, RAMPART_HALL_X.ninja, ceilTop, st, hoverKey === 'ninja');
+  drawAerie(ctx, RAMPART_HALL_X.flyer, ceilTop, st, hoverKey === 'flyer');
 
   // hanging banners inside the hall
   for (const bx of [146, 266, 386]) drawBanner(ctx, bx, ceilBot, 22, 46, c.banner, st);
@@ -2107,11 +2469,11 @@ function drawCastle(ctx, team, hoverKey) {
   ctx.restore();
 
   // research progress above buildings (unmirrored)
-  for (const [type, bx] of [...Object.entries(BUILD_X), ...Object.entries(MAGE_HALL_X), ['castle', 330], ['giant', GIANT_PIT_X]]) {
+  for (const [type, bx] of [...Object.entries(BUILD_X), ...Object.entries(RAMPART_HALL_X), ['castle', 10], ['giant', GIANT_PIT_X]]) {
     const r = team.research[type];
     if (!r) continue;
     const def = UPGRADES[type].find(u => u.key === r.key);
-    const y = type === 'castle' ? WALL_TOP - 34 : MAGE_HALL_X[type] ? WALL_TOP - 78 : type === 'giant' ? LANE_TOP - 120 : floorTop - 128;
+    const y = type === 'castle' ? WALL_TOP - 150 : RAMPART_HALL_X[type] ? WALL_TOP - 78 : type === 'giant' ? LANE_TOP - 120 : floorTop - 128;
     drawResearchBar(ctx, team.id === 0 ? bx : WORLD_W - bx, y, r.t / def.time);
   }
 }
@@ -2526,6 +2888,8 @@ function drawPortrait(cv, type, perks) {
     cleric: { x: 40, y: 116, scale: 1.5, gear: 'none' },
     warlock: { x: 40, y: 116, scale: 1.5, gear: 'none' },
     giant: { x: 42, y: 106, scale: 1.45, gear: 'none', chains: 3 },
+    ninja: { x: 38, y: 112, scale: 1.55, gear: 'ninja' },
+    flyer: { x: 50, y: 108, scale: 1.25, gear: 'goggles' },
   }[type];
   drawStickman(c, {
     ...pose, facing: 1, team: 0, type, walk: 0, moving: false, swing: -1,
@@ -2545,6 +2909,7 @@ const TIER2_ICON = { rage2: 'rage', bag2: 'bag', pick2: 'pick', devout2: 'devout
 
 function drawUpgradeIcon(cv, type, key) {
   if (type === 'spear' && key === 'helm') key = 'shelm';
+  if (type === 'ninja' && key === 'focus') key = 'nfocus';
   if (type === 'cleric' || type === 'warlock') key = type[0] + '_' + key;   // the mages share upgrade keys
   const tierMark = key === 'protein3' ? 'III' : 'II';
   const tier2 = !!TIER2_ICON[key];
@@ -2812,6 +3177,63 @@ function drawUpgradeIcon(cv, type, key) {
       c.fillStyle = '#9a7a26'; c.beginPath(); c.moveTo(12, 5); c.quadraticCurveTo(24, 8, 34, 6); c.lineTo(28, 13); c.lineTo(34, 20); c.quadraticCurveTo(24, 18, 12, 19); c.closePath(); c.fill();
       c.strokeStyle = '#e8d38a'; c.lineWidth = 1.6;
       for (const y of [27, 32]) { c.beginPath(); c.moveTo(20, y + 3); c.lineTo(25, y); c.lineTo(30, y + 3); c.stroke(); }
+      break;
+    // ---- critical hits (archers and ninjas)
+    case 'eye':
+    case 'vital':
+      c.strokeStyle = '#d8cfbc'; c.lineWidth = 1.6;
+      c.beginPath(); c.arc(20, 20, 13, 0, TAU); c.moveTo(20, 3); c.lineTo(20, 11); c.moveTo(20, 29); c.lineTo(20, 37); c.moveTo(3, 20); c.lineTo(11, 20); c.moveTo(29, 20); c.lineTo(37, 20); c.stroke();
+      c.fillStyle = key === 'eye' ? '#e0bf5a' : '#c0432f'; c.beginPath(); c.arc(20, 20, 4.5, 0, TAU); c.fill();
+      c.fillStyle = '#fff4c8'; c.font = 'bold 8px Georgia, serif'; c.textAlign = 'center'; c.fillText('×2', 31, 37);
+      break;
+    // ---- ninja
+    case 'serrated':
+      c.strokeStyle = '#1a1414'; c.lineWidth = 3; c.beginPath(); c.moveTo(7, 34); c.lineTo(13, 28); c.stroke();
+      c.strokeStyle = '#c8ccd0'; c.lineWidth = 2.2; c.beginPath(); c.moveTo(13, 28); c.quadraticCurveTo(24, 20, 34, 5); c.stroke();
+      c.strokeStyle = '#7a8086'; c.lineWidth = 1.2; c.beginPath();
+      for (let k = 0.2; k < 0.95; k += 0.15) { const x = 13 + 21 * k, y = 28 - 23 * k; c.moveTo(x, y); c.lineTo(x + 2.5, y + 1.5); }
+      c.stroke();
+      break;
+    case 'parry':
+      c.strokeStyle = '#c8ccd0'; c.lineWidth = 2.4;
+      c.beginPath(); c.moveTo(8, 32); c.lineTo(30, 6); c.moveTo(8, 8); c.lineTo(32, 30); c.stroke();
+      c.fillStyle = '#fff4c8';
+      c.beginPath(); for (let i = 0; i < 10; i++) { const a = (i / 10) * TAU, r = i % 2 ? 2 : 5; c.lineTo(20 + Math.cos(a) * r, 19 + Math.sin(a) * r); } c.closePath(); c.fill();
+      break;
+    case 'nfocus':
+      c.fillStyle = '#0e0c0c'; c.beginPath(); c.arc(20, 20, 13, 0, TAU); c.fill();
+      c.fillStyle = '#d8c08a'; c.fillRect(9, 17, 22, 4);
+      c.fillStyle = '#c0432f'; c.beginPath(); c.arc(24, 19, 1.8, 0, TAU); c.fill();
+      c.strokeStyle = 'rgba(200,70,50,0.6)'; c.lineWidth = 1.4; c.setLineDash([2, 2]); c.beginPath(); c.arc(20, 20, 17, 0, TAU); c.stroke(); c.setLineDash([]);
+      break;
+    case 'stars':
+      drawStar(c, 14, 24, 8, 0.3);
+      drawStar(c, 29, 12, 6, 0.9);
+      c.strokeStyle = 'rgba(216,207,188,0.5)'; c.lineWidth = 1; c.beginPath(); c.moveTo(3, 30); c.lineTo(8, 27); c.moveTo(20, 16); c.lineTo(24, 14); c.stroke();
+      break;
+    // ---- kestrels
+    case 'feather':
+      c.fillStyle = '#d8cfbc'; c.strokeStyle = '#5a4a38'; c.lineWidth = 1.2;
+      c.beginPath(); c.moveTo(10, 34); c.quadraticCurveTo(12, 12, 31, 5); c.quadraticCurveTo(28, 24, 10, 34); c.fill(); c.stroke();
+      c.beginPath(); c.moveTo(10, 34); c.lineTo(26, 12); c.stroke();
+      c.strokeStyle = '#d8cfbc'; c.lineWidth = 1.4; c.setLineDash([2, 3]); c.beginPath(); c.moveTo(33, 22); c.lineTo(33, 36); c.stroke(); c.setLineDash([]);
+      break;
+    case 'scope':
+      c.fillStyle = '#4a3220'; c.fillRect(6, 18, 22, 5);
+      c.fillStyle = '#8a7a4a'; c.fillRect(10, 12, 14, 5);
+      c.fillStyle = 'rgba(160,210,230,0.85)'; c.beginPath(); c.arc(25, 14.5, 2.4, 0, TAU); c.fill();
+      c.strokeStyle = '#d8cfbc'; c.lineWidth = 1; c.setLineDash([2, 2]); c.beginPath(); c.moveTo(28, 21); c.lineTo(38, 21); c.stroke(); c.setLineDash([]);
+      break;
+    case 'winch':
+      c.strokeStyle = '#8a9096'; c.lineWidth = 2.4; c.beginPath(); c.arc(20, 20, 9, 0, TAU); c.stroke();
+      c.beginPath(); for (let i = 0; i < 6; i++) { const a = (i / 6) * TAU; c.moveTo(20 + Math.cos(a) * 9, 20 + Math.sin(a) * 9); c.lineTo(20 + Math.cos(a) * 12.5, 20 + Math.sin(a) * 12.5); } c.stroke();
+      c.strokeStyle = '#4a3220'; c.lineWidth = 3; c.beginPath(); c.moveTo(20, 20); c.lineTo(31, 31); c.stroke();
+      break;
+    case 'barbs':
+      for (const dy of [-6, 6]) {
+        c.strokeStyle = '#6a5a44'; c.lineWidth = 2.6; c.beginPath(); c.moveTo(6, 22 + dy); c.lineTo(28, 18 + dy); c.stroke();
+        c.fillStyle = '#9aa0a6'; c.beginPath(); c.moveTo(36, 16 + dy); c.lineTo(27, 14 + dy); c.lineTo(29, 18 + dy); c.lineTo(27, 22 + dy); c.closePath(); c.fill();
+      }
       break;
     case 'halberd':
       c.strokeStyle = wood; c.lineWidth = 2.6; c.beginPath(); c.moveTo(8, 36); c.lineTo(30, 6); c.stroke();

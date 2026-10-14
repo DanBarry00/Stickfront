@@ -25,7 +25,7 @@ class PoorAI {
       if (chance(0.75)) queueUnit(team, 'miner');
     } else if (chance(0.65)) {
       const r = Math.random();
-      queueUnit(team, r < 0.45 ? 'sword' : r < 0.65 ? 'archer' : r < 0.82 ? 'spear' : r < 0.91 ? 'cleric' : 'warlock');
+      queueUnit(team, r < 0.4 ? 'sword' : r < 0.58 ? 'archer' : r < 0.72 ? 'spear' : r < 0.8 ? 'ninja' : r < 0.86 ? 'flyer' : r < 0.93 ? 'cleric' : 'warlock');
     } else if (chance(0.15)) queueUnit(team, 'miner');
 
     // Now and then wanders into a random upgrade when it has spare gold.
@@ -65,8 +65,8 @@ class PoorAI {
 // research, attacks when it has the edge and falls back when losing. Hard: researches everything,
 // gathers mana, fields mages and giants, refits veterans, and attacks and retreats in formations.
 const SMART = {
-  normal: { think: [2, 3.5], miners: 7, praying: 1, panning: 0, research: 'basic', mages: true, giants: false, formations: false, perThink: 1, attackPower: 900, edge: 1.1, saveAt: 7, bigArmy: 10, reserve: 250, saveBias: 0.7, armyPerUpgrade: 0.8, researchGap: 90, prayAt: 4, panAt: 99, manaCap: 300 },
-  hard: { think: [1, 1.8], miners: 8, praying: 1, panning: 1, research: 'all', mages: true, giants: true, formations: true, perThink: 2, attackPower: 1000, edge: 1.0, saveAt: 7, bigArmy: 9, reserve: 250, saveBias: 0.6, armyPerUpgrade: 0.35, researchGap: 70, prayAt: 5, panAt: 8, manaCap: 700 },
+  normal: { think: [2, 3.5], miners: 7, praying: 1, panning: 0, research: 'basic', mages: true, giants: false, formations: false, perThink: 1, attackPower: 900, edge: 1.1, saveAt: 7, bigArmy: 10, reserve: 250, saveBias: 0.7, armyPerUpgrade: 0.8, researchGap: 90, prayAt: 4, panAt: 99, manaCap: 300, ninjas: 0.1, flyers: 0.06 },
+  hard: { think: [1, 1.8], miners: 8, praying: 1, panning: 1, research: 'all', mages: true, giants: true, formations: true, perThink: 2, attackPower: 1000, edge: 1.0, saveAt: 7, bigArmy: 9, reserve: 250, saveBias: 0.6, armyPerUpgrade: 0.35, researchGap: 70, prayAt: 5, panAt: 8, manaCap: 700, ninjas: 0.14, flyers: 0.1 },
 };
 
 // Research order: what a sensible commander buys first.
@@ -76,6 +76,8 @@ const AI_RESEARCH = [
   ['miner', 'devout'], ['cleric', 'pool'], ['warlock', 'big'], ['spear', 'inspire'], ['archer', 'quiver'],
   ['castle', 'archer2'], ['sword', 'rage'], ['giant', 'protein'], ['giant', 'blinders'], ['spear', 'halberd'],
   ['cleric', 'focus'], ['warlock', 'focus'], ['miner', 'defense'],
+  ['ninja', 'serrated'], ['flyer', 'barbs'], ['archer', 'eye'], ['ninja', 'stars'], ['flyer', 'scope'],
+  ['ninja', 'parry'], ['ninja', 'vital'], ['flyer', 'winch'], ['ninja', 'focus'], ['flyer', 'feather'],
   ['cleric', 'big'], ['warlock', 'pool'], ['cleric', 'speed'], ['warlock', 'speed'], ['cleric', 'might'],
   ['warlock', 'might'], ['miner', 'pick2'], ['miner', 'bag2'], ['spear', 'shield2'], ['archer', 'fire'],
   ['sword', 'leap'], ['sword', 'rage2'], ['giant', 'stun'], ['giant', 'protein2'], ['castle', 'tithe2'],
@@ -115,8 +117,12 @@ class SmartAI {
     if (c.giants && n >= 6 && count('giant') < 1 + Math.floor(n / 14) && team.mana > 200 && team.gold >= UNIT_TYPES.giant.cost) return 'giant';
     if (c.mages && count('cleric') < Math.floor(n / 7) && team.mana > 120) return 'cleric';
     if (c.mages && count('warlock') < Math.floor(n / 7) && team.mana > 120) return 'warlock';
+    // enemy Kestrels can only be answered from range: more archers (and some of our own Kestrels)
+    const enemyFlyers = G.units.filter(u => u.team !== this.id && !u.dead && isFlying(u)).length;
+    if (count('archer') < n * 0.28 + enemyFlyers * 0.6) return 'archer';
     if (count('spear') < n * 0.2) return 'spear';
-    if (count('archer') < n * 0.28) return 'archer';
+    if (count('flyer') < Math.floor(n * c.flyers) + (enemyFlyers ? 1 : 0)) return 'flyer';
+    if (count('ninja') < Math.floor(n * c.ninjas)) return 'ninja';
     return 'sword';
   }
 
@@ -128,6 +134,8 @@ class SmartAI {
       if (this.cfg.research === 'basic' && (d.requires || ['giant', 'cleric', 'warlock', 'castle'].includes(type))) continue;
       if (d.requires && !team.upgrades[type][d.requires]) continue;
       if (team.research[type]) continue;
+      // no point researching for ninjas or Kestrels it hasn't trained
+      if ((type === 'ninja' || type === 'flyer') && !G.units.some(u => u.team === this.id && !u.dead && u.type === type)) continue;
       return { type, d };
     }
     return null;

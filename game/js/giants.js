@@ -19,7 +19,7 @@ const giantChains = u => (u.isStatueGiant ? 0 : Math.round(u.obey * 5));
 function biggestFoe(u, range) {
   let best = null, bh = -1;
   for (const e of G.units) {
-    if (e.team === u.team || e.dead || e.inside) continue;
+    if (e.team === u.team || !canTarget(u, e)) continue;
     if (Math.abs(e.x - u.x) > range || Math.abs(e.y - u.y) > 140) continue;
     if (e.hp > bh) { bh = e.hp; best = e; }
   }
@@ -39,7 +39,7 @@ function updateGiant(u, dt) {
   if (u.confusedT > 0) {
     let near = null, nd = 90;
     for (const e of G.units) {
-      if (e === u || e.dead || e.inside || isGiant(e)) continue;
+      if (e === u || isGiant(e) || !canTarget(u, e)) continue;
       const d = Math.abs(e.x - u.x) + Math.abs(e.y - u.y) * 0.5;
       if (d < nd) { nd = d; near = e; }
     }
@@ -100,6 +100,15 @@ function giantSlot(u) {
   return { y: rowY(i % 2 === 0 ? 1 : 4), back: Math.floor(i / 2) * GIANT_COL_GAP };
 }
 
+// Archers (and ninja stars) can send a giant into a confused rage. Blinders make it rarer and shorter.
+function confuseGiant(t, p) {
+  const blind = t.perks.blinders ? BLINDERS_CONFUSE : { chance: 1, time: 1 };
+  if (t.isStatueGiant || t.confuseCd > 0 || !chance(p * blind.chance)) return;
+  t.confusedT = GIANT_CONFUSE.time * blind.time;
+  t.confuseCd = GIANT_CONFUSE.cooldown;
+  floatText(t.x, t.y - 80 * t.scale, 'Confused!', '#e0bf5a');
+}
+
 // Knock a unit away from the source and stun it. Giants stand firm.
 function knock(t, src, dist, stun) {
   if (t.dead || t.isStructure || isGiant(t)) return;
@@ -116,8 +125,8 @@ function giantImpact(u, t, amt) {
   if (u.isStatueGiant && !u.swept) {
     u.swept = true;
     for (const e of G.units.slice()) {
-      if (e === t || e.team === u.team || e.dead || e.inside || Math.abs(e.x - u.x) > 160 || Math.abs(e.y - u.y) > 90) continue;
-      damage(e, amt * 0.6, u);
+      if (e === t || e.team === u.team || e.dead || e.inside || isFlying(e) || Math.abs(e.x - u.x) > 160 || Math.abs(e.y - u.y) > 90) continue;
+      damage(e, amt * 0.6, u, true);
       knock(e, u, 100, 2.5);
     }
     knock(t, u, 100, 2.5);
@@ -127,10 +136,10 @@ function giantImpact(u, t, amt) {
   }
   if (isGiant(t)) return;   // giant on giant: no splash
   const side = G.units
-    .filter(e => e !== t && e.team === t.team && !e.dead && !e.inside && Math.abs(e.x - t.x) < 60 && Math.abs(e.y - t.y) < 40)
+    .filter(e => e !== t && e.team === t.team && !e.dead && !e.inside && !isFlying(e) && Math.abs(e.x - t.x) < 60 && Math.abs(e.y - t.y) < 40)
     .sort((a, b) => Math.abs(a.x - t.x) + Math.abs(a.y - t.y) - (Math.abs(b.x - t.x) + Math.abs(b.y - t.y)))
     .slice(0, 2);
-  for (const e of side) damage(e, amt * GIANT_SPLASH, u);
+  for (const e of side) damage(e, amt * GIANT_SPLASH, u, true);
   if (u.perks.stun) knock(t, u, 55, STUN_TIME);
 }
 
