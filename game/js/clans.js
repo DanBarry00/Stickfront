@@ -95,10 +95,9 @@ const CLANS = {
     hp: { sword: 0.9, spear: 0.9 },
     castleArchers: 1,
     lockUnits: ['giant'],
-    ai: { cleric: 0.1, warlock: 0.1 },
-    strengths: ['Starts with 150 mana, a Cleric, a Warlock, Healing Pool and Blight Pool', 'Mages cost 35 mana instead of 60', 'Praying gives 50% more mana'],
+    ai: { cleric: 0.1, warlock: 0.1, golem: 0.08 },
+    strengths: ['Starts with 150 mana, a Cleric, a Warlock, Healing Pool and Blight Pool', 'Mages cost 35 mana instead of 60', 'Praying gives 50% more mana', 'Clan unit: Spirit Golem, a 700 hp tank you command directly that can Hunker Down and shrugs off Warlock magic'],
     weaknesses: ['Swordwrath and Spearton have 10% less health', 'Only 1 castle archer', 'No Giants'],
-    coming: ['Spirit Golem: a commandable tank that can Hunker Down'],
   },
 
   beast: {

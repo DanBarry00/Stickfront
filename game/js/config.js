@@ -114,8 +114,14 @@ const UNIT_TYPES = {
     dmg: 45, range: 550, atkTime: 4, aggro: 590, hotkey: ']', code: 'BracketRight', clans: ['defense'],
     desc: 'A crewed bolt-thrower. Range 550, one heavy bolt every 4s that punches through into a second unit, double damage to trenches and statues. It cannot hit flyers or anything closer than 120, so it backs away from attackers. Slow.',
   },
+  // Arcane Circle construct: a commandable tank. Hunker Down to soak damage and draw attacks.
+  golem: {
+    key: 'golem', name: 'Spirit Golem', building: 'Golem Forge', cost: 150, mana: 250, time: 12, hp: 700, speed: 45, pop: 3,
+    dmg: 30, range: 40, atkTime: 1.6, aggro: 280, hotkey: '\\', code: 'Backslash', clans: ['arcane'],
+    desc: 'A rune-carved stone construct that takes your orders, unlike a giant. 700 hp, hits one target at a time, and takes half damage from Warlock magic. Hunker Down (X): half speed, 60% less damage, enemies prefer to hit it, and it stops attacking.',
+  },
 };
-const UNIT_ORDER = ['miner', 'sword', 'archer', 'spear', 'cleric', 'warlock', 'giant', 'ninja', 'flyer', 'ballista'];
+const UNIT_ORDER = ['miner', 'sword', 'archer', 'spear', 'cleric', 'warlock', 'giant', 'ninja', 'flyer', 'ballista', 'golem'];
 // Training groups: each group trains one unit at a time from a shared queue (so a Swordwrath
 // waits for the Spearton ahead of it). Colors tint the training bar.
 const TRAIN_GROUPS = [
@@ -123,7 +129,7 @@ const TRAIN_GROUPS = [
   { key: 'infantry', name: 'Infantry', color: '#c0503a', types: ['sword', 'spear', 'ninja'] },
   { key: 'ranged', name: 'Ranged', color: '#7aa84a', types: ['archer', 'flyer', 'ballista'] },
   { key: 'mages', name: 'Mages', color: '#9a62d8', types: ['cleric', 'warlock'] },
-  { key: 'giants', name: 'Giants', color: '#8f8a80', types: ['giant'] },
+  { key: 'giants', name: 'Giants', color: '#8f8a80', types: ['giant', 'golem'] },
 ];
 const groupOf = type => TRAIN_GROUPS.find(g => g.types.includes(type));
 const isMage = u => u.type === 'cleric' || u.type === 'warlock';
@@ -137,7 +143,7 @@ const trainCode = def => def.code || 'Digit' + def.hotkey;
 // all four halls stand. The giant pit is outside the gate.
 const GIANT_PIT_X = 655;
 const RAMPART_HALL_X = { cleric: 150, warlock: 222, ninja: 340, flyer: 462 };
-const DOOR_X = { ...BUILD_X, cleric: 52, warlock: 52, giant: GIANT_PIT_X, ninja: RAMPART_HALL_X.ninja, flyer: RAMPART_HALL_X.flyer, ballista: 500 };   // ballistas roll out by the gate
+const DOOR_X = { ...BUILD_X, cleric: 52, warlock: 52, giant: GIANT_PIT_X, ninja: RAMPART_HALL_X.ninja, flyer: RAMPART_HALL_X.flyer, ballista: 500, golem: GIANT_PIT_X };   // ballistas roll out by the gate
 
 // Ninjas
 const NINJA_AMBUSH = 3;           // damage multiplier of the first blow of a fight (or out of stealth)
@@ -158,6 +164,10 @@ const CRIT = { chance: 0.1, upgraded: 0.2, mult: 2 };
 // Ballista (Defense Clan): can't shoot closer than minRange; each bolt also hits the next unit
 // behind its target for a share of the damage; structures (trenches, statues) take extra.
 const BALLISTA = { minRange: 120, pierce: 0.6, structureMul: 2 };
+
+// Spirit Golem (Arcane Circle): bigger than a man, stone armor, shrugs off Warlock magic;
+// Mana Core heals it slowly.
+const GOLEM = { scale: 1.5, armor: 0.1, spellMul: 0.5, regen: 3 };
 
 // Giants
 const GIANT_SCALE = 2.1;          // base size; each Protein Diet tier adds 13%
@@ -254,6 +264,10 @@ const UPGRADES = {
     { key: 'ironbolt', name: 'Iron-tipped Bolts', cost: 225, mana: 50, time: 25, desc: 'Bolt damage 45 → 60.' },
     { key: 'mantlet', name: 'Mantlet', cost: 175, mana: 25, time: 20, desc: 'A timber shield for the crew: +60 hp and 20% armor.' },
   ],
+  golem: [
+    { key: 'plating', name: 'Runic Plating', cost: 200, mana: 75, time: 25, desc: 'Rune-etched plates: +20% armor.' },
+    { key: 'core', name: 'Mana Core', cost: 175, mana: 100, time: 25, desc: `A glowing core in its chest that slowly mends it: +${GOLEM.regen} hp per second.` },
+  ],
   spear: [
     { key: 'shield', name: 'Shields', cost: 175, mana: 0, time: 20, desc: '+20% armor and +40 hp, and unlocks Shield Wall (X): they stop attacking, take 60% less damage and draw enemy attacks.' },
     { key: 'shield2', name: 'Tower Shields', cost: 200, mana: 50, time: 25, requires: 'shield', desc: '+10% more armor and +40 hp; Shield Wall blocks 75% and draws attackers even harder.' },
@@ -341,6 +355,7 @@ const GEAR = {
   ninja: [['ninja'], ['ninja']],
   flyer: [['goggles'], ['goggles']],
   ballista: [['band'], ['horns']],
+  golem: [['none'], ['none']],
 };
 
 const THEMES = [

@@ -84,7 +84,8 @@ function buildingAt(wx, wy) {
     for (const [type, hx] of Object.entries(RAMPART_HALL_X)) if (Math.abs(wx - hx) < 28 && wy > WALL_TOP - 90) return type;
     return 'castle';
   }
-  if (Math.abs(wx - GIANT_PIT_X) < 52 && wy > LANE_TOP - 100 && wy < LANE_TOP + 2) return 'giant';
+  // the pit outside the gate: the Giant Pit, or the Golem Forge for the Arcane Circle
+  if (Math.abs(wx - GIANT_PIT_X) < 52 && wy > LANE_TOP - 100 && wy < LANE_TOP + 2) return canTrain(G.teams[0], 'golem') ? 'golem' : 'giant';
   if (wy < LANE_TOP - 128 || wy > LANE_TOP) return null;
   for (const [type, bx] of Object.entries(BUILD_X)) if (Math.abs(wx - bx) < 52) return type;
   return null;
@@ -113,7 +114,8 @@ const mageSel = () => liveSel().filter(u => isMage(u));
 const builderSelection = () => minerSel().filter(u => u.perks.walls);
 const fortifierSelection = () => minerSel().filter(u => u.perks.walls2);
 const prospectorSelection = () => minerSel().filter(u => u.perks.prospect);
-const shieldSelection = () => liveSel().filter(u => u.type === 'spear' && u.perks.shield);
+// Units that can brace: Spearton with Shields (Shield Wall) and Spirit Golems (Hunker Down).
+const shieldSelection = () => liveSel().filter(u => (u.type === 'spear' && u.perks.shield) || u.type === 'golem');
 const refitSelection = () => liveSel().filter(u => missingUpgrades(u).length);
 const starSelection = () => liveSel().filter(u => u.type === 'ninja' && u.perks.stars);
 
@@ -229,6 +231,7 @@ function startPlacing(mode) {
 function toggleShieldWall() {
   const s = shieldSelection();
   if (!s.length) {
+    if (canTrain(G.teams[0], 'golem')) return toast('Select Spirit Golems or Spearton with Shields');
     return toast(G.teams[0].upgrades.spear.shield ? 'Select Spearton with Shields (refit older ones with R)' : 'Research Shields at the Spear Hall first');
   }
   const on = !s.every(u => u.shieldWall);
@@ -338,7 +341,7 @@ const COMMANDS = [
   { id: 'retreat', label: 'Retreat', key: '⇧C', show: s => s.mil, run: () => formGroup(G.teams[0], milSel(), 'retreat'), on: () => inGroup('retreat') },
   { id: 'hold', label: 'Hold', key: 'S', show: () => true, run: stopSelected },
   { id: 'manwall', label: 'Defend trench', key: 'K', show: s => s.melee && s.canWall, run: () => manWall(G.teams[0], meleeSel(), null), on: () => meleeSel().every(u => u.order.type === 'manwall') },
-  { id: 'shield', label: 'Shield wall', key: 'X', show: s => s.shield, run: toggleShieldWall, on: () => shieldSelection().every(u => u.shieldWall) },
+  { id: 'shield', label: s => (s.golemOnly ? 'Hunker down' : 'Shield wall'), key: 'X', show: s => s.shield, run: toggleShieldWall, on: () => shieldSelection().every(u => u.shieldWall) },
   { id: 'mine', label: 'Mine', key: 'I', show: s => s.miner, run: () => minerSel().forEach(u => setOrder(u, { type: 'stance' })) },
   { id: 'pray', label: 'Pray', key: 'O', show: s => s.miner, run: () => minerSel().forEach(u => setOrder(u, { type: 'mana' })) },
   { id: 'pan', label: 'Pan', key: '⇧Q', show: s => s.miner && s.mil, run: () => minerSel().forEach(u => setOrder(u, { type: 'pan' })) },
@@ -372,6 +375,7 @@ function selectionCaps() {
     miner: minerSel().length > 0,
     canWall: canManWalls(me),
     shield: shieldSelection().length > 0,
+    golemOnly: shieldSelection().length > 0 && shieldSelection().every(u => u.type === 'golem'),
     build: builderSelection().length > 0,
     fort: fortifierSelection().length > 0,
     prosp: prospectorSelection().length > 0,
@@ -605,7 +609,7 @@ const CMD_TIPS = {
   retreat: 'Fall back toward the castle together, facing the enemy and still fighting anything in reach.',
   hold: 'Stop and hold this spot, fighting anything that comes close.',
   manwall: `Melee troops climb onto the rampart of your nearest finished trench (one row, ${WALL_GUARDS} per trench). Blows against them are split half to the rampart.`,
-  shield: 'Spearton brace behind their shields: no attacks, big damage reduction, enemies prefer to hit them.',
+  shield: 'Spearton brace behind their shields, Spirit Golems hunker down: no attacks, half speed, big damage reduction, and enemies prefer to hit them.',
   mine: 'Go back to mining gold.',
   pray: 'Kneel at the statue and pray for mana (4 at a time).',
   pan: 'Go into the castle and pan the stream for gold and mana (5 at a time).',
@@ -844,7 +848,7 @@ function unitJob(u, me) {
     return ({ mana: 'Praying for mana', pan: 'Going to pan', build: 'Working on a trench', replenish: 'Replenishing a deposit', refit: 'Going to refit', garrison: 'Garrisoned', move: 'Moving', hold: 'Holding', attack: 'Fighting' }[u.order.type]
       || (u.retaliateT > 0 ? 'Defending itself' : u.praying ? 'Praying for mana' : u.carry >= u.carryCap ? 'Returning gold' : u.mine ? 'Mining gold' : 'Idle'));
   }
-  if (u.shieldWall) return 'Shield wall';
+  if (u.shieldWall) return u.type === 'golem' ? 'Hunkered down' : 'Shield wall';
   if (u.order.type === 'stance') {
     const s = u.ownStance || me.stance;
     return { garrison: 'Garrisoned', defend: 'Defending', attack: 'Attacking' }[s] + (u.ownStance ? ' (own order)' : '');

@@ -99,7 +99,7 @@ function rate(samples, win, get) {
   return dt > 0 ? (get(last) - get(first)) / dt : 0;
 }
 
-const DBG_KINDS = ['miner', 'sword', 'archer', 'spear', 'cleric', 'warlock', 'giant', 'ninja', 'flyer', 'ballista', 'castle'];
+const DBG_KINDS = ['miner', 'sword', 'archer', 'spear', 'cleric', 'warlock', 'giant', 'golem', 'ninja', 'flyer', 'ballista', 'castle'];
 const fmt = (v, p = 0) => (Math.abs(v) < 0.05 && p ? '–' : v.toFixed(p));
 
 function debugTeamHTML(id) {

@@ -503,6 +503,116 @@ function drawCrossbow(ctx, x, y, ang, f, P, loaded) {
   }
 }
 
+// Spirit Golem: a blocky stone construct with glowing runes in its side's crystal colour.
+// Hunkered down (o.wall) it crouches with both forearms crossed in front like a shield and the
+// runes flare. Runic Plating adds etched metal plates; Mana Core glows in its chest.
+function drawGolem(ctx, o) {
+  const st = TEAM_STYLE[o.team], f = o.facing, P = o.perks || NO_PERKS;
+  ctx.save();
+  ctx.translate(o.x, o.y - (o.lift || 0));
+  if (o.fall) ctx.rotate(-f * o.fall * 1.2);
+  if (o.alpha !== undefined) ctx.globalAlpha *= o.alpha;
+  ctx.scale(o.scale, o.scale);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  const stone = o.flash > 0 ? '#7a3a30' : o.team === 0 ? '#8c8678' : '#6c6268';
+  const dark = shade(stone, -0.55), rune = st.crystal, t = RT + o.seed;
+  const hunker = !!o.wall, walking = o.moving && !hunker;
+  const glow = hunker ? 0.95 : 0.55 + 0.15 * Math.sin(t * 2.5);
+  const limb = (pts, w) => {
+    for (const [col, lw] of [[dark, w + 2.5], [stone, w]]) {
+      ctx.strokeStyle = col;
+      ctx.lineWidth = lw;
+      ctx.beginPath();
+      pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+      ctx.stroke();
+    }
+  };
+
+  // legs: short and thick; a heavy stomping walk
+  const hipY = hunker ? -17 : -24 - (walking ? Math.abs(Math.sin(o.walk)) * 1.5 : 0);
+  for (let i = 0; i < 2; i++) {
+    const p = o.walk + i * Math.PI;
+    const fx = walking ? Math.sin(p) * 7 : i ? -5 : 5, fy = walking ? -Math.max(0, Math.cos(p)) * 3 : 0;
+    const kx = hunker ? (i ? -9 : 9) : fx * 0.5 + 2;
+    limb([[(i ? -4 : 4) * f, hipY], [kx * f, hipY * 0.45], [fx * f, fy]], 7);
+  }
+  // torso: a broad slab, wider at the shoulders
+  const shY = hipY - (hunker ? 22 : 27), lean = hunker ? 5 : 1.5;
+  ctx.fillStyle = stone;
+  ctx.strokeStyle = dark;
+  ctx.lineWidth = 1.8;
+  ctx.beginPath();
+  ctx.moveTo(-8 * f, hipY + 2);
+  ctx.lineTo(8 * f, hipY + 2);
+  ctx.lineTo((13 + lean) * f, shY);
+  ctx.lineTo((-12 + lean) * f, shY - 1);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  texFill(ctx, -14, shY - 1, 28, hipY - shY + 3, 0.5);
+  // runes carved down the chest
+  ctx.strokeStyle = rgba(rune, glow);
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.moveTo((lean - 1) * f, shY + 4); ctx.lineTo((lean + 2) * f, shY + 9); ctx.lineTo((lean - 2) * f, shY + 13);
+  ctx.moveTo((lean - 7) * f, shY + 6); ctx.lineTo((lean - 7) * f, shY + 12);
+  ctx.moveTo((lean + 7) * f, shY + 6); ctx.lineTo((lean + 5) * f, shY + 11);
+  ctx.stroke();
+  if (P.plating) {
+    ctx.fillStyle = '#5a5e64';
+    ctx.strokeStyle = rgba(rune, 0.6);
+    ctx.lineWidth = 1;
+    for (const [x, y, w, h] of [[-11, shY + 1, 7, 5], [5, shY + 1, 7, 5], [-6, hipY - 8, 12, 5]]) {
+      ctx.fillRect((lean + x) * f - (f < 0 ? w : 0), y, w, h);
+      ctx.strokeRect((lean + x) * f - (f < 0 ? w : 0), y, w, h);
+    }
+  }
+  if (P.core) {
+    const g = ctx.createRadialGradient(lean * f, shY + 10, 0, lean * f, shY + 10, 9);
+    g.addColorStop(0, rgba('#9fe0ff', 0.9));
+    g.addColorStop(1, rgba('#9fe0ff', 0));
+    ctx.fillStyle = g;
+    ctx.fillRect(lean * f - 9, shY + 1, 18, 18);
+  }
+  // head: a small block with glowing eyes
+  const hx = (lean + 2) * f, hy = shY - 6;
+  ctx.fillStyle = stone;
+  ctx.strokeStyle = dark;
+  ctx.lineWidth = 1.6;
+  ctx.fillRect(hx - 6, hy - 6, 12, 11);
+  ctx.strokeRect(hx - 6, hy - 6, 12, 11);
+  ctx.fillStyle = rgba(rune, Math.min(1, glow + 0.2));
+  ctx.fillRect(hx + 1.5 * f - 1.5, hy - 2, 3, 2);
+  ctx.fillRect(hx - 2.5 * f - 1.5, hy - 2, 3, 2);
+  // arms: crossed in front when hunkered, otherwise a big overhead slam
+  const sh = [(lean + 11) * f, shY + 2], back = [(lean - 10) * f, shY + 2];
+  if (hunker) {
+    limb([back, [(lean + 2) * f, shY + 10], [(lean + 15) * f, shY + 4]], 6.5);
+    limb([sh, [(lean + 15) * f, shY + 14], [(lean + 2) * f, shY + 8]], 6.5);
+    // a shimmer of warding magic in front
+    ctx.strokeStyle = rgba(rune, 0.35 + 0.15 * Math.sin(t * 6));
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc((lean + 8) * f, hipY - 10, 26, -1.2, 1.2);
+    ctx.stroke();
+  } else {
+    const th = o.swing >= 0 ? swingAngle(o.swing, 1.05) : walking ? 1.1 + Math.sin(o.walk + Math.PI) * 0.25 : 1.15;
+    const [ex, ey] = polar(sh[0], sh[1], th + 0.25, 11, f);
+    const [hx2, hy2] = polar(ex, ey, th - 0.15, 11, f);
+    limb([back, [(lean - 12) * f, shY + 13], [(lean - 10) * f, shY + 24]], 6.5);
+    limb([sh, [ex, ey], [hx2, hy2]], 6.5);
+    ctx.fillStyle = stone;
+    ctx.strokeStyle = dark;
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.arc(hx2, hy2, 4.5, 0, TAU);
+    ctx.fill();
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 // Ballista: a wheeled bolt-thrower, its crewman turning the windlass behind it. Between shots
 // the string is wound back over most of the reload, the bolt sits in the groove, and it snaps
 // forward at the release (swing 0.8). Mantlet adds a timber shield across the front.
@@ -679,6 +789,7 @@ function drawStickman(ctx, o) {
   if (o.type === 'cleric' || o.type === 'warlock') return drawMage(ctx, o);
   if (o.type === 'flyer' && !o.grounded) return drawFlyer(ctx, o);
   if (o.type === 'ballista') return drawBallista(ctx, o);
+  if (o.type === 'golem') return drawGolem(ctx, o);
   const st = TEAM_STYLE[o.team], f = o.facing, P = o.perks || NO_PERKS;
   ctx.save();
   ctx.translate(o.x, o.y - (o.lift || 0));
@@ -2603,11 +2714,11 @@ function drawCastle(ctx, team, hoverKey) {
   ctx.restore();
 
   // research progress above buildings (unmirrored)
-  for (const [type, bx] of [...Object.entries(BUILD_X), ...Object.entries(RAMPART_HALL_X), ['castle', 10], ['giant', GIANT_PIT_X]]) {
+  for (const [type, bx] of [...Object.entries(BUILD_X), ...Object.entries(RAMPART_HALL_X), ['castle', 10], ['giant', GIANT_PIT_X], ['golem', GIANT_PIT_X]]) {
     const r = team.research[type];
     if (!r) continue;
     const def = UPGRADES[type].find(u => u.key === r.key);
-    const y = type === 'castle' ? WALL_TOP - 150 : RAMPART_HALL_X[type] ? WALL_TOP - 78 : type === 'giant' ? LANE_TOP - 120 : floorTop - 128;
+    const y = type === 'castle' ? WALL_TOP - 150 : RAMPART_HALL_X[type] ? WALL_TOP - 78 : type === 'giant' || type === 'golem' ? LANE_TOP - 120 : floorTop - 128;
     drawResearchBar(ctx, team.id === 0 ? bx : WORLD_W - bx, y, r.t / def.time);
   }
 }
@@ -3134,6 +3245,14 @@ function drawUnitIcon(cv, type) {
       c.fillStyle = '#bdb5a2'; c.beginPath(); c.arc(13, 26, 3.2, 0, TAU); c.fill();
       break;
     }
+    case 'golem':
+      // a stone head with glowing eyes and a rune on the brow
+      c.fillStyle = '#8c8678'; c.strokeStyle = '#2a2622'; c.lineWidth = 1.6;
+      c.fillRect(9, 8, 22, 24); c.strokeRect(9, 8, 22, 24);
+      c.fillStyle = '#58c3e8'; c.fillRect(13, 17, 5, 3); c.fillRect(22, 17, 5, 3);
+      c.strokeStyle = 'rgba(88,195,232,0.8)'; c.lineWidth = 1.4; c.beginPath(); c.moveTo(18, 10); c.lineTo(20, 14); c.lineTo(22, 10); c.moveTo(14, 26); c.lineTo(26, 26); c.stroke();
+      c.fillStyle = '#5a5650'; c.fillRect(4, 30, 32, 8);
+      break;
     case 'ballista':
       c.fillStyle = '#2a1c10';
       for (const x of [11, 27]) { c.beginPath(); c.arc(x, 31, 5, 0, TAU); c.fill(); }
@@ -3505,6 +3624,18 @@ function drawUpgradeIcon(cv, type, key) {
       }
       break;
     // ---- ballista
+    // ---- spirit golem
+    case 'plating':
+      c.fillStyle = '#5a5e64'; c.strokeStyle = '#58c3e8'; c.lineWidth = 1.2;
+      c.beginPath(); c.moveTo(20, 4); c.lineTo(34, 10); c.lineTo(31, 28); c.lineTo(20, 36); c.lineTo(9, 28); c.lineTo(6, 10); c.closePath(); c.fill(); c.stroke();
+      c.beginPath(); c.moveTo(20, 12); c.lineTo(24, 20); c.lineTo(20, 28); c.lineTo(16, 20); c.closePath(); c.stroke();
+      break;
+    case 'core': {
+      const g = c.createRadialGradient(20, 20, 1, 20, 20, 16); g.addColorStop(0, '#e8f8ff'); g.addColorStop(0.4, '#9fe0ff'); g.addColorStop(1, 'rgba(88,195,232,0)');
+      c.fillStyle = g; c.beginPath(); c.arc(20, 20, 16, 0, TAU); c.fill();
+      c.strokeStyle = '#8c8678'; c.lineWidth = 3; c.strokeRect(9, 9, 22, 22);
+      break;
+    }
     case 'torsion':
       c.fillStyle = '#b8a070'; c.fillRect(13, 6, 14, 28);
       c.strokeStyle = '#6a5430'; c.lineWidth = 1.6; c.beginPath();

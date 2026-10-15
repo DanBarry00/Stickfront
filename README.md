@@ -18,12 +18,12 @@ Each clan sets your starting gold, mana and army, which upgrades are already res
 | **Defense** | 2 miners; a trench held by a Spearton and an archer | Clan unit: the **Ballista**; Earthworks, Shields, Military Training, Rallying Cry, Recurve Bows, a second castle archer; 4 castle archer slots; clan-only Levy II (a free Spearton every minute too) | No Warlocks or Giants |
 | **Sword** | 2 miners, 2 Swordwrath | Population 35; Levy, Military Training, Adrenaline; clan-only Great Swords (damage 25, 10% slower swing) | No Kestrels or Throwing Stars (only archers and Javelins hit flyers); no Flaming Arrows; no trenches |
 | **Mercenary** | 4 miners, 1 plain Swordwrath | Bigger Bags, Steel Pickaxes, Iron Pans, Prospecting, Statue Offerings; every kill pays 20% of the victim's gold cost; clan-only Mule Packs (carry 100), Diamond Picks (17 per swing), Gilded Statue (4 gold/s) | Praying gives half the mana; weakest starting army |
-| **Arcane Circle** | 150 mana; 2 miners, a Cleric and a Warlock | Healing Pool and Blight Pool; mages cost 35 mana; praying gives 50% more | Swordwrath and Spearton −10% health; 1 castle archer; no Giants |
+| **Arcane Circle** | 150 mana; 2 miners, a Cleric and a Warlock | Clan unit: the **Spirit Golem**; Healing Pool and Blight Pool; mages cost 35 mana; praying gives 50% more | Swordwrath and Spearton −10% health; 1 castle archer; no Giants |
 | **Beast** | 2 miners, 2 Swordwrath | Giants cost 340 gold + 90 mana and take 3 population; Blinders researched | No Archers or Kestrels |
 | **Shadow** | 2 miners, 2 ninjas | All units +15% damage; ninjas cost 125, vanish again after 3s; Throwing Stars researched | All units −15% health; no Spearton; no trenches |
 | **Sky** | 2 miners, 2 Kestrels | Kestrels cost 150 and crit 10% of the time; clan-only Hawk Eye (20% crit), Spyglass (range 480), Barbed Bolts II (damage 26) | Swordwrath and Spearton −10% health; no Giants |
 
-Clan-only upgrades and units appear only for their clan. Still to come: the Spirit Golem, Beastmaster, Saboteur and Firebird. The setup screen lists these as "coming soon" for each clan.
+Clan-only upgrades and units appear only for their clan. Still to come: the Beastmaster, Saboteur and Firebird. The setup screen lists these as "coming soon" for each clan.
 
 ## Units
 | Unit | Cost | Building | Role |
@@ -38,6 +38,7 @@ Clan-only upgrades and units appear only for their clan. Still to come: the Spir
 | Ninja | 150 | Dojo (on the rampart) | Fast, fragile assassin. Triple-damage first blow, cuts through armor, can't be targeted while running. Hunts the weakest enemy, archers first |
 | Kestrel | 175 | Aerie (on the rampart) | Flies over the battle with a small crossbow. Only ranged attacks can hit it |
 | Ballista | 250 + 50 mana | Siege Workshop (Defense Clan only) | Long-range siege engine that wrecks trenches and statues; helpless up close (2 population) |
+| Spirit Golem | 150 + 250 mana | Golem Forge (Arcane Circle only) | Commandable 700 hp tank; Hunker Down to soak damage and draw attacks; half damage from Warlock magic (3 population) |
 
 ## Giants
 - **Targeting:** a giant always goes for the enemy with the most health, ignoring taunts. Each blow also splashes the 2 enemies beside its target, unless the target is another giant.
@@ -127,6 +128,14 @@ A crewed bolt-thrower, trained in the Ranged group (hotkey `]`). 250 gold + 50 m
 - **Siege:** double damage to trenches and statues.
 - **Weaknesses:** it can't hit flyers, and it can't shoot anything closer than 120. It backs away to get a clear shot, but it's slow, so melee troops and Kestrels that reach it can pick it apart. It prefers targets it can actually shoot.
 - **Upgrades (Siege Workshop, opened from the ⚒ on its button):** Torsion Springs (range 650), Iron-tipped Bolts (damage 60), Mantlet (+60 hp and 20% armor).
+
+## Spirit Golem (Arcane Circle)
+A rune-carved stone construct, trained in the Giants group (hotkey `\`) at the Golem Forge, the pit outside the gate. 150 gold + 250 mana, 3 population, 700 hp, 30 damage per slam, slow.
+- **You command it directly**, unlike a giant: move, hold, attack and stance orders all work. It stands at the front of formations.
+- **No splash:** it hits one target at a time.
+- **Half damage from Warlock magic** (bolts, Blight Pools and Fireballs).
+- **Hunker Down (X):** it crouches behind crossed arms at half speed, takes 60% less damage, and enemies prefer to hit it (like Tower Shields), but it stops attacking. It's the clan's only real tank. The computer hunkers its golems down when three or more enemies close in, or when one is badly hurt in a fight.
+- **Upgrades (Golem Forge):** Runic Plating (+20% armor) and Mana Core (heals 3 hp per second).
 
 ## Javelins (Spear Hall, every clan)
 150 gold + 25 mana. Each Spearton carries one javelin and hurls it automatically at the nearest flyer within 250 (30 damage). It gets a new one each time it garrisons. It's the main answer to flyers for clans without good ranged units, like the Sword Clan.

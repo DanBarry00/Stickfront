@@ -81,7 +81,7 @@ const AI_RESEARCH = [
   ['ninja', 'parry'], ['ninja', 'vital'], ['flyer', 'winch'], ['ninja', 'focus'], ['flyer', 'feather'],
   ['sword', 'greatsword'], ['archer', 'longbow'], ['archer', 'broadheads'], ['flyer', 'hawkeye'], ['flyer', 'scope2'],
   ['flyer', 'barbs2'], ['archer', 'steady'], ['castle', 'levy2'], ['spear', 'javelin'],
-  ['ballista', 'torsion'], ['ballista', 'ironbolt'], ['ballista', 'mantlet'],
+  ['ballista', 'torsion'], ['ballista', 'ironbolt'], ['ballista', 'mantlet'], ['golem', 'plating'], ['golem', 'core'],
   ['cleric', 'big'], ['warlock', 'pool'], ['cleric', 'speed'], ['warlock', 'speed'], ['cleric', 'might'],
   ['warlock', 'might'], ['miner', 'pick2'], ['miner', 'bag2'], ['spear', 'shield2'], ['archer', 'fire'],
   ['sword', 'leap'], ['sword', 'rage2'], ['giant', 'stun'], ['giant', 'protein2'], ['castle', 'tithe2'],
@@ -124,6 +124,9 @@ class SmartAI {
     const n = army.length + 1;
     const giantCost = unitCost(team, 'giant');
     if ((c.giants || extra.giant) && can('giant') && n >= 6 && count('giant') < 1 + Math.floor(n * share('giant', 1 / 14)) && team.mana > giantCost.mana + 80 && team.gold >= giantCost.gold) return 'giant';
+    // the Arcane Circle's Spirit Golems hold the front instead
+    const golemCost = unitCost(team, 'golem');
+    if (can('golem') && n >= 4 && count('golem') < 1 + Math.floor(n * share('golem', 0)) && team.mana > golemCost.mana + 40 && team.gold >= golemCost.gold) return 'golem';
     const mageMana = t => unitCost(team, t).mana + 60;
     if ((c.mages || extra.cleric) && can('cleric') && count('cleric') < Math.floor(n * share('cleric', 1 / 7)) && team.mana > mageMana('cleric')) return 'cleric';
     if ((c.mages || extra.warlock) && can('warlock') && count('warlock') < Math.floor(n * share('warlock', 1 / 7)) && team.mana > mageMana('warlock')) return 'warlock';
@@ -153,7 +156,7 @@ class SmartAI {
       if (d.requires && !team.upgrades[type][d.requires]) continue;
       if (team.research[type]) continue;
       // no point researching for ninjas, Kestrels or ballistas it hasn't built
-      if (['ninja', 'flyer', 'ballista'].includes(type) && !G.units.some(u => u.team === this.id && !u.dead && u.type === type)) continue;
+      if (['ninja', 'flyer', 'ballista', 'golem'].includes(type) && !G.units.some(u => u.team === this.id && !u.dead && u.type === type)) continue;
       return { type, d };
     }
     return null;
@@ -278,6 +281,13 @@ class SmartAI {
     }
 
     if (this.mode !== 'attack') this.guardLine(team, army, ours, theirs);
+
+    // golems hunker down when swarmed or badly hurt in a fight, and stand up again once it eases
+    for (const u of mine) {
+      if (u.type !== 'golem') continue;
+      const close = G.units.filter(e => e.team === foe && !e.dead && !e.inside && Math.abs(e.x - u.x) < 120 && Math.abs(e.y - u.y) < 60).length;
+      u.shieldWall = close >= 3 || (close >= 1 && u.hp < u.maxHp * 0.4);
+    }
 
     // hard: brace the spear line when enemy archers are firing on it
     if (c.formations) {

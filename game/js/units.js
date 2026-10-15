@@ -18,7 +18,7 @@ class Unit {
     applyPerks(this);
     this.hp = this.maxHp;
     this.facing = team === 0 ? 1 : -1;
-    this.scale = type === 'giant' ? this.giantScale * rnd(0.97, 1.03) : rnd(0.93, 1.07) * (type === 'spear' ? 1.06 : 1);
+    this.scale = type === 'giant' ? this.giantScale * rnd(0.97, 1.03) : type === 'golem' ? GOLEM.scale * rnd(0.97, 1.03) : rnd(0.93, 1.07) * (type === 'spear' ? 1.06 : 1);
     this.speedMul = rnd(0.92, 1.08);
     this.gear = pick(GEAR[type][team]);
     this.seed = rnd(0, 100);
@@ -167,6 +167,8 @@ function applyPerks(u) {
       u.atk = P.winch ? d.atkTime * 0.7 : d.atkTime;
       u.crit = P.hawkeye ? CRIT.upgraded : G && G.teams ? clanOf(G.teams[u.team]).kestrelCrit || 0 : 0;   // Sky Clan Kestrels crit
     }
+  } else if (u.type === 'golem') {
+    u.armor = GOLEM.armor + (P.plating ? 0.2 : 0);
   } else if (u.type === 'ballista') {
     u.range = P.torsion ? 650 : d.range;
     u.aggro = u.range + 40;
@@ -342,7 +344,7 @@ function moveTo(u, tx, ty, dt) {
 function targetAimY(t) {
   if (t.isStatue) return LANE_TOP - 80;
   if (t.isWall) return LANE_TOP - 10;
-  return t.y - 38 * (isGiant(t) ? t.scale * 0.8 : 1) - (t.onWall ? wallHeight(t.onWall) : 0) - (t.alt || 0);
+  return t.y - 38 * (isGiant(t) || t.type === 'golem' ? t.scale * 0.8 : 1) - (t.onWall ? wallHeight(t.onWall) : 0) - (t.alt || 0);
 }
 
 // Roll a critical hit (archers and ninjas): double damage and a little "Crit!" over the target.
@@ -524,7 +526,7 @@ function handleBlocked(u, dt) {
 }
 
 // Shield-walling spearmen draw attention: they count as much closer than they are.
-const tauntBias = e => (e.shieldWall ? (e.perks.shield2 ? 220 : 150) : 0);
+const tauntBias = e => (e.shieldWall ? (e.perks.shield2 || e.type === 'golem' ? 220 : 150) : 0);   // golems draw attacks like Tower Shields
 
 function nearestEnemy(u, range, fromX) {
   const ox = fromX === undefined ? u.x : fromX;
@@ -601,7 +603,7 @@ function doRefit(u, dt) {
 
 // Rank offsets from the front of a formation: spearton in front, swordwrath behind them,
 // archers and mages at the back.
-const RANK_OFF = { spear: 22, sword: 0, ninja: -8, flyer: -60, archer: -85, warlock: -95, cleric: -110, ballista: -140 };
+const RANK_OFF = { spear: 22, sword: 0, ninja: -8, flyer: -60, archer: -85, warlock: -95, cleric: -110, ballista: -140, golem: 34 };   // the golem tanks in front
 
 // Where the idx-th unit of a type stands: up to six abreast, extra units form more columns.
 function rankSlot(type, idx, count, frontX, dir) {
@@ -1048,6 +1050,7 @@ function damage(t, amt, src, aoe) {
     return;
   }
   if (t.lastStand > 0) { t.flash = 0.12; return; }   // already living on borrowed time
+  if (t.type === 'golem' && src && src.type === 'warlock') amt = Math.max(1, Math.round(amt * GOLEM.spellMul));   // golems shrug off Warlock magic
   // archers are the giant-killers: extra damage, and a chance to send it into a confused rage
   if (isGiant(t) && src && src.type === 'archer') {
     amt = Math.round(amt * ARCHER_VS_GIANT);
@@ -1248,6 +1251,7 @@ function updateUnit(u, dt) {
   if (u.type === 'miner' && !u.panUsed) freePanSlot(u);
   if (u.type === 'ninja') updateStealth(u, dt);
   if (u.type === 'spear') updateJavelin(u);
+  if (u.type === 'golem' && u.perks.core && u.hp < u.maxHp && u.lastStand <= 0) u.hp = Math.min(u.maxHp, u.hp + GOLEM.regen * dt);   // Mana Core
   // legs move in step with the distance actually covered, so a fast unit held to a slow
   // formation pace walks slowly instead of sprinting on the spot; sprinters drop to a walk
   const inst = dt > 0 ? Math.min(1.6, u.stepDist / (dt * baseSpeed(u))) : 0;
