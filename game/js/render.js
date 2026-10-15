@@ -221,7 +221,7 @@ function drawUnitInAir(ctx, u, dying, fall, alpha, lift) {
     flash: u.lastStand > 0 ? (Math.sin(RT * 30) > 0 ? 1 : 0) : u.flash,
     wall: u.shieldWall, arch: u.type === 'archer' ? archPose(u, dying) : null, cast: u.swingKind === 'cast',
     chains: isGiant(u) ? giantChains(u) : 0, stone: u.isStatueGiant ? G.teams[u.team].statue.stone : null,
-    starRanged: u.starRanged, grounded: u.grounded, aimFa: u.aimFa, pace: u.pace,
+    starRanged: u.starRanged, grounded: u.grounded, aimFa: u.aimFa, pace: u.pace, javelin: !!(u.perks.javelin && u.javelin),
   });
   if (dying) return;
   drawBuffsOver(ctx, u);
@@ -457,6 +457,23 @@ function drawProjectiles(ctx) {
   for (const p of G.projectiles) {
     const a = Math.atan2(p.vy, p.vx), c = Math.cos(a), s = Math.sin(a);
     if (p.kind === 'star') { drawStar(ctx, p.x, p.y, 4, p.t * 25); continue; }
+    if (p.kind === 'javelin') {
+      // a long throwing spear
+      ctx.strokeStyle = '#6a4a2a';
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y);
+      ctx.lineTo(p.x - c * 28, p.y - s * 28);
+      ctx.stroke();
+      ctx.fillStyle = '#a9b0b6';
+      ctx.beginPath();
+      ctx.moveTo(p.x + c * 5, p.y + s * 5);
+      ctx.lineTo(p.x - s * 2.5, p.y + c * 2.5);
+      ctx.lineTo(p.x + s * 2.5, p.y - c * 2.5);
+      ctx.closePath();
+      ctx.fill();
+      continue;
+    }
     if (p.kind === 'bolt') {
       // a short, heavy crossbow bolt
       ctx.strokeStyle = '#3a2a1a';

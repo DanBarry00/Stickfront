@@ -14,16 +14,16 @@ Each clan sets your starting gold, mana and army, which upgrades are already res
 | Clan | Start | Strengths | Weaknesses |
 |---|---|---|---|
 | **Base** | 2 miners, a veteran Swordwrath with every sword upgrade | Every unit and upgrade | No head start |
-| **Archer** | 2 miners, 2 archers | Recurve Bows, Eagle Eye, Vital Points, Long Sights; archers and Kestrels 15 gold cheaper; 4 castle archer slots | No Iron/Crested Helmets or Tower Shields; giants can't get Blinders |
-| **Defense** | 2 miners; a trench held by a Spearton and an archer | Earthworks, Shields, Military Training, Rallying Cry, Recurve Bows, a second castle archer; 4 castle archer slots | No Warlocks or Giants |
-| **Sword** | 2 miners, 2 Swordwrath | Population 35; Levy, Military Training, Adrenaline | No Kestrels or Throwing Stars; no Flaming Arrows; no trenches |
-| **Mercenary** | 4 miners, 1 plain Swordwrath | Bigger Bags, Steel Pickaxes, Iron Pans, Prospecting, Statue Offerings; every kill pays 20% of the victim's gold cost | Praying gives half the mana; weakest starting army |
+| **Archer** | 2 miners, 2 archers | Recurve Bows, Eagle Eye, Vital Points, Long Sights; archers and Kestrels 15 gold cheaper; 4 castle archer slots; clan-only Longbows (range 600), Broadheads (damage 40), Steady Hands (reload 15% faster), Spyglass (Kestrel range 480) | No Iron/Crested Helmets or Tower Shields; giants can't get Blinders |
+| **Defense** | 2 miners; a trench held by a Spearton and an archer | Earthworks, Shields, Military Training, Rallying Cry, Recurve Bows, a second castle archer; 4 castle archer slots; clan-only Levy II (a free Spearton every minute too) | No Warlocks or Giants |
+| **Sword** | 2 miners, 2 Swordwrath | Population 35; Levy, Military Training, Adrenaline; clan-only Great Swords (damage 25, 10% slower swing) | No Kestrels or Throwing Stars (only archers and Javelins hit flyers); no Flaming Arrows; no trenches |
+| **Mercenary** | 4 miners, 1 plain Swordwrath | Bigger Bags, Steel Pickaxes, Iron Pans, Prospecting, Statue Offerings; every kill pays 20% of the victim's gold cost; clan-only Mule Packs (carry 100), Diamond Picks (17 per swing), Gilded Statue (4 gold/s) | Praying gives half the mana; weakest starting army |
 | **Arcane Circle** | 150 mana; 2 miners, a Cleric and a Warlock | Healing Pool and Blight Pool; mages cost 35 mana; praying gives 50% more | Swordwrath and Spearton −10% health; 1 castle archer; no Giants |
 | **Beast** | 2 miners, 2 Swordwrath | Giants cost 340 gold + 90 mana and take 3 population; Blinders researched | No Archers or Kestrels |
 | **Shadow** | 2 miners, 2 ninjas | All units +15% damage; ninjas cost 125, vanish again after 3s; Throwing Stars researched | All units −15% health; no Spearton; no trenches |
-| **Sky** | 2 miners, 2 Kestrels | Kestrels cost 150 and crit 10% of the time | Swordwrath and Spearton −10% health; no Giants |
+| **Sky** | 2 miners, 2 Kestrels | Kestrels cost 150 and crit 10% of the time; clan-only Hawk Eye (20% crit), Spyglass (range 480), Barbed Bolts II (damage 26) | Swordwrath and Spearton −10% health; no Giants |
 
-Still to come: clan-only upgrades (Javelins, Great Swords, Longbows and the other extra tiers, Levy II, Hawk Eye, the extra mining tiers) and the unique units (Ballista, Spirit Golem, Beastmaster, Saboteur, Firebird). The setup screen lists these as "coming soon" for each clan.
+Clan-only upgrades appear in their building's panel only for that clan. Still to come: the unique units (Ballista, Spirit Golem, Beastmaster, Saboteur, Firebird). The setup screen lists these as "coming soon" for each clan.
 
 ## Units
 | Unit | Cost | Building | Role |
@@ -119,6 +119,9 @@ The Cleric and Warlock are exact opposites. They have the same cost, health, ran
 - **Auto-cast is on by default:** mages pick good targets and counter enemy spells. They throw Sanctuary over allies an incoming Fireball is aimed at, a Healing Pool onto a Blight Pool, Haste onto slowed allies, and the reverse for Warlocks. Auto keeps 15 mana in reserve.
 - **Forcing a spell:** click a spell on the command card (or press 7 / 8 / 9 / 0), then click where to cast it. It works even with auto on. The nearest ready mage walks into range and casts. With both mage types selected, Shift + 7–0 casts the Warlock's spells.
 - **L** toggles auto-cast for the selected mages.
+
+## Javelins (Spear Hall, every clan)
+150 gold + 25 mana. Each Spearton carries one javelin and hurls it automatically at the nearest flyer within 250 (30 damage). It gets a new one each time it garrisons. It's the main answer to flyers for clans without good ranged units, like the Sword Clan.
 
 ## Defences
 - **Trenches** (Earthworks, Miners' Lodge): miners dig a ditch across the lane and pile an earth rampart behind it, with sharpened stakes facing the enemy. Enemies on foot can't pass until they hack it down (Kestrels fly over). 100 gold each, up to 3. **Palisade** adds a row of pointed logs along the top: taller, +800 hp. Builders can **repair** a damaged trench for free: right-click it with them, or press **Y** to send them to the most damaged one. Stakes get knocked out and the earth slumps as a trench takes damage.

@@ -21,7 +21,8 @@ const ARCHER_XS = [520, 400, 280, 104];   // castle archer spots on the rampart 
 // Castle archers cover the ground out to just past where an enemy archer with the same bow
 // upgrades has to stand to shoot the statue: statue + its half-width + archer range + this margin.
 const CASTLE_REACH_PAD = 60;
-const TITHE_GOLD = [0, 1, 2.5];      // statue income per second: none / Offerings / Golden Idol
+const TITHE_GOLD = [0, 1, 2.5, 4];   // statue income per second: none / Offerings / Golden Idol / Gilded Statue (Mercenary)
+const JAVELIN = { range: 250, dmg: 30 };   // Spearton javelins (one each, refilled by garrisoning), thrown only at flyers
 const LEVY_INTERVAL = 60;    // seconds between free Swordwrath with the Levy castle upgrade
 const DEFEND_OFFSET = 250;   // defend line distance in front of statue
 const GARRISON_HEAL = 9;     // hp per second inside the castle
@@ -189,6 +190,7 @@ const buildingName = type => (type === 'castle' ? 'Castle' : UNIT_TYPES[type].bu
 const UPGRADES = {
   sword: [
     { key: 'blades', name: 'Forged Blades', cost: 200, mana: 0, time: 25, desc: 'Swordwrath trade their clubs for iron swords. +50% damage.' },
+    { key: 'greatsword', name: 'Great Swords', cost: 250, mana: 75, time: 30, requires: 'blades', clans: ['sword'], desc: 'Heavy two-handed blades: damage 18 → 25, but each swing is 10% slower.' },
     { key: 'helm', name: 'Iron Helmets', cost: 175, mana: 0, time: 20, desc: 'Helmets that absorb 25% of incoming damage.' },
     { key: 'leap', name: 'Running Jump', cost: 150, mana: 50, time: 20, desc: 'After a sprint, the first strike is a leaping blow that deals double damage.' },
     { key: 'rage', name: 'Adrenaline', cost: 150, mana: 75, time: 25, desc: 'The more wounded they are, the faster and harder they hit.' },
@@ -198,8 +200,10 @@ const UPGRADES = {
   miner: [
     { key: 'bag', name: 'Bigger Bags', cost: 150, mana: 0, time: 20, desc: 'Carry 35 → 56 gold per trip.' },
     { key: 'bag2', name: 'Ox-hide Sacks', cost: 200, mana: 25, time: 25, requires: 'bag', desc: 'Carry 56 → 80 gold per trip.' },
+    { key: 'mule', name: 'Mule Packs', cost: 250, mana: 50, time: 30, requires: 'bag2', clans: ['mercenary'], desc: 'Carry 80 → 100 gold per trip.' },
     { key: 'pick', name: 'Steel Pickaxes', cost: 200, mana: 0, time: 25, desc: 'Swing faster and dig 7 → 11 gold per swing.' },
     { key: 'pick2', name: 'Tempered Picks', cost: 250, mana: 25, time: 30, requires: 'pick', desc: 'Swing faster still and dig 11 → 14 gold per swing.' },
+    { key: 'diamond', name: 'Diamond Picks', cost: 300, mana: 50, time: 35, requires: 'pick2', clans: ['mercenary'], desc: 'Swing faster again and dig 14 → 17 gold per swing.' },
     { key: 'devout', name: 'Devout', cost: 100, mana: 25, time: 20, desc: 'Prayers yield 50% more mana.' },
     { key: 'devout2', name: 'Zealous Faith', cost: 175, mana: 50, time: 25, requires: 'devout', desc: 'Prayers yield double mana.' },
     { key: 'pan1', name: 'Iron Pans', cost: 150, mana: 0, time: 20, desc: 'Pan the castle stream 35% faster.' },
@@ -211,10 +215,13 @@ const UPGRADES = {
   ],
   archer: [
     { key: 'bow', name: 'Recurve Bows', cost: 175, mana: 0, time: 20, desc: 'Range 380 → 500. Castle archers reach just as much further.' },
+    { key: 'longbow', name: 'Longbows', cost: 250, mana: 50, time: 30, requires: 'bow', clans: ['archer'], desc: 'Range 500 → 600: out-shoots enemy castle archers. Your castle archers reach further too.' },
     { key: 'arrows', name: 'Bodkin Arrows', cost: 175, mana: 0, time: 20, desc: 'Arrow damage 24 → 32, and the bodkin points ignore a third of the target’s armor.' },
     { key: 'fire', name: 'Flaming Arrows', cost: 225, mana: 75, time: 30, requires: 'arrows', desc: `Arrows set targets alight: ${BURN_DPS} damage per second for ${BURN_TIME}s on top of the hit.` },
+    { key: 'broadheads', name: 'Broadheads', cost: 225, mana: 50, time: 25, requires: 'arrows', clans: ['archer'], desc: 'Arrow damage 32 → 40.' },
     { key: 'quiver', name: 'Deep Quivers', cost: 150, mana: 50, time: 20, desc: 'Reload 30% faster.' },
     { key: 'eye', name: 'Eagle Eye', cost: 175, mana: 50, time: 25, desc: `Critical hit chance ${CRIT.chance * 100}% → ${CRIT.upgraded * 100}%. A critical hit does double damage.` },
+    { key: 'steady', name: 'Steady Hands', cost: 200, mana: 50, time: 25, requires: 'quiver', clans: ['archer'], desc: 'Reload another 15% faster.' },
   ],
   ninja: [
     { key: 'serrated', name: 'Serrated Blades', cost: 175, mana: 0, time: 20, desc: `Cuts through more armor: ignores ${NINJA_PIERCE[1] * 100}% of it instead of ${NINJA_PIERCE[0] * 100}%.` },
@@ -226,8 +233,11 @@ const UPGRADES = {
   flyer: [
     { key: 'feather', name: 'Feather Fall', cost: 175, mana: 50, time: 25, desc: `When shot down, the Kestrel glides to the ground and fights on with a knife (${GROUNDED.hp} hp, weak). On the ground anyone can hit it.` },
     { key: 'scope', name: 'Long Sights', cost: 175, mana: 0, time: 20, desc: 'Range 300 → 400.' },
+    { key: 'scope2', name: 'Spyglass', cost: 225, mana: 50, time: 25, requires: 'scope', clans: ['archer', 'sky'], desc: 'Range 400 → 480.' },
     { key: 'winch', name: 'Crank Winch', cost: 150, mana: 50, time: 20, desc: 'Reload 30% faster.' },
     { key: 'barbs', name: 'Barbed Bolts', cost: 175, mana: 0, time: 20, desc: 'Bolt damage 15 → 21.' },
+    { key: 'barbs2', name: 'Barbed Bolts II', cost: 225, mana: 50, time: 25, requires: 'barbs', clans: ['sky'], desc: 'Bolt damage 21 → 26.' },
+    { key: 'hawkeye', name: 'Hawk Eye', cost: 175, mana: 50, time: 25, clans: ['sky'], desc: `Kestrel critical hit chance ${CRIT.chance * 100}% → ${CRIT.upgraded * 100}%.` },
   ],
   spear: [
     { key: 'shield', name: 'Shields', cost: 175, mana: 0, time: 20, desc: '+20% armor and +40 hp, and unlocks Shield Wall (X): they stop attacking, take 60% less damage and draw enemy attacks.' },
@@ -235,6 +245,7 @@ const UPGRADES = {
     { key: 'helm', name: 'Crested Helmets', cost: 150, mana: 0, time: 20, desc: '+15% armor.' },
     { key: 'inspire', name: 'Rallying Cry', cost: 200, mana: 100, time: 30, desc: 'Inspires up to 8 nearby allies: +10% damage and 8% faster attacks per stack, up to 3 stacks. Every ally nearby gets one stack before anyone gets a second. Also unlocks Defend Trench.' },
     { key: 'halberd', name: 'Halberds', cost: 200, mana: 50, time: 25, desc: 'Armor piercing: ignores enemy armor and halves shield wall protection. Damage 18 → 28.' },
+    { key: 'javelin', name: 'Javelins', cost: 150, mana: 25, time: 20, desc: `Each Spearton carries one javelin and hurls it at the nearest flyer within ${JAVELIN.range} (${JAVELIN.dmg} damage). It gets a new one each time it garrisons.` },
   ],
   // Castle upgrades are bought from the castle itself (click the rampart/tower or the castle button).
   // Mirrored mage research: each pair costs exactly the same.
@@ -262,10 +273,12 @@ const UPGRADES = {
   castle: [
     { key: 'tithe', name: 'Statue Offerings', cost: 200, mana: 25, time: 25, team: true, desc: `Your statue earns ${TITHE_GOLD[1]} gold per second.` },
     { key: 'tithe2', name: 'Golden Idol', cost: 300, mana: 75, time: 35, team: true, requires: 'tithe', desc: `Statue income rises to ${TITHE_GOLD[2]} gold per second.` },
+    { key: 'gilded', name: 'Gilded Statue', cost: 400, mana: 100, time: 40, team: true, requires: 'tithe2', clans: ['mercenary'], desc: `Statue income rises to ${TITHE_GOLD[3]} gold per second.` },
     { key: 'archer2', name: 'Second Castle Archer', cost: 200, mana: 50, time: 25, team: true, desc: 'Posts another archer on the rampart. Castle archers always use your researched archer upgrades.' },
     { key: 'archer3', name: 'Third Castle Archer', cost: 300, mana: 100, time: 30, team: true, requires: 'archer2', desc: 'Posts a third archer on the rampart.' },
     { key: 'archer4', name: 'Fourth Castle Archer', cost: 400, mana: 150, time: 35, team: true, requires: 'archer3', desc: 'Posts a fourth archer on the rampart (clans with 4 castle archer slots only).' },
     { key: 'levy', name: 'Levy', cost: 300, mana: 100, time: 35, team: true, desc: `A free Swordwrath marches out of the Barracks every ${LEVY_INTERVAL} seconds (if you have room in your population).` },
+    { key: 'levy2', name: 'Levy II', cost: 450, mana: 150, time: 40, team: true, requires: 'levy', clans: ['defense'], desc: `A free Spearton also marches out of the Spear Hall every ${LEVY_INTERVAL} seconds (if you have room in your population).` },
   ],
 };
 

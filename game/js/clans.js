@@ -43,9 +43,8 @@ const CLANS = {
     castleArchers: 4,
     lockUpgrades: { sword: ['helm'], spear: ['helm', 'shield2'], giant: ['blinders'] },
     ai: { archer: 0.12, flyer: 0.04 },
-    strengths: ['Starts with 2 archers, Recurve Bows, Eagle Eye, Vital Points and Long Sights', 'Archers and Kestrels cost 15 gold less', '4 castle archer slots'],
+    strengths: ['Starts with 2 archers, Recurve Bows, Eagle Eye, Vital Points and Long Sights', 'Clan-only tiers: Longbows (range 600), Broadheads, Steady Hands, Spyglass', 'Archers and Kestrels cost 15 gold less', '4 castle archer slots'],
     weaknesses: ['No Iron or Crested Helmets, no Tower Shields', 'Giants can\'t get Blinders'],
-    coming: ['Extra ranged tiers: Longbows, Broadheads, Steady Hands, Spyglass'],
   },
 
   defense: {
@@ -57,9 +56,9 @@ const CLANS = {
     castleArchers: 4,
     lockUnits: ['warlock', 'giant'],
     ai: { spear: 0.12, archer: 0.05 },
-    strengths: ['Starts with a trench, held by a Spearton and an archer', 'Earthworks, Shields, Military Training, Rallying Cry, Recurve Bows and a second castle archer', '4 castle archer slots'],
+    strengths: ['Starts with a trench, held by a Spearton and an archer', 'Earthworks, Shields, Military Training, Rallying Cry, Recurve Bows and a second castle archer', 'Clan-only: Levy II, a free Spearton every minute', '4 castle archer slots'],
     weaknesses: ['No Warlocks and no Giants'],
-    coming: ['Ballista siege unit', 'Levy II: a free Spearton every minute'],
+    coming: ['Ballista siege unit'],
   },
 
   sword: {
@@ -71,9 +70,8 @@ const CLANS = {
     lockUnits: ['flyer'],
     lockUpgrades: { ninja: ['stars'], archer: ['fire'], miner: ['walls'] },
     ai: { sword: 0.15 },
-    strengths: ['Population cap 35', 'Starts with 2 Swordwrath, the Levy, Military Training and Adrenaline'],
-    weaknesses: ['No Kestrels and no Throwing Stars: almost nothing that hits flyers', 'Archers can\'t get Flaming Arrows', 'Can\'t dig trenches'],
-    coming: ['Great Swords upgrade', 'Javelins for Spearton (a base upgrade)'],
+    strengths: ['Population cap 35', 'Starts with 2 Swordwrath, the Levy, Military Training and Adrenaline', 'Clan-only: Great Swords (damage 25)'],
+    weaknesses: ['No Kestrels and no Throwing Stars: only archers and Spearton Javelins hit flyers', 'Archers can\'t get Flaming Arrows', 'Can\'t dig trenches'],
   },
 
   mercenary: {
@@ -83,9 +81,8 @@ const CLANS = {
     free: { miner: ['bag', 'pick', 'pan1', 'prospect'], castle: ['tithe'] },
     bounty: 0.2,
     prayer: 0.5,
-    strengths: ['Starts with 4 miners, Bigger Bags, Steel Pickaxes, Iron Pans, Prospecting and Statue Offerings', 'Every kill pays 20% of the victim\'s gold cost'],
+    strengths: ['Starts with 4 miners, Bigger Bags, Steel Pickaxes, Iron Pans, Prospecting and Statue Offerings', 'Every kill pays 20% of the victim\'s gold cost', 'Clan-only: Mule Packs, Diamond Picks, Gilded Statue (4 gold/s)'],
     weaknesses: ['Praying gives half the mana', 'Weakest starting army: one plain Swordwrath'],
-    coming: ['Extra mining tiers: Mule Packs, Diamond Picks, Gilded Statue'],
   },
 
   arcane: {
@@ -145,9 +142,9 @@ const CLANS = {
     hp: { sword: 0.9, spear: 0.9 },
     lockUnits: ['giant'],
     ai: { flyer: 0.15 },
-    strengths: ['Starts with 2 Kestrels', 'Kestrels cost 150 and have a 10% critical hit chance'],
+    strengths: ['Starts with 2 Kestrels', 'Kestrels cost 150 and have a 10% critical hit chance', 'Clan-only: Hawk Eye (20% crit), Spyglass, Barbed Bolts II'],
     weaknesses: ['Swordwrath and Spearton have 10% less health', 'No Giants'],
-    coming: ['Firebird bomber', 'Hawk Eye, Long Sights II and Barbed Bolts II'],
+    coming: ['Firebird bomber'],
   },
 };
 const CLAN_ORDER = ['base', 'archer', 'defense', 'sword', 'mercenary', 'arcane', 'beast', 'shadow', 'sky'];
@@ -158,8 +155,10 @@ const clanOf = team => CLANS[team.clanKey] || CLANS.base;
 const canTrain = (team, type) => !(clanOf(team).lockUnits || []).includes(type);
 function upgradeLocked(team, type, key) {
   const locked = (clanOf(team).lockUpgrades || {})[type] || [];
-  // a later tier is locked along with the tier it builds on
-  for (let d = upgradeDef(type, key); d; d = d.requires ? upgradeDef(type, d.requires) : null) if (locked.includes(d.key)) return true;
+  // a later tier is locked along with the tier it builds on; clan-only tiers belong to their clans
+  for (let d = upgradeDef(type, key); d; d = d.requires ? upgradeDef(type, d.requires) : null) {
+    if (locked.includes(d.key) || (d.clans && !d.clans.includes(team.clanKey))) return true;
+  }
   // castle archer posts beyond the clan's limit
   if (type === 'castle' && /^archer\d$/.test(key) && +key.slice(6) > (clanOf(team).castleArchers || 3)) return true;
   // upgrades for units the clan can't train

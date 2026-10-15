@@ -739,13 +739,19 @@ function buildHUD() {
 // Group a building's upgrades into chains: a first tier followed by the tiers that require it.
 // Tiers the player's clan can't research are left out (a chain with none left disappears).
 function upgradeChains(type) {
-  const list = UPGRADES[type], chains = [], me = G.teams[0];
+  // A tier that branches off one already in a chain (e.g. Broadheads and Flaming Arrows both build
+  // on Bodkin Arrows) gets a button of its own.
+  const me = G.teams[0], list = UPGRADES[type].filter(d => !upgradeLocked(me, type, d.key));
+  const used = new Set(), chains = [];
   for (const d of list) {
-    if (d.requires) continue;
+    if (used.has(d.key)) continue;
     const chain = [d];
-    for (let next = list.find(x => x.requires === d.key); next; next = list.find(x => x.requires === next.key)) chain.push(next);
-    const open = chain.filter(x => !upgradeLocked(me, type, x.key));
-    if (open.length) chains.push(open);
+    used.add(d.key);
+    for (let next; (next = list.find(x => x.requires === chain[chain.length - 1].key && !used.has(x.key)));) {
+      chain.push(next);
+      used.add(next.key);
+    }
+    chains.push(chain);
   }
   return chains;
 }

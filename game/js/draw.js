@@ -892,7 +892,7 @@ function drawStickman(ctx, o) {
     ctx.stroke();
   } else if (isSword) {
     const bladeAng = run && o.swing < 0 ? th + 0.6 : th - 1.0;
-    if (P.blades) drawSword(ctx, hx2, hy2, bladeAng, f, st, o.swing);
+    if (P.blades) drawSword(ctx, hx2, hy2, bladeAng, f, st, o.swing, P.greatsword);
     else drawClub(ctx, hx2, hy2, bladeAng, f, o.swing);
   } else if (isMiner && panning) drawPan(ctx, hx2, hy2, th, f, t, P);
   else if (isMiner && !kneel) drawPick(ctx, hx2, hy2, th - 0.5, f, P.pick, P.pick2);
@@ -901,6 +901,17 @@ function drawStickman(ctx, o) {
     if (arrow) drawNockedArrow(ctx, arrow[0], arrow[1], f, P.arrows);
   } else if (isSpear) {
     if (shieldAt) drawShield(ctx, shieldAt[0], shieldAt[1], f, st, wall, P.shield2);
+    if (o.javelin) {
+      // the javelin carried across the back
+      ctx.strokeStyle = '#6a4a2a';
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.moveTo(sx - 12 * f, sy + 14);
+      ctx.lineTo(sx + 6 * f, sy - 20);
+      ctx.stroke();
+      ctx.fillStyle = '#a9b0b6';
+      ctx.fillRect(sx + 5 * f - 1.5, sy - 23, 3, 4);
+    }
     drawSpear(ctx, hx2, hy2, spearAng, f, P, st, t);
   }
   ctx.strokeStyle = col;
@@ -1200,25 +1211,27 @@ function swingTrail(ctx, x, y, ang, len, f, swing) {
   ctx.fill();
 }
 
-function drawSword(ctx, x, y, ang, f, st, swing) {
-  swingTrail(ctx, x, y, ang, 27, f, swing);
-  const [tx, ty] = polar(x, y, ang, 27, f);
+// Great Swords (big): a longer, broader blade with a wider guard.
+function drawSword(ctx, x, y, ang, f, st, swing, big) {
+  const len = big ? 36 : 27;
+  swingTrail(ctx, x, y, ang, len, f, swing);
+  const [tx, ty] = polar(x, y, ang, len, f);
   const [px, py] = polar(x, y, ang + Math.PI, 5, f);
   ctx.lineCap = 'round';
   ctx.strokeStyle = '#1f2124';
-  ctx.lineWidth = 4.4;
+  ctx.lineWidth = big ? 6 : 4.4;
   ctx.beginPath();
   ctx.moveTo(px, py);
   ctx.lineTo(tx, ty);
   ctx.stroke();
   ctx.strokeStyle = '#a9b0b6';
-  ctx.lineWidth = 2;
+  ctx.lineWidth = big ? 3.2 : 2;
   ctx.beginPath();
   ctx.moveTo(x, y);
   ctx.lineTo(tx, ty);
   ctx.stroke();
-  const [g1x, g1y] = polar(x, y, ang + Math.PI / 2, 4.5, f);
-  const [g2x, g2y] = polar(x, y, ang - Math.PI / 2, 4.5, f);
+  const [g1x, g1y] = polar(x, y, ang + Math.PI / 2, big ? 6.5 : 4.5, f);
+  const [g2x, g2y] = polar(x, y, ang - Math.PI / 2, big ? 6.5 : 4.5, f);
   ctx.strokeStyle = shade(st.accent, -0.35);
   ctx.lineWidth = 2.6;
   ctx.beginPath();
@@ -3012,13 +3025,20 @@ function drawUnitIcon(cv, type) {
 }
 
 // Second-tier upgrades reuse their first tier's art with a "II" badge.
-const TIER2_ICON = { rage2: 'rage', bag2: 'bag', pick2: 'pick', devout2: 'devout', shield2: 'shield', tithe2: 'tithe', pan2: 'pan1', protein2: 'protein', protein3: 'protein' };
+// Later tiers (including the clan-only ones) reuse their first tier's art with a II or III badge.
+const TIER2_ICON = {
+  rage2: 'rage', bag2: 'bag', pick2: 'pick', devout2: 'devout', shield2: 'shield', tithe2: 'tithe', pan2: 'pan1', protein2: 'protein', protein3: 'protein',
+  greatsword: 'blades', longbow: 'bow', broadheads: 'arrows', steady: 'quiver', scope2: 'scope', barbs2: 'barbs', levy2: 'levy',
+  mule: 'bag', diamond: 'pick', gilded: 'tithe',
+};
+const TIER3_KEYS = ['protein3', 'mule', 'diamond', 'gilded'];
 
 function drawUpgradeIcon(cv, type, key) {
   if (type === 'spear' && key === 'helm') key = 'shelm';
   if (type === 'ninja' && key === 'focus') key = 'nfocus';
+  if (key === 'hawkeye') key = 'eye';   // Kestrel crits share the Eagle Eye art
   if (type === 'cleric' || type === 'warlock') key = type[0] + '_' + key;   // the mages share upgrade keys
-  const tierMark = key === 'protein3' ? 'III' : 'II';
+  const tierMark = TIER3_KEYS.includes(key) ? 'III' : 'II';
   const tier2 = !!TIER2_ICON[key];
   if (tier2) key = TIER2_ICON[key];
   const c = cv.getContext('2d'), W = cv.width;
@@ -3353,6 +3373,13 @@ function drawUpgradeIcon(cv, type, key) {
         c.strokeStyle = '#6a5a44'; c.lineWidth = 2.6; c.beginPath(); c.moveTo(6, 22 + dy); c.lineTo(28, 18 + dy); c.stroke();
         c.fillStyle = '#9aa0a6'; c.beginPath(); c.moveTo(36, 16 + dy); c.lineTo(27, 14 + dy); c.lineTo(29, 18 + dy); c.lineTo(27, 22 + dy); c.closePath(); c.fill();
       }
+      break;
+    case 'javelin':
+      // a javelin arcing up toward a flyer's wing
+      c.strokeStyle = 'rgba(216,207,188,0.5)'; c.lineWidth = 1; c.setLineDash([2, 3]); c.beginPath(); c.moveTo(5, 35); c.quadraticCurveTo(12, 14, 26, 10); c.stroke(); c.setLineDash([]);
+      c.strokeStyle = wood; c.lineWidth = 2.4; c.beginPath(); c.moveTo(14, 26); c.lineTo(30, 10); c.stroke();
+      c.fillStyle = steel; c.beginPath(); c.moveTo(34, 6); c.lineTo(27, 9); c.lineTo(31, 13); c.closePath(); c.fill();
+      c.fillStyle = shade('#c49a2c', -0.35); c.beginPath(); c.moveTo(22, 4); c.quadraticCurveTo(31, -1, 39, 4); c.quadraticCurveTo(31, 2, 22, 4); c.fill();
       break;
     case 'halberd':
       c.strokeStyle = wood; c.lineWidth = 2.6; c.beginPath(); c.moveTo(8, 36); c.lineTo(30, 6); c.stroke();

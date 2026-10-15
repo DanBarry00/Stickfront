@@ -79,12 +79,15 @@ const AI_RESEARCH = [
   ['cleric', 'focus'], ['warlock', 'focus'], ['miner', 'defense'],
   ['ninja', 'serrated'], ['flyer', 'barbs'], ['archer', 'eye'], ['ninja', 'stars'], ['flyer', 'scope'],
   ['ninja', 'parry'], ['ninja', 'vital'], ['flyer', 'winch'], ['ninja', 'focus'], ['flyer', 'feather'],
+  ['sword', 'greatsword'], ['archer', 'longbow'], ['archer', 'broadheads'], ['flyer', 'hawkeye'], ['flyer', 'scope2'],
+  ['flyer', 'barbs2'], ['archer', 'steady'], ['castle', 'levy2'], ['spear', 'javelin'],
   ['cleric', 'big'], ['warlock', 'pool'], ['cleric', 'speed'], ['warlock', 'speed'], ['cleric', 'might'],
   ['warlock', 'might'], ['miner', 'pick2'], ['miner', 'bag2'], ['spear', 'shield2'], ['archer', 'fire'],
   ['sword', 'leap'], ['sword', 'rage2'], ['giant', 'stun'], ['giant', 'protein2'], ['castle', 'tithe2'],
   ['castle', 'archer3'], ['castle', 'archer4'], ['miner', 'devout2'], ['miner', 'pan1'], ['miner', 'pan2'], ['giant', 'protein3'], ['castle', 'levy'],
+  ['miner', 'mule'], ['miner', 'diamond'], ['castle', 'gilded'],
 ];
-// Never researched by the AI because it doesn't use them: Masonry, Fortification, Prospecting.
+// Never researched by the AI because it doesn't use them: Earthworks, Palisade, Prospecting.
 
 // Rough fighting value of a side's army (cost weighted by remaining health). The whole-army
 // figure counts troops hiding in the castle too; a local figure (nearX) only counts those outside.
@@ -136,7 +139,11 @@ class SmartAI {
 
   // The next upgrade this AI wants (null when nothing is left or its building is busy).
   nextResearch(team) {
-    for (const [type, key] of AI_RESEARCH) {
+    // enemy flyers about and Spearton in the army: Javelins jump the queue
+    const flyers = G.units.some(u => u.team !== this.id && !u.dead && isFlying(u));
+    const spears = G.units.some(u => u.team === this.id && !u.dead && u.type === 'spear');
+    const order = flyers && spears ? [['spear', 'javelin'], ...AI_RESEARCH] : AI_RESEARCH;
+    for (const [type, key] of order) {
       if (team.upgrades[type][key] || upgradeLocked(team, type, key)) continue;
       const d = upgradeDef(type, key);
       if (this.cfg.research === 'basic' && (d.requires || ['giant', 'cleric', 'warlock', 'castle'].includes(type))) continue;

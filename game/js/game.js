@@ -333,19 +333,22 @@ function setMinerGarrison(team, on) {
 // Passive statue income and the Levy's free Swordwrath.
 function updateCastle(team, dt) {
   if (team.statue.dead || G.over) return;
-  const up = team.upgrades.castle, tithe = TITHE_GOLD[up.tithe2 ? 2 : up.tithe ? 1 : 0] * dt;
+  const up = team.upgrades.castle, tithe = TITHE_GOLD[up.gilded ? 3 : up.tithe2 ? 2 : up.tithe ? 1 : 0] * dt;
   team.gold += tithe;
   G.stats[team.id].gold += tithe;
-  if (!team.upgrades.castle.levy) return;
+  if (!up.levy) return;
   team.levyT += dt;
   if (team.levyT < LEVY_INTERVAL) return;
   team.levyT = 0;
-  if (popUsed(team) + unitPop(team, 'sword') > popCap(team)) {
-    if (team.id === 0) toast('Levy skipped: population limit reached');
-    return;
+  // Levy: a free Swordwrath; Levy II (Defense Clan) adds a free Spearton at the same time
+  for (const type of up.levy2 ? ['sword', 'spear'] : ['sword']) {
+    if (popUsed(team) + unitPop(team, type) > popCap(team)) {
+      if (team.id === 0) toast(`Levy skipped: no room for a ${UNIT_TYPES[type].name}`);
+      continue;
+    }
+    spawnUnit(team, type);
+    if (team.id === 0) toast(`Levy: a free ${UNIT_TYPES[type].name} has joined your army`);
   }
-  spawnUnit(team, 'sword');
-  if (team.id === 0) toast('Levy: a free Swordwrath has joined your army');
 }
 
 // The Shrine: soldiers near it (miners don't count) pull its allegiance their way while no enemy
@@ -399,11 +402,11 @@ const ARCHER_PHASES = { idle: 0.45, nock: 0.4, draw: 0.5, aim: 0.3, release: 0.3
 // Castle archers automatically benefit from whatever archer upgrades the team has researched.
 function castleArcherStats(team) {
   const up = team.upgrades.archer;
-  const archerRange = up.bow ? 500 : UNIT_TYPES.archer.range;   // same as a trained archer's
+  const archerRange = up.longbow ? 600 : up.bow ? 500 : UNIT_TYPES.archer.range;   // same as a trained archer's
   return {
     reach: STATUE_X + team.statue.halfW + archerRange + CASTLE_REACH_PAD,   // distance from our edge of the world
-    dmg: up.arrows ? 16 : 11,
-    rate: up.quiver ? 1.35 : 1,
+    dmg: up.broadheads ? 20 : up.arrows ? 16 : 11,
+    rate: up.quiver ? (up.steady ? 1.55 : 1.35) : 1,
     fire: !!up.fire,
     pierceHalf: !!up.arrows,
   };

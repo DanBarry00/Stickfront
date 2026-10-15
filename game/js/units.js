@@ -129,23 +129,24 @@ function applyPerks(u) {
   u.pierceFrac = 0;    // share of the target's armor this unit's blows ignore
   u.crit = 0;          // chance of a double-damage critical hit
   if (u.type === 'sword') {
-    u.dmg = P.blades ? 18 : 12;
+    u.dmg = P.greatsword ? 25 : P.blades ? 18 : 12;
+    if (P.greatsword) u.atk = d.atkTime * 1.1;   // Great Swords swing slower
     u.armor = P.helm ? 0.25 : 0;
   } else if (u.type === 'miner') {
     u.maxHp += P.defense ? 50 : 0;
     u.dmg = P.defense ? 11 : d.dmg;
-    u.carryCap = P.bag2 ? 80 : P.bag ? 56 : 35;
-    u.goldPerSwing = P.pick2 ? 14 : P.pick ? 11 : 7;
-    u.mineTime = P.pick2 ? 0.6 : P.pick ? 0.72 : MINE_SWING_TIME;
+    u.carryCap = P.mule ? 100 : P.bag2 ? 80 : P.bag ? 56 : 35;
+    u.goldPerSwing = P.diamond ? 17 : P.pick2 ? 14 : P.pick ? 11 : 7;
+    u.mineTime = P.diamond ? 0.52 : P.pick2 ? 0.6 : P.pick ? 0.72 : MINE_SWING_TIME;
     u.manaMul = P.devout2 ? 2 : P.devout ? 1.5 : 1;
     u.panMul = P.pan2 ? 1.75 : P.pan1 ? 1.35 : 1;
   } else if (u.type === 'archer') {
-    u.range = P.bow ? 500 : d.range;
+    u.range = P.longbow ? 600 : P.bow ? 500 : d.range;
     u.aggro = u.range + 40;
-    u.dmg = P.arrows ? 32 : d.dmg;
+    u.dmg = P.broadheads ? 40 : P.arrows ? 32 : d.dmg;
     u.pierceHalf = !!P.arrows;   // bodkin points punch through a third of any armor
     u.fire = !!P.fire;
-    u.atk = P.quiver ? 0.92 : d.atkTime;
+    u.atk = P.quiver ? (P.steady ? 0.92 * 0.85 : 0.92) : d.atkTime;
     u.crit = P.eye ? CRIT.upgraded : CRIT.chance;
   } else if (u.type === 'ninja') {
     u.pierceFrac = NINJA_PIERCE[P.serrated ? 1 : 0];
@@ -160,17 +161,18 @@ function applyPerks(u) {
       u.atk = GROUNDED.atkTime;
       u.aggro = 220;
     } else {
-      u.range = P.scope ? 400 : d.range;
+      u.range = P.scope2 ? 480 : P.scope ? 400 : d.range;
       u.aggro = u.range + 40;
-      u.dmg = P.barbs ? 21 : d.dmg;
+      u.dmg = P.barbs2 ? 26 : P.barbs ? 21 : d.dmg;
       u.atk = P.winch ? d.atkTime * 0.7 : d.atkTime;
-      u.crit = G && G.teams ? clanOf(G.teams[u.team]).kestrelCrit || 0 : 0;   // Sky Clan Kestrels crit
+      u.crit = P.hawkeye ? CRIT.upgraded : G && G.teams ? clanOf(G.teams[u.team]).kestrelCrit || 0 : 0;   // Sky Clan Kestrels crit
     }
   } else if (u.type === 'spear') {
     u.armor = 0.1 + (P.shield ? 0.2 : 0) + (P.shield2 ? 0.1 : 0) + (P.helm ? 0.15 : 0);
     u.maxHp += (P.shield ? 40 : 0) + (P.shield2 ? 40 : 0);
     u.pierce = !!P.halberd;
     u.dmg = P.halberd ? 28 : d.dmg;
+    if (P.javelin && u.javelin === undefined) u.javelin = 1;   // one javelin, refilled by garrisoning
   } else if (isMage(u)) {
     u.dmg = P.focus ? 28 : d.dmg;   // heal amount for clerics, bolt damage for warlocks
   } else if (isGiant(u)) {
@@ -206,6 +208,24 @@ function updateNinjaMode(u) {
   const t = u.lastTarget;
   const far = t && !t.dead && (isFlying(t) || isGiant(t));
   setNinjaMode(u, far || u.hp < u.maxHp * 0.35);
+}
+
+// Javelins: a Spearton hurls its one javelin at the nearest flyer in range, and gets a new one
+// whenever it garrisons.
+function updateJavelin(u) {
+  if (!u.perks.javelin) return;
+  if (u.inside) { u.javelin = 1; return; }
+  if (!u.javelin || u.stunT > 0) return;
+  let best = null, bd = JAVELIN.range;
+  for (const e of G.units) {
+    if (e.team === u.team || !isFlying(e) || e.dead || e.inside || e.stealth) continue;
+    const d = Math.abs(e.x - u.x) + Math.abs(e.y - u.y) * 0.5;
+    if (d < bd) { bd = d; best = e; }
+  }
+  if (!best) return;
+  u.javelin = 0;
+  u.facing = best.x >= u.x ? 1 : -1;
+  fireArrow(u.team, u.x + u.facing * 8, u.y - 56 * u.scale, best, JAVELIN.dmg * dmgMult(u), u, false, { kind: 'javelin' });
 }
 
 // Vanish while running; any blow (or stopping) reveals the ninja and starts the cooldown.
@@ -1218,6 +1238,7 @@ function updateUnit(u, dt) {
   if (!u.praying) u.pray = -1;
   if (u.type === 'miner' && !u.panUsed) freePanSlot(u);
   if (u.type === 'ninja') updateStealth(u, dt);
+  if (u.type === 'spear') updateJavelin(u);
   // legs move in step with the distance actually covered, so a fast unit held to a slow
   // formation pace walks slowly instead of sprinting on the spot; sprinters drop to a walk
   const inst = dt > 0 ? Math.min(1.6, u.stepDist / (dt * baseSpeed(u))) : 0;
