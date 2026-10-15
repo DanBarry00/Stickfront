@@ -120,14 +120,20 @@ const UNIT_TYPES = {
     dmg: 30, range: 40, atkTime: 1.6, aggro: 280, hotkey: '\\', code: 'Backslash', clans: ['arcane'],
     desc: 'A rune-carved stone construct that takes your orders, unlike a giant. 700 hp, hits one target at a time, and takes half damage from Warlock magic. Hunker Down (X): half speed, 60% less damage, enemies prefer to hit it, and it stops attacking.',
   },
+  // Beast Clan slinger: the giant-killer (and giant-tamer). Its stones reach flyers too.
+  beastmaster: {
+    key: 'beastmaster', name: 'Beastmaster', building: 'Beast Pen', cost: 140, time: 5, hp: 90, speed: 80, pop: 1,
+    dmg: 14, range: 260, atkTime: 1.2, aggro: 300, hotkey: "'", code: 'Quote', clans: ['beast'],
+    desc: 'A slinger in a beast-hide cloak. Its stones reach flyers and do double damage to enemy giants, and nearby friendly giants obey it as if more troops were around.',
+  },
 };
-const UNIT_ORDER = ['miner', 'sword', 'archer', 'spear', 'cleric', 'warlock', 'giant', 'ninja', 'flyer', 'ballista', 'golem'];
+const UNIT_ORDER = ['miner', 'sword', 'archer', 'spear', 'cleric', 'warlock', 'giant', 'ninja', 'flyer', 'ballista', 'golem', 'beastmaster'];
 // Training groups: each group trains one unit at a time from a shared queue (so a Swordwrath
 // waits for the Spearton ahead of it). Colors tint the training bar.
 const TRAIN_GROUPS = [
   { key: 'workers', name: 'Workers', color: '#c9a23a', types: ['miner'] },
   { key: 'infantry', name: 'Infantry', color: '#c0503a', types: ['sword', 'spear', 'ninja'] },
-  { key: 'ranged', name: 'Ranged', color: '#7aa84a', types: ['archer', 'flyer', 'ballista'] },
+  { key: 'ranged', name: 'Ranged', color: '#7aa84a', types: ['archer', 'flyer', 'ballista', 'beastmaster'] },
   { key: 'mages', name: 'Mages', color: '#9a62d8', types: ['cleric', 'warlock'] },
   { key: 'giants', name: 'Giants', color: '#8f8a80', types: ['giant', 'golem'] },
 ];
@@ -137,13 +143,13 @@ const isGiant = u => u.type === 'giant';
 // Kestrels are airborne until Feather Fall drops them to the ground (then they fight with a knife).
 const isFlying = u => u.type === 'flyer' && !u.grounded;
 // Ninjas count as ranged while throwing stars (u.starRanged is decided each frame).
-const isRanged = u => u.type === 'archer' || u.type === 'warlock' || u.type === 'ballista' || isFlying(u) || (u.type === 'ninja' && !!u.starRanged);
+const isRanged = u => u.type === 'archer' || u.type === 'warlock' || u.type === 'ballista' || u.type === 'beastmaster' || isFlying(u) || (u.type === 'ninja' && !!u.starRanged);
 const trainCode = def => def.code || 'Digit' + def.hotkey;
 // Mages come down the castle ladder; the Dojo and Aerie troops leave straight off the rampart, where
 // all four halls stand. The giant pit is outside the gate.
 const GIANT_PIT_X = 655;
 const RAMPART_HALL_X = { cleric: 150, warlock: 222, ninja: 340, flyer: 462 };
-const DOOR_X = { ...BUILD_X, cleric: 52, warlock: 52, giant: GIANT_PIT_X, ninja: RAMPART_HALL_X.ninja, flyer: RAMPART_HALL_X.flyer, ballista: 500, golem: GIANT_PIT_X };   // ballistas roll out by the gate
+const DOOR_X = { ...BUILD_X, cleric: 52, warlock: 52, giant: GIANT_PIT_X, ninja: RAMPART_HALL_X.ninja, flyer: RAMPART_HALL_X.flyer, ballista: 500, golem: GIANT_PIT_X, beastmaster: GIANT_PIT_X };   // beastmasters come out of the pit with the giants   // ballistas roll out by the gate
 
 // Ninjas
 const NINJA_AMBUSH = 3;           // damage multiplier of the first blow of a fight (or out of stealth)
@@ -168,6 +174,10 @@ const BALLISTA = { minRange: 120, pierce: 0.6, structureMul: 2 };
 // Spirit Golem (Arcane Circle): bigger than a man, stone armor, shrugs off Warlock magic;
 // Mana Core heals it slowly.
 const GOLEM = { scale: 1.5, armor: 0.1, spellMul: 0.5, regen: 3 };
+
+// Beastmaster (Beast Clan): double damage to giants; within auraRange each one counts as this many
+// extra troops for a friendly giant's obedience (more with Beast Lore).
+const BEASTMASTER = { giantMul: 2, aura: 2, auraLore: 4, auraRange: 280 };
 
 // Giants
 const GIANT_SCALE = 2.1;          // base size; each Protein Diet tier adds 13%
@@ -268,6 +278,10 @@ const UPGRADES = {
     { key: 'plating', name: 'Runic Plating', cost: 200, mana: 75, time: 25, desc: 'Rune-etched plates: +20% armor.' },
     { key: 'core', name: 'Mana Core', cost: 175, mana: 100, time: 25, desc: `A glowing core in its chest that slowly mends it: +${GOLEM.regen} hp per second.` },
   ],
+  beastmaster: [
+    { key: 'stones', name: 'Heavy Stones', cost: 175, mana: 0, time: 20, desc: 'Sling damage 14 → 20.' },
+    { key: 'lore', name: 'Beast Lore', cost: 175, mana: 50, time: 25, desc: `Each Beastmaster counts as ${BEASTMASTER.auraLore} extra troops for nearby giants' obedience instead of ${BEASTMASTER.aura}.` },
+  ],
   spear: [
     { key: 'shield', name: 'Shields', cost: 175, mana: 0, time: 20, desc: '+20% armor and +40 hp, and unlocks Shield Wall (X): they stop attacking, take 60% less damage and draw enemy attacks.' },
     { key: 'shield2', name: 'Tower Shields', cost: 200, mana: 50, time: 25, requires: 'shield', desc: '+10% more armor and +40 hp; Shield Wall blocks 75% and draws attackers even harder.' },
@@ -356,6 +370,7 @@ const GEAR = {
   flyer: [['goggles'], ['goggles']],
   ballista: [['band'], ['horns']],
   golem: [['none'], ['none']],
+  beastmaster: [['pelt'], ['pelt']],
 };
 
 const THEMES = [

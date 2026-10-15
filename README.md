@@ -19,11 +19,11 @@ Each clan sets your starting gold, mana and army, which upgrades are already res
 | **Sword** | 2 miners, 2 Swordwrath | Population 35; Levy, Military Training, Adrenaline; clan-only Great Swords (damage 25, 10% slower swing) | No Kestrels or Throwing Stars (only archers and Javelins hit flyers); no Flaming Arrows; no trenches |
 | **Mercenary** | 4 miners, 1 plain Swordwrath | Bigger Bags, Steel Pickaxes, Iron Pans, Prospecting, Statue Offerings; every kill pays 20% of the victim's gold cost; clan-only Mule Packs (carry 100), Diamond Picks (17 per swing), Gilded Statue (4 gold/s) | Praying gives half the mana; weakest starting army |
 | **Arcane Circle** | 150 mana; 2 miners, a Cleric and a Warlock | Clan unit: the **Spirit Golem**; Healing Pool and Blight Pool; mages cost 35 mana; praying gives 50% more | Swordwrath and Spearton −10% health; 1 castle archer; no Giants |
-| **Beast** | 2 miners, 2 Swordwrath | Giants cost 340 gold + 90 mana and take 3 population; Blinders researched | No Archers or Kestrels |
+| **Beast** | 2 miners, a Swordwrath and a Beastmaster | Clan unit: the **Beastmaster**; Giants cost 340 gold + 90 mana and take 3 population; Blinders researched | No Archers or Kestrels (only Beastmasters, Warlocks and Javelins reach flyers) |
 | **Shadow** | 2 miners, 2 ninjas | All units +15% damage; ninjas cost 125, vanish again after 3s; Throwing Stars researched | All units −15% health; no Spearton; no trenches |
 | **Sky** | 2 miners, 2 Kestrels | Kestrels cost 150 and crit 10% of the time; clan-only Hawk Eye (20% crit), Spyglass (range 480), Barbed Bolts II (damage 26) | Swordwrath and Spearton −10% health; no Giants |
 
-Clan-only upgrades and units appear only for their clan. Still to come: the Beastmaster, Saboteur and Firebird. The setup screen lists these as "coming soon" for each clan.
+Clan-only upgrades and units appear only for their clan. Still to come: the Saboteur and Firebird. The setup screen lists these as "coming soon" for each clan.
 
 ## Units
 | Unit | Cost | Building | Role |
@@ -39,6 +39,7 @@ Clan-only upgrades and units appear only for their clan. Still to come: the Beas
 | Kestrel | 175 | Aerie (on the rampart) | Flies over the battle with a small crossbow. Only ranged attacks can hit it |
 | Ballista | 250 + 50 mana | Siege Workshop (Defense Clan only) | Long-range siege engine that wrecks trenches and statues; helpless up close (2 population) |
 | Spirit Golem | 150 + 250 mana | Golem Forge (Arcane Circle only) | Commandable 700 hp tank; Hunker Down to soak damage and draw attacks; half damage from Warlock magic (3 population) |
+| Beastmaster | 140 | Beast Pen (Beast Clan only) | Slinger: hits flyers, double damage to giants, tames nearby friendly giants |
 
 ## Giants
 - **Targeting:** a giant always goes for the enemy with the most health, ignoring taunts. Each blow also splashes the 2 enemies beside its target, unless the target is another giant.
@@ -136,6 +137,14 @@ A rune-carved stone construct, trained in the Giants group (hotkey `\`) at the G
 - **Half damage from Warlock magic** (bolts, Blight Pools and Fireballs).
 - **Hunker Down (X):** it crouches behind crossed arms at half speed, takes 60% less damage, and enemies prefer to hit it (like Tower Shields), but it stops attacking. It's the clan's only real tank. The computer hunkers its golems down when three or more enemies close in, or when one is badly hurt in a fight.
 - **Upgrades (Golem Forge):** Runic Plating (+20% armor) and Mana Core (heals 3 hp per second).
+
+## Beastmaster (Beast Clan)
+A slinger in a wolf-pelt hood, trained in the Ranged group (hotkey `'`). It comes out of the pit beside the giants. 140 gold, 90 hp.
+- **Sling:** range 260, 14 damage. Its stones **can hit flyers**, which makes it the Beast Clan's main answer to the sky.
+- **Giant-killer:** double damage to enemy giants.
+- **Giant-tamer:** each Beastmaster near a friendly giant counts as 3 troops (1 plus 2 extra) toward the giant's obedience, so it wears more chains and listens better.
+- **Upgrades (Beast Pen, from the ⚒ on its button):** Heavy Stones (damage 20) and Beast Lore (counts as 5 troops instead of 3).
+- The computer playing the Beast Clan keeps two miners praying and saves its gold and mana for its first giant.
 
 ## Javelins (Spear Hall, every clan)
 150 gold + 25 mana. Each Spearton carries one javelin and hurls it automatically at the nearest flyer within 250 (30 damage). It gets a new one each time it garrisons. It's the main answer to flyers for clans without good ranged units, like the Sword Clan.

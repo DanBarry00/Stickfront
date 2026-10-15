@@ -457,6 +457,13 @@ function drawProjectiles(ctx) {
   for (const p of G.projectiles) {
     const a = Math.atan2(p.vy, p.vx), c = Math.cos(a), s = Math.sin(a);
     if (p.kind === 'star') { drawStar(ctx, p.x, p.y, 4, p.t * 25); continue; }
+    if (p.kind === 'stone') {
+      ctx.fillStyle = '#7d7870';
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 2.6, 0, TAU);
+      ctx.fill();
+      continue;
+    }
     if (p.kind === 'ballista') {
       // a heavy siege bolt with leather fletching
       ctx.strokeStyle = '#3a2a1a';

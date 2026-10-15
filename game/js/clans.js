@@ -21,6 +21,7 @@
 //   giantPop               population a giant takes (default 4)
 //   kestrelCrit            Kestrels' critical hit chance (default 0)
 //   ai                     extra share of the army the computer aims for: { unitType: share }
+//   aiPray                 miners the computer keeps praying (at least)
 //   coming                 clan features not in the game yet (listed on the setup screen)
 
 const ALL_UPGRADES = type => UPGRADES[type].map(d => d.key);
@@ -103,15 +104,15 @@ const CLANS = {
   beast: {
     name: 'Beast Clan',
     tagline: 'Giants, and the keepers who tame them.',
-    army: [{ type: 'miner', n: 2 }, { type: 'sword', n: 2 }],
+    army: [{ type: 'miner', n: 2 }, { type: 'sword', n: 1 }, { type: 'beastmaster', n: 1 }],
     free: { giant: ['blinders'] },
     cost: { giant: { gold: -110, mana: -30 } },
     giantPop: 3,
     lockUnits: ['archer', 'flyer'],
-    ai: { giant: 0.08, spear: 0.08 },
-    strengths: ['Giants cost 340 gold + 90 mana and take 3 population', 'Blinders already researched'],
-    weaknesses: ['No Archers and no Kestrels: only Warlocks reach flyers for now'],
-    coming: ['Beastmaster: slinger who hits flyers and does double damage to giants'],
+    ai: { giant: 0.08, spear: 0.08, beastmaster: 0.1 },
+    aiPray: 2,   // the computer keeps two miners praying for giant mana
+    strengths: ['Starts with a Swordwrath and a Beastmaster', 'Giants cost 340 gold + 90 mana and take 3 population', 'Blinders already researched', 'Clan unit: Beastmaster, a slinger who hits flyers, does double damage to giants and keeps your giants in line'],
+    weaknesses: ['No Archers and no Kestrels: only Beastmasters, Warlocks and Javelins reach flyers'],
   },
 
   shadow: {

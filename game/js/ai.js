@@ -81,7 +81,7 @@ const AI_RESEARCH = [
   ['ninja', 'parry'], ['ninja', 'vital'], ['flyer', 'winch'], ['ninja', 'focus'], ['flyer', 'feather'],
   ['sword', 'greatsword'], ['archer', 'longbow'], ['archer', 'broadheads'], ['flyer', 'hawkeye'], ['flyer', 'scope2'],
   ['flyer', 'barbs2'], ['archer', 'steady'], ['castle', 'levy2'], ['spear', 'javelin'],
-  ['ballista', 'torsion'], ['ballista', 'ironbolt'], ['ballista', 'mantlet'], ['golem', 'plating'], ['golem', 'core'],
+  ['ballista', 'torsion'], ['ballista', 'ironbolt'], ['ballista', 'mantlet'], ['golem', 'plating'], ['golem', 'core'], ['beastmaster', 'stones'], ['beastmaster', 'lore'],
   ['cleric', 'big'], ['warlock', 'pool'], ['cleric', 'speed'], ['warlock', 'speed'], ['cleric', 'might'],
   ['warlock', 'might'], ['miner', 'pick2'], ['miner', 'bag2'], ['spear', 'shield2'], ['archer', 'fire'],
   ['sword', 'leap'], ['sword', 'rage2'], ['giant', 'stun'], ['giant', 'protein2'], ['castle', 'tithe2'],
@@ -124,6 +124,9 @@ class SmartAI {
     const n = army.length + 1;
     const giantCost = unitCost(team, 'giant');
     if ((c.giants || extra.giant) && can('giant') && n >= 6 && count('giant') < 1 + Math.floor(n * share('giant', 1 / 14)) && team.mana > giantCost.mana + 80 && team.gold >= giantCost.gold) return 'giant';
+    // a giant clan saves its gold for the giant once a small escort is out and the mana is ready
+    // (returning 'giant' while short of gold means nothing else gets bought this round)
+    if (extra.giant && can('giant') && n >= 3 && count('giant') < 1 + Math.floor(n * share('giant', 1 / 14)) && team.mana >= giantCost.mana) return 'giant';
     // the Arcane Circle's Spirit Golems hold the front instead
     const golemCost = unitCost(team, 'golem');
     if (can('golem') && n >= 4 && count('golem') < 1 + Math.floor(n * share('golem', 0)) && team.mana > golemCost.mana + 40 && team.gold >= golemCost.gold) return 'golem';
@@ -132,7 +135,7 @@ class SmartAI {
     if ((c.mages || extra.warlock) && can('warlock') && count('warlock') < Math.floor(n * share('warlock', 1 / 7)) && team.mana > mageMana('warlock')) return 'warlock';
     // enemy Kestrels can only be answered from range: more archers (or whatever shoots for this clan)
     const enemyFlyers = G.units.filter(u => u.team !== this.id && !u.dead && isFlying(u)).length;
-    const shooter = can('archer') ? 'archer' : can('flyer') ? 'flyer' : can('warlock') ? 'warlock' : null;
+    const shooter = can('archer') ? 'archer' : can('flyer') ? 'flyer' : can('beastmaster') ? 'beastmaster' : can('warlock') ? 'warlock' : null;
     if (shooter && (shooter !== 'warlock' || team.mana > mageMana('warlock')) && count(shooter) < n * share(shooter, shooter === 'archer' ? 0.28 : 0.12) + enemyFlyers * 0.6) return shooter;
     const front = can('spear') ? 'spear' : null;
     if (front && count(front) < n * share('spear', 0.2)) return front;
@@ -156,7 +159,7 @@ class SmartAI {
       if (d.requires && !team.upgrades[type][d.requires]) continue;
       if (team.research[type]) continue;
       // no point researching for ninjas, Kestrels or ballistas it hasn't built
-      if (['ninja', 'flyer', 'ballista', 'golem'].includes(type) && !G.units.some(u => u.team === this.id && !u.dead && u.type === type)) continue;
+      if (['ninja', 'flyer', 'ballista', 'golem', 'beastmaster'].includes(type) && !G.units.some(u => u.team === this.id && !u.dead && u.type === type)) continue;
       return { type, d };
     }
     return null;
@@ -173,7 +176,9 @@ class SmartAI {
     const starved = G.time > 120 && G.time - this.lastResearch > this.cfg.researchGap && team.mana >= (next.d.mana || 0);
     const core = starved || armySize >= this.cfg.saveAt + owned * this.cfg.armyPerUpgrade;   // grow army and upgrades together
     const reserve = core ? 50 : this.cfg.reserve;
-    if (team.gold >= next.d.cost + reserve && team.mana >= (next.d.mana || 0)) {
+    // a giant clan keeps its mana for its first giants rather than spending it on research
+    const giantMana = clanOf(team).ai && clanOf(team).ai.giant && canTrain(team, 'giant') && !G.units.some(u => u.team === this.id && !u.dead && isGiant(u)) ? unitCost(team, 'giant').mana : 0;
+    if (team.gold >= next.d.cost + reserve && team.mana >= (next.d.mana || 0) + (next.d.mana ? giantMana : 0)) {
       startResearch(team, next.type, next.d.key);
       this.lastResearch = G.time;
       return false;
@@ -191,7 +196,7 @@ class SmartAI {
     const free = miners.filter(u => u.order.type === 'stance' || u.order.type === 'work');
     // pray only while mana is short; with plenty banked, the worshipper goes back to digging gold
     if (team.mana > c.manaCap) { for (const u of miners) if (u.order.type === 'mana') setOrder(u, { type: 'stance' }); }
-    else if (miners.length >= c.prayAt && praying < c.praying && free.length) setOrder(free[0], { type: 'mana' });
+    else if (miners.length >= c.prayAt && praying < Math.max(c.praying, clanOf(team).aiPray || 0) && free.length) setOrder(free[0], { type: 'mana' });
     else if (miners.length >= c.panAt && panning < c.panning && free.length) setOrder(free[0], { type: 'pan' });
     this.protectMiners(team, miners);
   }

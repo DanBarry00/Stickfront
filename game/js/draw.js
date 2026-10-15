@@ -803,6 +803,7 @@ function drawStickman(ctx, o) {
   const t = RT + o.seed, ph = o.walk;
   const isMiner = o.type === 'miner', isArcher = o.type === 'archer', isSword = o.type === 'sword', isSpear = o.type === 'spear';
   const isNinja = o.type === 'ninja', isKnife = o.type === 'flyer';   // a grounded Kestrel fights with a knife
+  const isSling = o.type === 'beastmaster';
   const praying = o.pray !== undefined && o.pray >= 0;
   const panning = !!o.panning;
   const kneel = praying || panning;
@@ -882,6 +883,10 @@ function drawStickman(ctx, o) {
     if (wall) th = -0.25;
     else if (o.swing >= 0) th = 0.1;
     else th = 0.55 + (walk ? Math.sin(ph + Math.PI) * 0.12 : Math.sin(t * 2) * 0.04);
+  } else if (isSling) {
+    // arm up to whirl the sling, a snap forward at the release, hanging at the side otherwise
+    const s = o.swing;
+    th = s < 0 ? 0.9 + Math.sin(t * 2) * 0.05 : s < 0.8 ? -1.45 : lerp(-1.45, 0.3, Math.min(1, (s - 0.8) / 0.12));
   } else if (isNinja && o.starRanged && o.swing >= 0) {
     // throwing a star: draw the arm back, then whip it forward (release at 0.8)
     const s = o.swing;
@@ -997,7 +1002,7 @@ function drawStickman(ctx, o) {
   ctx.stroke();
 
   // ragged waist cloth on fighters
-  if (isSword || isArcher || isSpear || isNinja || isKnife) {
+  if (isSword || isArcher || isSpear || isNinja || isKnife || isSling) {
     const wave = Math.sin(t * (run ? 14 : 4)) * (run ? 3 : 1.2);
     ctx.strokeStyle = CLOTH[o.team];
     ctx.lineWidth = 2.2;
@@ -1097,7 +1102,25 @@ function drawStickman(ctx, o) {
   }
 
   // weapon, then the front arm over it
-  if (isNinja) {
+  if (isSling) {
+    // the sling: whirled overhead while winding up, let go at the release, hanging loose otherwise
+    const s = o.swing, spin = s * TAU * 3;
+    let sx2 = hx2, sy2 = hy2 + 10, stone = true;
+    if (s >= 0 && s < 0.8) { sx2 = hx2 + Math.cos(spin) * 11 * f; sy2 = hy2 + Math.sin(spin) * 5 - 3; }
+    else if (s >= 0.8) { sx2 = hx2 + 9 * f; sy2 = hy2 + 3 + Math.sin(t * 30) * 2; stone = false; }
+    ctx.strokeStyle = '#8a6a44';
+    ctx.lineWidth = 1.1;
+    ctx.beginPath();
+    ctx.moveTo(hx2, hy2);
+    ctx.lineTo(sx2, sy2);
+    ctx.stroke();
+    if (stone) {
+      ctx.fillStyle = P.stones ? '#6a6d70' : '#8f8a80';
+      ctx.beginPath();
+      ctx.arc(sx2, sy2, P.stones ? 2.6 : 2, 0, TAU);
+      ctx.fill();
+    }
+  } else if (isNinja) {
     if (o.starRanged) {
       // blade sheathed across the back, a star in the throwing hand until it flies
       drawKatana(ctx, sx - 8 * f, sy - 6, 2.3, f, P, -1);
@@ -1403,6 +1426,22 @@ function drawGear(ctx, g, hx, hy, f, st, t, team) {
       ctx.stroke();
       break;
     }
+    case 'pelt':
+      // a wolf pelt worn as a hood, ears up, the hide hanging down the back
+      ctx.fillStyle = '#5a4430';
+      ctx.beginPath();
+      ctx.arc(hx - 0.5 * f, hy - 1, 8.2, Math.PI * 0.95, Math.PI * 2.05);
+      ctx.lineTo(hx - 9 * f, hy + 10);
+      ctx.lineTo(hx - 6 * f, hy + 2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(hx - 4 * f, hy - 7); ctx.lineTo(hx - 6 * f, hy - 13); ctx.lineTo(hx - 1 * f, hy - 8);
+      ctx.moveTo(hx + 2 * f, hy - 8); ctx.lineTo(hx + 2 * f, hy - 14); ctx.lineTo(hx + 5 * f, hy - 7);
+      ctx.fill();
+      ctx.fillStyle = '#d8c8a0';
+      ctx.fillRect(hx + 5 * f - 1, hy - 5, 2, 2);
+      break;
     case 'goggles':
       ctx.strokeStyle = '#4a3420';
       ctx.lineWidth = 2;
@@ -3245,6 +3284,13 @@ function drawUnitIcon(cv, type) {
       c.fillStyle = '#bdb5a2'; c.beginPath(); c.arc(13, 26, 3.2, 0, TAU); c.fill();
       break;
     }
+    case 'beastmaster':
+      // a sling whirling a stone, and a giant's horn
+      c.strokeStyle = 'rgba(216,207,188,0.45)'; c.lineWidth = 1; c.setLineDash([2, 3]); c.beginPath(); c.arc(16, 15, 10, 0, TAU); c.stroke(); c.setLineDash([]);
+      line('#8a6a44', 1.6, [[8, 34], [16, 15], [24, 9]]);
+      c.fillStyle = '#8f8a80'; c.beginPath(); c.arc(25, 8, 3.4, 0, TAU); c.fill();
+      c.fillStyle = '#d8c8a0'; c.beginPath(); c.moveTo(27, 36); c.quadraticCurveTo(38, 30, 35, 18); c.quadraticCurveTo(34, 28, 24, 32); c.closePath(); c.fill();
+      break;
     case 'golem':
       // a stone head with glowing eyes and a rune on the brow
       c.fillStyle = '#8c8678'; c.strokeStyle = '#2a2622'; c.lineWidth = 1.6;
@@ -3624,6 +3670,17 @@ function drawUpgradeIcon(cv, type, key) {
       }
       break;
     // ---- ballista
+    // ---- beastmaster
+    case 'stones':
+      c.fillStyle = '#6a6d70'; c.strokeStyle = dark; c.lineWidth = 1.2;
+      for (const [x, y, r] of [[14, 24, 7], [26, 26, 6], [20, 14, 6]]) { c.beginPath(); c.arc(x, y, r, 0, TAU); c.fill(); c.stroke(); }
+      c.strokeStyle = '#8a6a44'; c.lineWidth = 2; c.beginPath(); c.moveTo(4, 36); c.lineTo(12, 30); c.stroke();
+      break;
+    case 'lore':
+      c.fillStyle = '#5a4430'; c.beginPath(); c.ellipse(20, 26, 8, 7, 0, 0, TAU); c.fill();
+      for (const [x, y] of [[10, 15], [17, 11], [24, 11], [31, 15]]) { c.beginPath(); c.ellipse(x, y, 3.2, 4, 0, 0, TAU); c.fill(); }
+      c.strokeStyle = '#e0bf5a'; c.lineWidth = 1.4; c.beginPath(); c.arc(20, 22, 17, -0.4, 0.4); c.stroke();
+      break;
     // ---- spirit golem
     case 'plating':
       c.fillStyle = '#5a5e64'; c.strokeStyle = '#58c3e8'; c.lineWidth = 1.2;

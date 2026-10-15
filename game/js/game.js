@@ -498,7 +498,7 @@ function updateProjectiles(dt) {
         if (p.kind === 'star' && isGiant(t) && !t.dead) confuseGiant(t, STAR.confuse);   // stars disorient giants
         if (p.kind === 'ballista' && !t.isStructure) ballistaPierce(p, t, src);
       }
-      else if (p.kind !== 'star') G.particles.push({ kind: 'stuck', x: p.x, y: Math.max(p.y, LANE_TOP), ang: Math.atan2(p.vy, p.vx), life: 6, max: 6 });
+      else if (p.kind !== 'star' && p.kind !== 'stone') G.particles.push({ kind: 'stuck', x: p.x, y: Math.max(p.y, LANE_TOP), ang: Math.atan2(p.vy, p.vx), life: 6, max: 6 });
       p.done = true;
     }
   }

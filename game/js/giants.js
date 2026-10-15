@@ -9,7 +9,8 @@ function giantObedience(u) {
   if (u.isStatueGiant) return 0;
   let n = 0;
   for (const o of G.units) {
-    if (o.team === u.team && !o.dead && !o.inside && o.type !== 'miner' && !isGiant(o) && Math.abs(o.x - u.x) < 280) n++;
+    if (o.team !== u.team || o.dead || o.inside || o.type === 'miner' || isGiant(o) || Math.abs(o.x - u.x) >= BEASTMASTER.auraRange) continue;
+    n += 1 + (o.type === 'beastmaster' ? (o.perks.lore ? BEASTMASTER.auraLore : BEASTMASTER.aura) : 0);   // beastmasters tame giants
   }
   return clamp(0.25 + 0.09 * Math.min(n, 7) + (u.perks.blinders ? 0.25 : 0), 0.1, 0.97);
 }

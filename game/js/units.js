@@ -167,6 +167,8 @@ function applyPerks(u) {
       u.atk = P.winch ? d.atkTime * 0.7 : d.atkTime;
       u.crit = P.hawkeye ? CRIT.upgraded : G && G.teams ? clanOf(G.teams[u.team]).kestrelCrit || 0 : 0;   // Sky Clan Kestrels crit
     }
+  } else if (u.type === 'beastmaster') {
+    u.dmg = P.stones ? 20 : d.dmg;
   } else if (u.type === 'golem') {
     u.armor = GOLEM.armor + (P.plating ? 0.2 : 0);
   } else if (u.type === 'ballista') {
@@ -423,8 +425,8 @@ function onSwingHit(u) {
       const aim = u.facing === 1 ? u.aimFa : Math.PI - u.aimFa;
       const lift = (u.onWall ? wallHeight(u.onWall) : 0) + (u.alt || 0);
       const c = rollCrit(u, u.dmg * dmgMult(u));
-      const kind = u.type === 'ninja' ? 'star' : u.type === 'flyer' ? 'bolt' : u.type === 'ballista' ? 'ballista' : 'arrow';
-      const muzzle = u.type === 'ballista' ? 26 : 46;   // the ballista fires from its low stock
+      const kind = u.type === 'ninja' ? 'star' : u.type === 'flyer' ? 'bolt' : u.type === 'ballista' ? 'ballista' : u.type === 'beastmaster' ? 'stone' : 'arrow';
+      const muzzle = u.type === 'ballista' ? 26 : u.type === 'beastmaster' ? 60 : 46;   // low stock; a sling whirled overhead
       fireArrow(u.team, u.x + Math.cos(aim) * 14 * u.scale, u.y - lift - muzzle * u.scale + Math.sin(aim) * 14, t, c.amt, u, u.fire, { kind, crit: c.crit });
     }
   } else if (u.swingKind === 'gold') {
@@ -603,7 +605,7 @@ function doRefit(u, dt) {
 
 // Rank offsets from the front of a formation: spearton in front, swordwrath behind them,
 // archers and mages at the back.
-const RANK_OFF = { spear: 22, sword: 0, ninja: -8, flyer: -60, archer: -85, warlock: -95, cleric: -110, ballista: -140, golem: 34 };   // the golem tanks in front
+const RANK_OFF = { spear: 22, sword: 0, ninja: -8, flyer: -60, archer: -85, warlock: -95, cleric: -110, ballista: -140, golem: 34, beastmaster: -70 };   // the golem tanks in front
 
 // Where the idx-th unit of a type stands: up to six abreast, extra units form more columns.
 function rankSlot(type, idx, count, frontX, dir) {
@@ -1052,6 +1054,7 @@ function damage(t, amt, src, aoe) {
   if (t.lastStand > 0) { t.flash = 0.12; return; }   // already living on borrowed time
   if (t.type === 'golem' && src && src.type === 'warlock') amt = Math.max(1, Math.round(amt * GOLEM.spellMul));   // golems shrug off Warlock magic
   // archers are the giant-killers: extra damage, and a chance to send it into a confused rage
+  if (isGiant(t) && src && src.type === 'beastmaster') amt = Math.round(amt * BEASTMASTER.giantMul);   // the giant-killer's sling
   if (isGiant(t) && src && src.type === 'archer') {
     amt = Math.round(amt * ARCHER_VS_GIANT);
     confuseGiant(t, GIANT_CONFUSE.chance);
