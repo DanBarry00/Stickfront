@@ -132,14 +132,20 @@ const UNIT_TYPES = {
     dmg: 6, range: 26, atkTime: 0.9, aggro: 200, hotkey: ';', code: 'Semicolon', clans: ['shadow'],
     desc: 'A cloaked infiltrator, very fast, that vanishes while running like a ninja. Weak in a fight, but does triple damage to trenches, and can Salt a gold deposit (right-click it): for 30s enemy miners get only half the gold they dig there.',
   },
+  // Sky Clan bomber: glides over the enemy and drops fire pots on the ground below.
+  firebird: {
+    key: 'firebird', name: 'Firebird', building: 'Aerie', cost: 200, mana: 50, time: 9, hp: 90, speed: 85, pop: 2,
+    dmg: 20, range: 40, atkTime: 3, aggro: 320, hotkey: '/', code: 'Slash', clans: ['sky'],
+    desc: 'A rider on a flame-feathered glider. Every 3s it drops a fire pot on the ground units below it: 20 damage to everyone in a small area, and they burn. It cannot hit other flyers. Like a Kestrel, only ranged attacks can reach it.',
+  },
 };
-const UNIT_ORDER = ['miner', 'sword', 'archer', 'spear', 'cleric', 'warlock', 'giant', 'ninja', 'flyer', 'ballista', 'golem', 'beastmaster', 'saboteur'];
+const UNIT_ORDER = ['miner', 'sword', 'archer', 'spear', 'cleric', 'warlock', 'giant', 'ninja', 'flyer', 'ballista', 'golem', 'beastmaster', 'saboteur', 'firebird'];
 // Training groups: each group trains one unit at a time from a shared queue (so a Swordwrath
 // waits for the Spearton ahead of it). Colors tint the training bar.
 const TRAIN_GROUPS = [
   { key: 'workers', name: 'Workers', color: '#c9a23a', types: ['miner'] },
   { key: 'infantry', name: 'Infantry', color: '#c0503a', types: ['sword', 'spear', 'ninja', 'saboteur'] },
-  { key: 'ranged', name: 'Ranged', color: '#7aa84a', types: ['archer', 'flyer', 'ballista', 'beastmaster'] },
+  { key: 'ranged', name: 'Ranged', color: '#7aa84a', types: ['archer', 'flyer', 'firebird', 'ballista', 'beastmaster'] },
   { key: 'mages', name: 'Mages', color: '#9a62d8', types: ['cleric', 'warlock'] },
   { key: 'giants', name: 'Giants', color: '#8f8a80', types: ['giant', 'golem'] },
 ];
@@ -147,7 +153,7 @@ const groupOf = type => TRAIN_GROUPS.find(g => g.types.includes(type));
 const isMage = u => u.type === 'cleric' || u.type === 'warlock';
 const isGiant = u => u.type === 'giant';
 // Kestrels are airborne until Feather Fall drops them to the ground (then they fight with a knife).
-const isFlying = u => u.type === 'flyer' && !u.grounded;
+const isFlying = u => (u.type === 'flyer' && !u.grounded) || u.type === 'firebird';
 // Ninjas count as ranged while throwing stars (u.starRanged is decided each frame).
 const isRanged = u => u.type === 'archer' || u.type === 'warlock' || u.type === 'ballista' || u.type === 'beastmaster' || isFlying(u) || (u.type === 'ninja' && !!u.starRanged);
 const trainCode = def => def.code || 'Digit' + def.hotkey;
@@ -155,7 +161,7 @@ const trainCode = def => def.code || 'Digit' + def.hotkey;
 // all four halls stand. The giant pit is outside the gate.
 const GIANT_PIT_X = 655;
 const RAMPART_HALL_X = { cleric: 150, warlock: 222, ninja: 340, flyer: 462 };
-const DOOR_X = { ...BUILD_X, cleric: 52, warlock: 52, giant: GIANT_PIT_X, ninja: RAMPART_HALL_X.ninja, flyer: RAMPART_HALL_X.flyer, ballista: 500, golem: GIANT_PIT_X, beastmaster: GIANT_PIT_X, saboteur: RAMPART_HALL_X.ninja };   // beastmasters come out of the pit with the giants   // ballistas roll out by the gate
+const DOOR_X = { ...BUILD_X, cleric: 52, warlock: 52, giant: GIANT_PIT_X, ninja: RAMPART_HALL_X.ninja, flyer: RAMPART_HALL_X.flyer, ballista: 500, golem: GIANT_PIT_X, beastmaster: GIANT_PIT_X, saboteur: RAMPART_HALL_X.ninja, firebird: RAMPART_HALL_X.flyer };   // beastmasters come out of the pit with the giants   // ballistas roll out by the gate
 
 // Ninjas
 const NINJA_AMBUSH = 3;           // damage multiplier of the first blow of a fight (or out of stealth)
@@ -187,6 +193,9 @@ const BEASTMASTER = { giantMul: 2, aura: 2, auraLore: 4, auraRange: 280 };
 
 // Saboteur (Shadow Clan): trench damage multiplier (Sappers) and Salt the Mine: seconds spent salting,
 // how long the salt lasts (Brine), and the share of dug gold enemy miners keep from a salted deposit.
+// Firebird (Sky Clan): fire pot blast radius and burn time (bigger with Pitch Pots), and the faster
+// drop rate with Quick Fuse.
+const FIREBIRD = { radius: 45, radiusPitch: 65, burn: 3, burnPitch: 5, fuseAtk: 2.2 };
 const SABOTEUR = { trenchMul: 3, trenchMulSappers: 5, saltTime: 2.5, saltDur: 30, saltDurBrine: 50, saltKeep: 0.5 };
 
 // Giants
@@ -296,6 +305,10 @@ const UPGRADES = {
     { key: 'sappers', name: "Sappers' Picks", cost: 175, mana: 25, time: 20, desc: `Trench damage ${SABOTEUR.trenchMul}× → ${SABOTEUR.trenchMulSappers}×.` },
     { key: 'brine', name: 'Brine', cost: 150, mana: 50, time: 20, desc: `Salted deposits stay spoiled for ${SABOTEUR.saltDurBrine}s instead of ${SABOTEUR.saltDur}s.` },
   ],
+  firebird: [
+    { key: 'pitch', name: 'Pitch Pots', cost: 200, mana: 75, time: 25, desc: `Fire pots burst wider (radius ${FIREBIRD.radius} → ${FIREBIRD.radiusPitch}) and burn longer (${FIREBIRD.burn}s → ${FIREBIRD.burnPitch}s).` },
+    { key: 'fuse', name: 'Quick Fuse', cost: 175, mana: 50, time: 20, desc: `Drops a pot every ${FIREBIRD.fuseAtk}s instead of every 3s.` },
+  ],
   spear: [
     { key: 'shield', name: 'Shields', cost: 175, mana: 0, time: 20, desc: '+20% armor and +40 hp, and unlocks Shield Wall (X): they stop attacking, take 60% less damage and draw enemy attacks.' },
     { key: 'shield2', name: 'Tower Shields', cost: 200, mana: 50, time: 25, requires: 'shield', desc: '+10% more armor and +40 hp; Shield Wall blocks 75% and draws attackers even harder.' },
@@ -386,6 +399,7 @@ const GEAR = {
   golem: [['none'], ['none']],
   beastmaster: [['pelt'], ['pelt']],
   saboteur: [['cowl'], ['cowl']],
+  firebird: [['goggles'], ['goggles']],
 };
 
 const THEMES = [

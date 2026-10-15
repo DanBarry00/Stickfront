@@ -139,10 +139,9 @@ const CLANS = {
     kestrelCrit: 0.1,
     hp: { sword: 0.9, spear: 0.9 },
     lockUnits: ['giant'],
-    ai: { flyer: 0.15 },
-    strengths: ['Starts with 2 Kestrels', 'Kestrels cost 150 and have a 10% critical hit chance', 'Clan-only: Hawk Eye (20% crit), Spyglass, Barbed Bolts II'],
+    ai: { flyer: 0.15, firebird: 0.12 },
+    strengths: ['Starts with 2 Kestrels', 'Kestrels cost 150 and have a 10% critical hit chance', 'Clan-only: Hawk Eye (20% crit), Spyglass, Barbed Bolts II', 'Clan unit: Firebird, a flying bomber that drops fire pots on the ground below'],
     weaknesses: ['Swordwrath and Spearton have 10% less health', 'No Giants'],
-    coming: ['Firebird bomber'],
   },
 };
 const CLAN_ORDER = ['base', 'archer', 'defense', 'sword', 'mercenary', 'arcane', 'beast', 'shadow', 'sky'];

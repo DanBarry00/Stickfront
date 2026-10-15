@@ -81,7 +81,7 @@ const AI_RESEARCH = [
   ['ninja', 'parry'], ['ninja', 'vital'], ['flyer', 'winch'], ['ninja', 'focus'], ['flyer', 'feather'],
   ['sword', 'greatsword'], ['archer', 'longbow'], ['archer', 'broadheads'], ['flyer', 'hawkeye'], ['flyer', 'scope2'],
   ['flyer', 'barbs2'], ['archer', 'steady'], ['castle', 'levy2'], ['spear', 'javelin'],
-  ['ballista', 'torsion'], ['ballista', 'ironbolt'], ['ballista', 'mantlet'], ['golem', 'plating'], ['golem', 'core'], ['beastmaster', 'stones'], ['beastmaster', 'lore'], ['saboteur', 'sappers'], ['saboteur', 'brine'],
+  ['ballista', 'torsion'], ['ballista', 'ironbolt'], ['ballista', 'mantlet'], ['golem', 'plating'], ['golem', 'core'], ['beastmaster', 'stones'], ['beastmaster', 'lore'], ['saboteur', 'sappers'], ['saboteur', 'brine'], ['firebird', 'pitch'], ['firebird', 'fuse'],
   ['cleric', 'big'], ['warlock', 'pool'], ['cleric', 'speed'], ['warlock', 'speed'], ['cleric', 'might'],
   ['warlock', 'might'], ['miner', 'pick2'], ['miner', 'bag2'], ['spear', 'shield2'], ['archer', 'fire'],
   ['sword', 'leap'], ['sword', 'rage2'], ['giant', 'stun'], ['giant', 'protein2'], ['castle', 'tithe2'],
@@ -140,6 +140,7 @@ class SmartAI {
     const front = can('spear') ? 'spear' : null;
     if (front && count(front) < n * share('spear', 0.2)) return front;
     if (can('flyer') && count('flyer') < Math.floor(n * share('flyer', c.flyers)) + (enemyFlyers ? 1 : 0)) return 'flyer';
+    if (can('firebird') && n >= 5 && count('firebird') < Math.floor(n * share('firebird', 0)) && team.mana >= unitCost(team, 'firebird').mana) return 'firebird';
     if (can('saboteur') && n >= 4 && count('saboteur') < 1 + Math.floor(n * share('saboteur', 0))) return 'saboteur';
     if (can('ninja') && count('ninja') < Math.floor(n * share('ninja', c.ninjas))) return 'ninja';
     // a ballista or two once the army has a line to stand behind
@@ -160,7 +161,7 @@ class SmartAI {
       if (d.requires && !team.upgrades[type][d.requires]) continue;
       if (team.research[type]) continue;
       // no point researching for ninjas, Kestrels or ballistas it hasn't built
-      if (['ninja', 'flyer', 'ballista', 'golem', 'beastmaster', 'saboteur'].includes(type) && !G.units.some(u => u.team === this.id && !u.dead && u.type === type)) continue;
+      if (['ninja', 'flyer', 'ballista', 'golem', 'beastmaster', 'saboteur', 'firebird'].includes(type) && !G.units.some(u => u.team === this.id && !u.dead && u.type === type)) continue;
       return { type, d };
     }
     return null;

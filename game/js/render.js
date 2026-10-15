@@ -457,6 +457,18 @@ function drawProjectiles(ctx) {
   for (const p of G.projectiles) {
     const a = Math.atan2(p.vy, p.vx), c = Math.cos(a), s = Math.sin(a);
     if (p.kind === 'star') { drawStar(ctx, p.x, p.y, 4, p.t * 25); continue; }
+    if (p.kind === 'pot') {
+      ctx.fillStyle = '#7a4a2a';
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 4, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = Math.sin(RT * 30) > 0 ? '#ffd25a' : '#ff8a2e';
+      ctx.beginPath();
+      ctx.arc(p.x + 2, p.y - 4, 1.8, 0, TAU);
+      ctx.fill();
+      if (chance(0.5)) G.particles.push({ kind: 'spark', x: p.x, y: p.y - 4, vx: rnd(-8, 8), vy: rnd(-20, -5), life: 0.3, max: 0.3, color: '#ff9a2e', size: 1.4 });
+      continue;
+    }
     if (p.kind === 'stone') {
       ctx.fillStyle = '#7d7870';
       ctx.beginPath();

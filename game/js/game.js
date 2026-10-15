@@ -124,7 +124,7 @@ function spawnUnit(team, type, x, y) {
     u.slotY = rnd(LANE_TOP + 10, LANE_BOT - 10);
     // ninjas drop off the rampart by the Dojo; Kestrels launch from the Aerie and glide down
     if (type === 'ninja') u.dropT = 0.5;
-    if (type === 'flyer') u.alt = LANE_TOP - WALL_TOP + 20;
+    if (type === 'flyer' || type === 'firebird') u.alt = LANE_TOP - WALL_TOP + 20;
     if (type === 'miner') {
       // the small mine / pray / pan toggle decides where fresh miners head
       if (team.minerDefault === 'pray') u.order = { type: 'mana' };
@@ -455,6 +455,25 @@ function updateArchers(team, dt) {
   for (const a of team.archers) updateCastleArcher(team, a, dt, garrisoned);
 }
 
+// A Firebird's fire pot bursts where it lands: every enemy on the ground nearby takes the hit and
+// starts burning; trenches and the statue take half.
+function potBlast(p) {
+  const src = p.src && !p.src.dead ? p.src : null, r = p.radius || FIREBIRD.radius;
+  const x = p.x, y = p.target && !p.target.isStructure ? p.target.y : (LANE_TOP + LANE_BOT) / 2;   // ground level where it lands
+  for (const e of G.units.slice()) {
+    if (e.team === p.team || e.dead || e.inside || isFlying(e) || Math.abs(e.x - x) > r || Math.abs(e.y - y) > 32) continue;
+    damage(e, p.dmg * rnd(0.9, 1.1), src, true);
+    if (!e.dead) { e.burnT = Math.max(e.burnT, p.burn || FIREBIRD.burn); e.burnSrc = src; }
+  }
+  const enemy = G.teams[1 - p.team];
+  if (!enemy.statue.dead && Math.abs(enemy.statue.x - x) < r + enemy.statue.halfW) damage(enemy.statue, p.dmg / 2, src);
+  for (const w of G.walls) if (w.team !== p.team && !w.dead && w.progress >= 1 && Math.abs(w.x - x) < r) damage(w, p.dmg / 2, src);
+  spawnBurst(x, y - 8, 16, { color: '#ff8a2e', speed: 150, up: 90, g: 400, life: 0.6, size: 2.6 });
+  spawnBurst(x, y - 8, 8, { color: '#3a2a22', speed: 90, up: 110, g: 200, life: 0.9, size: 3 });
+  G.spellFx.push({ kind: 'blast', x, y, r, t: 0, max: 0.4 });
+  addDecal(x, y + 2, rnd(8, 12), 0.3);
+}
+
 // A ballista bolt punches through its target into the next ground unit behind it.
 function ballistaPierce(p, t, src) {
   const dir = Math.sign(p.vx) || 1;
@@ -475,7 +494,7 @@ function fireArrow(team, x, y, target, dmg, src, fire, opts = {}) {
   T = 0.6 + Math.abs(target.x + v * T - x) / 900;
   const tx = target.x + v * T, ty = targetAimY(target);
   const g = 500;
-  G.projectiles.push({ x, y, vx: (tx - x) / T, vy: (ty - y - 0.5 * g * T * T) / T, g, t: 0, T, target, team, dmg, src, fire: !!fire, kind: opts.kind || 'arrow', crit: !!opts.crit });
+  G.projectiles.push({ x, y, vx: (tx - x) / T, vy: (ty - y - 0.5 * g * T * T) / T, g, t: 0, T, target, team, dmg, src, fire: !!fire, kind: opts.kind || 'arrow', crit: !!opts.crit, radius: opts.radius, burn: opts.burn });
 }
 
 function updateProjectiles(dt) {
@@ -484,6 +503,7 @@ function updateProjectiles(dt) {
     p.vy += p.g * dt;
     p.x += p.vx * dt;
     p.y += p.vy * dt;
+    if (p.t >= p.T && p.kind === 'pot') { potBlast(p); p.done = true; continue; }   // fire pots burst wherever they land
     if (p.t >= p.T) {
       const t = p.target;
       let hit = false;

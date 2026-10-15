@@ -167,6 +167,8 @@ function applyPerks(u) {
       u.atk = P.winch ? d.atkTime * 0.7 : d.atkTime;
       u.crit = P.hawkeye ? CRIT.upgraded : G && G.teams ? clanOf(G.teams[u.team]).kestrelCrit || 0 : 0;   // Sky Clan Kestrels crit
     }
+  } else if (u.type === 'firebird') {
+    u.atk = P.fuse ? FIREBIRD.fuseAtk : d.atkTime;
   } else if (u.type === 'beastmaster') {
     u.dmg = P.stones ? 20 : d.dmg;
   } else if (u.type === 'golem') {
@@ -253,7 +255,8 @@ function isValidTarget(t) {
 }
 
 // Who can hit flying units: ranged attackers (and castle archers, and a ninja that can switch to stars).
-const canHitAir = u => !u || u.castle || (isRanged(u) && u.type !== 'ballista') || (u.type === 'ninja' && u.perks.stars && u.starMode === 'auto');
+// (ballistas and firebirds only ever hit the ground)
+const canHitAir = u => !u || u.castle || (isRanged(u) && u.type !== 'ballista' && u.type !== 'firebird') || (u.type === 'ninja' && u.perks.stars && u.starMode === 'auto');
 
 // Can attacker u pick e as a target at all? (Vanished ninjas and, for melee, flyers are out of reach.)
 function canTarget(u, e) {
@@ -425,9 +428,12 @@ function onSwingHit(u) {
       const aim = u.facing === 1 ? u.aimFa : Math.PI - u.aimFa;
       const lift = (u.onWall ? wallHeight(u.onWall) : 0) + (u.alt || 0);
       const c = rollCrit(u, u.dmg * dmgMult(u));
-      const kind = u.type === 'ninja' ? 'star' : u.type === 'flyer' ? 'bolt' : u.type === 'ballista' ? 'ballista' : u.type === 'beastmaster' ? 'stone' : 'arrow';
+      const kind = u.type === 'ninja' ? 'star' : u.type === 'flyer' ? 'bolt' : u.type === 'ballista' ? 'ballista' : u.type === 'beastmaster' ? 'stone' : u.type === 'firebird' ? 'pot' : 'arrow';
       const muzzle = u.type === 'ballista' ? 26 : u.type === 'beastmaster' ? 60 : 46;   // low stock; a sling whirled overhead
-      fireArrow(u.team, u.x + Math.cos(aim) * 14 * u.scale, u.y - lift - muzzle * u.scale + Math.sin(aim) * 14, t, c.amt, u, u.fire, { kind, crit: c.crit });
+      // a firebird lets its pot fall from under the glider; the pot's blast size rides along with it
+      const pot = u.type === 'firebird' ? { radius: u.perks.pitch ? FIREBIRD.radiusPitch : FIREBIRD.radius, burn: u.perks.pitch ? FIREBIRD.burnPitch : FIREBIRD.burn } : {};
+      const sx = u.type === 'firebird' ? u.x : u.x + Math.cos(aim) * 14 * u.scale, sy = u.type === 'firebird' ? u.y - lift - 30 : u.y - lift - muzzle * u.scale + Math.sin(aim) * 14;
+      fireArrow(u.team, sx, sy, t, c.amt, u, u.fire, { kind, crit: c.crit, ...pot });
     }
   } else if (u.swingKind === 'gold') {
     const m = u.mine;
@@ -606,7 +612,7 @@ function doRefit(u, dt) {
 
 // Rank offsets from the front of a formation: spearton in front, swordwrath behind them,
 // archers and mages at the back.
-const RANK_OFF = { spear: 22, sword: 0, ninja: -8, flyer: -60, archer: -85, warlock: -95, cleric: -110, ballista: -140, golem: 34, beastmaster: -70 };   // the golem tanks in front
+const RANK_OFF = { spear: 22, sword: 0, ninja: -8, flyer: -60, archer: -85, warlock: -95, cleric: -110, ballista: -140, golem: 34, beastmaster: -70, firebird: -40 };   // the golem tanks in front
 
 // Where the idx-th unit of a type stands: up to six abreast, extra units form more columns.
 function rankSlot(type, idx, count, frontX, dir) {
@@ -1255,7 +1261,7 @@ function updateUnit(u, dt) {
   if (u.type === 'ninja') {
     u.parryCd -= dt;
     updateNinjaMode(u);
-  } else if (u.type === 'flyer') {
+  } else if (u.type === 'flyer' || u.type === 'firebird') {
     // climb to cruising height (or glide down after Feather Fall)
     const want = isFlying(u) ? FLY_ALT + Math.sin(RT * 1.7 + u.seed) * 4 : 0;
     u.alt += (want - u.alt) * Math.min(1, dt * (u.grounded ? 3 : 2));

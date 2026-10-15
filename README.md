@@ -21,9 +21,9 @@ Each clan sets your starting gold, mana and army, which upgrades are already res
 | **Arcane Circle** | 150 mana; 2 miners, a Cleric and a Warlock | Clan unit: the **Spirit Golem**; Healing Pool and Blight Pool; mages cost 35 mana; praying gives 50% more | Swordwrath and Spearton −10% health; 1 castle archer; no Giants |
 | **Beast** | 2 miners, a Swordwrath and a Beastmaster | Clan unit: the **Beastmaster**; Giants cost 340 gold + 90 mana and take 3 population; Blinders researched | No Archers or Kestrels (only Beastmasters, Warlocks and Javelins reach flyers) |
 | **Shadow** | 2 miners, 2 ninjas | Clan unit: the **Saboteur**; All units +15% damage; ninjas cost 125, vanish again after 3s; Throwing Stars researched | All units −15% health; no Spearton; no trenches |
-| **Sky** | 2 miners, 2 Kestrels | Kestrels cost 150 and crit 10% of the time; clan-only Hawk Eye (20% crit), Spyglass (range 480), Barbed Bolts II (damage 26) | Swordwrath and Spearton −10% health; no Giants |
+| **Sky** | 2 miners, 2 Kestrels | Clan unit: the **Firebird**; Kestrels cost 150 and crit 10% of the time; clan-only Hawk Eye (20% crit), Spyglass (range 480), Barbed Bolts II (damage 26) | Swordwrath and Spearton −10% health; no Giants |
 
-Clan-only upgrades and units appear only for their clan. Still to come: the Firebird. The setup screen lists these as "coming soon" for each clan.
+Clan-only upgrades and units appear only for their clan. The setup screen lists these as "coming soon" for each clan.
 
 ## Units
 | Unit | Cost | Building | Role |
@@ -41,6 +41,7 @@ Clan-only upgrades and units appear only for their clan. Still to come: the Fire
 | Spirit Golem | 150 + 250 mana | Golem Forge (Arcane Circle only) | Commandable 700 hp tank; Hunker Down to soak damage and draw attacks; half damage from Warlock magic (3 population) |
 | Beastmaster | 140 | Beast Pen (Beast Clan only) | Slinger: hits flyers, double damage to giants, tames nearby friendly giants |
 | Saboteur | 150 + 25 mana | Hideout (Shadow Clan only) | Fast infiltrator that vanishes while running; triple damage to trenches; salts enemy gold deposits |
+| Firebird | 200 + 50 mana | Aerie (Sky Clan only) | Flying bomber: drops fire pots on ground units below; only ranged attacks reach it (2 population) |
 
 ## Giants
 - **Targeting:** a giant always goes for the enemy with the most health, ignoring taunts. Each blow also splashes the 2 enemies beside its target, unless the target is another giant.
@@ -154,6 +155,13 @@ A hooded infiltrator with a satchel of salt, trained in the Infantry group (hotk
 - **Salt the Mine:** right-click a gold deposit (or use the Salt mine button and click one). The saboteur sneaks over, kneels to salt it for 2.5 seconds, then waits there. For 30 seconds, enemy miners keep only half the gold they dig from it; the rest is spoiled. A salted deposit shows a white crust and a countdown. Kneeling reveals the saboteur.
 - **Upgrades (Hideout, from the ⚒ on its button):** Sappers' Picks (5× trench damage) and Brine (salt lasts 50 seconds).
 - The computer playing the Shadow Clan keeps a saboteur or two busy salting the deposits your miners are working, one per deposit, and sends them at your trenches otherwise.
+
+## Firebird (Sky Clan)
+A rider on a big flame-feathered glider, trained in the Ranged group (hotkey `/`). It launches from the Aerie. 200 gold + 50 mana, 2 population, 90 hp.
+- **Flies like a Kestrel:** only ranged attacks (archers, warlocks, castle archers, ninja stars, Beastmasters, Javelins, Kestrels) can reach it, and it glides over trenches.
+- **Fire pots:** every 3 seconds it drops a pot on the ground units directly below it. The pot bursts for 20 damage on every enemy within 45, sets them burning for 3 seconds, and does half damage to trenches and the statue.
+- **It can't hit flyers.**
+- **Upgrades (Aerie, from the ⚒ on its button):** Pitch Pots (radius 65, 5 seconds of burning) and Quick Fuse (a pot every 2.2 seconds).
 
 ## Javelins (Spear Hall, every clan)
 150 gold + 25 mana. Each Spearton carries one javelin and hurls it automatically at the nearest flyer within 250 (30 damage). It gets a new one each time it garrisons. It's the main answer to flyers for clans without good ranged units, like the Sword Clan.

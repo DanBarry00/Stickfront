@@ -372,19 +372,26 @@ function drawFlyer(ctx, o) {
   ctx.scale(o.scale, o.scale);
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-  const col = o.flash > 0 ? '#6e1510' : st.body, t = RT + o.seed;
+  const col = o.flash > 0 ? '#6e1510' : st.body, t = RT + o.seed, fire = o.type === 'firebird';
   const sway = Math.sin(t * 2.2) * 1.5;
 
   // the glider wing
-  const wy = -66 + sway * 0.5;
-  const back = [-36 * f, wy + 10], top = [-4 * f, wy - 6], front = [32 * f, wy + 4];
-  ctx.fillStyle = shade(st.accent, -0.45);
+  const wy = -66 + sway * 0.5, span = fire ? 1.3 : 1;   // the Firebird's wing is bigger
+  const back = [-36 * f * span, wy + 10], top = [-4 * f, wy - 6 * span], front = [32 * f * span, wy + 4];
+  if (fire) {
+    // flame-feathered: a fiery gradient across the wing
+    const g = ctx.createLinearGradient(back[0], 0, front[0], 0);
+    g.addColorStop(0, '#7a1a10'); g.addColorStop(0.5, '#e0602a'); g.addColorStop(1, '#ffb347');
+    ctx.fillStyle = g;
+  } else {
+    ctx.fillStyle = shade(st.accent, -0.45);
+  }
   ctx.strokeStyle = '#1a1612';
   ctx.lineWidth = 1.6;
   ctx.beginPath();
   ctx.moveTo(front[0], front[1]);
   ctx.quadraticCurveTo(top[0], top[1] - 10, back[0], back[1]);
-  if (P.feather) {
+  if (P.feather || fire) {
     // feathered trailing edge
     for (let i = 1; i <= 6; i++) {
       const k = i / 6;
@@ -405,6 +412,16 @@ function drawFlyer(ctx, o) {
     ctx.lineTo(lerp(back[0], front[0], k), lerp(back[1], front[1], k) + 2);
   }
   ctx.stroke();
+  if (fire) {
+    // flames licking off the trailing edge
+    for (let i = 1; i <= 6; i++) {
+      const k = i / 6, x = lerp(back[0], front[0], k), y = lerp(back[1], front[1], k) + 6;
+      const fl = 4 + Math.sin(t * 18 + i * 1.7) * 2;
+      ctx.fillStyle = i % 2 ? 'rgba(255,200,90,0.8)' : 'rgba(255,120,30,0.75)';
+      ellipse(ctx, x, y + fl * 0.5, fl * 0.45, fl);
+      ctx.fill();
+    }
+  }
 
   // body hangs from the wing bar, leaning into the glide
   const hip = [-3 * f, -26 + sway], sh = [4 * f, -45 + sway];
@@ -449,7 +466,21 @@ function drawFlyer(ctx, o) {
   const aim = shooting ? clamp(o.aimFa || 0.6, -0.3, 1.3) : 0.55 + Math.sin(t * 2) * 0.05;
   const [ex, ey] = polar(sh[0], sh[1] + 1, aim + 0.4, 8, f);
   const [hx, hy] = polar(ex, ey, aim, 8, f);
-  drawCrossbow(ctx, hx, hy, aim, f, P, !shooting || o.swing < 0.8);
+  if (fire) {
+    // a clay fire pot with a sputtering wick, until it is dropped
+    if (!shooting || o.swing < 0.8) {
+      ctx.fillStyle = P.pitch ? '#3a2418' : '#7a4a2a';
+      ctx.beginPath();
+      ctx.arc(hx, hy + 5, P.pitch ? 5.5 : 4.5, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = Math.sin(t * 25) > 0 ? '#ffd25a' : '#ff8a2e';
+      ctx.beginPath();
+      ctx.arc(hx + 2 * f, hy - 1, P.fuse ? 2.2 : 1.6, 0, TAU);
+      ctx.fill();
+    }
+  } else {
+    drawCrossbow(ctx, hx, hy, aim, f, P, !shooting || o.swing < 0.8);
+  }
   ctx.strokeStyle = col;
   ctx.lineWidth = 3.3;
   ctx.beginPath();
@@ -787,7 +818,7 @@ function drawStar(ctx, x, y, r, spin) {
 function drawStickman(ctx, o) {
   if (o.type === 'giant') return drawGiant(ctx, o);
   if (o.type === 'cleric' || o.type === 'warlock') return drawMage(ctx, o);
-  if (o.type === 'flyer' && !o.grounded) return drawFlyer(ctx, o);
+  if ((o.type === 'flyer' && !o.grounded) || o.type === 'firebird') return drawFlyer(ctx, o);
   if (o.type === 'ballista') return drawBallista(ctx, o);
   if (o.type === 'golem') return drawGolem(ctx, o);
   const st = TEAM_STYLE[o.team], f = o.facing, P = o.perks || NO_PERKS;
@@ -3323,6 +3354,15 @@ function drawUnitIcon(cv, type) {
       c.fillStyle = '#bdb5a2'; c.beginPath(); c.arc(13, 26, 3.2, 0, TAU); c.fill();
       break;
     }
+    case 'firebird': {
+      // a flaming wing over a falling pot
+      const g = c.createLinearGradient(3, 0, 37, 0); g.addColorStop(0, '#7a1a10'); g.addColorStop(0.5, '#e0602a'); g.addColorStop(1, '#ffb347');
+      c.fillStyle = g; c.beginPath(); c.moveTo(3, 18); c.quadraticCurveTo(20, 0, 37, 14); c.quadraticCurveTo(20, 10, 3, 18); c.closePath(); c.fill();
+      c.fillStyle = 'rgba(255,200,90,0.8)'; for (const x of [10, 18, 26]) { c.beginPath(); c.ellipse(x, 18, 2, 4, 0, 0, TAU); c.fill(); }
+      c.fillStyle = '#7a4a2a'; c.beginPath(); c.arc(21, 30, 5, 0, TAU); c.fill();
+      c.fillStyle = '#ffd25a'; c.beginPath(); c.arc(24, 25, 2, 0, TAU); c.fill();
+      break;
+    }
     case 'saboteur':
       // a hooded face and a sack spilling salt
       c.fillStyle = '#26241f'; c.beginPath(); c.arc(15, 15, 10, Math.PI * 0.9, Math.PI * 2.1); c.lineTo(20, 22); c.lineTo(6, 26); c.closePath(); c.fill();
@@ -3716,6 +3756,19 @@ function drawUpgradeIcon(cv, type, key) {
       }
       break;
     // ---- ballista
+    // ---- firebird
+    case 'pitch': {
+      const g = c.createRadialGradient(20, 26, 2, 20, 26, 16); g.addColorStop(0, 'rgba(255,200,90,0.9)'); g.addColorStop(1, 'rgba(255,90,20,0)');
+      c.fillStyle = g; c.fillRect(0, 8, 40, 32);
+      c.fillStyle = '#3a2418'; c.beginPath(); c.arc(20, 16, 8, 0, TAU); c.fill();
+      c.fillStyle = '#1a120c'; c.fillRect(17, 5, 6, 4);
+      break;
+    }
+    case 'fuse':
+      c.fillStyle = '#7a4a2a'; c.beginPath(); c.arc(16, 26, 9, 0, TAU); c.fill();
+      c.strokeStyle = '#d8cfbc'; c.lineWidth = 1.4; c.beginPath(); c.moveTo(20, 18); c.quadraticCurveTo(26, 10, 31, 9); c.stroke();
+      c.fillStyle = '#ffd25a'; for (let i = 0; i < 8; i++) { const a = (i / 8) * TAU, r = i % 2 ? 2 : 5; c.beginPath(); c.arc(32 + Math.cos(a) * r * 0.6, 8 + Math.sin(a) * r * 0.6, 1, 0, TAU); c.fill(); }
+      break;
     // ---- saboteur
     case 'sappers':
       c.fillStyle = '#6a5440'; c.beginPath(); c.moveTo(4, 36); c.quadraticCurveTo(10, 22, 18, 20); c.lineTo(26, 20); c.lineTo(30, 36); c.closePath(); c.fill();
