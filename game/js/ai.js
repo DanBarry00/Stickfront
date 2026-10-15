@@ -81,7 +81,7 @@ const AI_RESEARCH = [
   ['ninja', 'parry'], ['ninja', 'vital'], ['flyer', 'winch'], ['ninja', 'focus'], ['flyer', 'feather'],
   ['sword', 'greatsword'], ['archer', 'longbow'], ['archer', 'broadheads'], ['flyer', 'hawkeye'], ['flyer', 'scope2'],
   ['flyer', 'barbs2'], ['archer', 'steady'], ['castle', 'levy2'], ['spear', 'javelin'],
-  ['ballista', 'torsion'], ['ballista', 'ironbolt'], ['ballista', 'mantlet'], ['golem', 'plating'], ['golem', 'core'], ['beastmaster', 'stones'], ['beastmaster', 'lore'],
+  ['ballista', 'torsion'], ['ballista', 'ironbolt'], ['ballista', 'mantlet'], ['golem', 'plating'], ['golem', 'core'], ['beastmaster', 'stones'], ['beastmaster', 'lore'], ['saboteur', 'sappers'], ['saboteur', 'brine'],
   ['cleric', 'big'], ['warlock', 'pool'], ['cleric', 'speed'], ['warlock', 'speed'], ['cleric', 'might'],
   ['warlock', 'might'], ['miner', 'pick2'], ['miner', 'bag2'], ['spear', 'shield2'], ['archer', 'fire'],
   ['sword', 'leap'], ['sword', 'rage2'], ['giant', 'stun'], ['giant', 'protein2'], ['castle', 'tithe2'],
@@ -140,6 +140,7 @@ class SmartAI {
     const front = can('spear') ? 'spear' : null;
     if (front && count(front) < n * share('spear', 0.2)) return front;
     if (can('flyer') && count('flyer') < Math.floor(n * share('flyer', c.flyers)) + (enemyFlyers ? 1 : 0)) return 'flyer';
+    if (can('saboteur') && n >= 4 && count('saboteur') < 1 + Math.floor(n * share('saboteur', 0))) return 'saboteur';
     if (can('ninja') && count('ninja') < Math.floor(n * share('ninja', c.ninjas))) return 'ninja';
     // a ballista or two once the army has a line to stand behind
     if (can('ballista') && n >= 5 && count('ballista') < Math.floor(n * share('ballista', 0)) && team.mana >= unitCost(team, 'ballista').mana) return 'ballista';
@@ -159,7 +160,7 @@ class SmartAI {
       if (d.requires && !team.upgrades[type][d.requires]) continue;
       if (team.research[type]) continue;
       // no point researching for ninjas, Kestrels or ballistas it hasn't built
-      if (['ninja', 'flyer', 'ballista', 'golem', 'beastmaster'].includes(type) && !G.units.some(u => u.team === this.id && !u.dead && u.type === type)) continue;
+      if (['ninja', 'flyer', 'ballista', 'golem', 'beastmaster', 'saboteur'].includes(type) && !G.units.some(u => u.team === this.id && !u.dead && u.type === type)) continue;
       return { type, d };
     }
     return null;
@@ -286,6 +287,17 @@ class SmartAI {
     }
 
     if (this.mode !== 'attack') this.guardLine(team, army, ours, theirs);
+
+    // saboteurs: salt a deposit enemy miners are working (one saboteur per deposit), or undermine an enemy trench
+    for (const u of mine) {
+      if (u.type !== 'saboteur' || u.order.type === 'salt' || u.order.type === 'refit') continue;
+      const busy = m => mine.some(o => o !== u && o.order.type === 'salt' && o.order.mine === m);
+      const target = G.mines.filter(m => m.gold > 0 && !(m.saltT > 3 && m.saltTeam === this.id) && !busy(m) && m.workers.some(w => w.team === foe))
+        .sort((a, b) => Math.abs(a.x - u.x) - Math.abs(b.x - u.x))[0];
+      if (target) { setOrder(u, { type: 'salt', mine: target }); continue; }
+      const trench = G.walls.find(w => w.team === foe && !w.dead && w.progress >= 1);
+      if (trench && u.order.type !== 'attack') setOrder(u, { type: 'attack', target: trench });
+    }
 
     // golems hunker down when swarmed or badly hurt in a fight, and stand up again once it eases
     for (const u of mine) {

@@ -803,12 +803,12 @@ function drawStickman(ctx, o) {
   const t = RT + o.seed, ph = o.walk;
   const isMiner = o.type === 'miner', isArcher = o.type === 'archer', isSword = o.type === 'sword', isSpear = o.type === 'spear';
   const isNinja = o.type === 'ninja', isKnife = o.type === 'flyer';   // a grounded Kestrel fights with a knife
-  const isSling = o.type === 'beastmaster';
+  const isSling = o.type === 'beastmaster', isSab = o.type === 'saboteur';
   const praying = o.pray !== undefined && o.pray >= 0;
-  const panning = !!o.panning;
+  const panning = !!o.panning || (isSab && !!o.salting);   // a saboteur hunches over a deposit to salt it
   const kneel = praying || panning;
   const wall = isSpear && o.wall;
-  const run = (isSword || isNinja) && o.moving && !(o.pace < 0.8);   // in a slow formation they walk
+  const run = (isSword || isNinja || isSab) && o.moving && !(o.pace < 0.8);   // in a slow formation they walk
   const walk = o.moving && !run;
 
   // ---- hips and legs
@@ -891,7 +891,7 @@ function drawStickman(ctx, o) {
     // throwing a star: draw the arm back, then whip it forward (release at 0.8)
     const s = o.swing;
     th = s < 0.65 ? lerp(0.5, -2.3, easeOut(s / 0.65)) : lerp(-2.3, 0.4, Math.min(1, (s - 0.65) / 0.2));
-  } else if (isSword || isNinja || isKnife) {
+  } else if (isSword || isNinja || isKnife || (isSab && !panning)) {
     if (o.swing >= 0) th = swingAngle(o.swing, 0.45);
     else if (run) th = 1.75 + Math.sin(ph + Math.PI) * 0.45;
     else th = 0.45 + Math.sin(t * 2) * 0.05;
@@ -1002,7 +1002,7 @@ function drawStickman(ctx, o) {
   ctx.stroke();
 
   // ragged waist cloth on fighters
-  if (isSword || isArcher || isSpear || isNinja || isKnife || isSling) {
+  if (isSword || isArcher || isSpear || isNinja || isKnife || isSling || isSab) {
     const wave = Math.sin(t * (run ? 14 : 4)) * (run ? 3 : 1.2);
     ctx.strokeStyle = CLOTH[o.team];
     ctx.lineWidth = 2.2;
@@ -1102,7 +1102,24 @@ function drawStickman(ctx, o) {
   }
 
   // weapon, then the front arm over it
-  if (isSling) {
+  if (isSab) {
+    // a satchel of salt on the hip and a short dagger
+    ctx.fillStyle = '#d8d2c0';
+    ctx.strokeStyle = '#3a2e22';
+    ctx.lineWidth = 1;
+    ellipse(ctx, -3 * f, hipY - 3, 4.5, 4);
+    ctx.fill();
+    ctx.stroke();
+    if (!panning) {
+      const [kx, ky] = polar(hx2, hy2, th - 1.0, 10, f);
+      ctx.strokeStyle = '#a9b0b6';
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(hx2, hy2);
+      ctx.lineTo(kx, ky);
+      ctx.stroke();
+    }
+  } else if (isSling) {
     // the sling: whirled overhead while winding up, let go at the release, hanging loose otherwise
     const s = o.swing, spin = s * TAU * 3;
     let sx2 = hx2, sy2 = hy2 + 10, stone = true;
@@ -1426,6 +1443,16 @@ function drawGear(ctx, g, hx, hy, f, st, t, team) {
       ctx.stroke();
       break;
     }
+    case 'cowl':
+      // a deep charcoal hood with the cloak hanging down the back
+      ctx.fillStyle = team === 1 ? '#2a1a1a' : '#26241f';
+      ctx.beginPath();
+      ctx.arc(hx - 0.5 * f, hy - 0.5, 8.4, Math.PI * 0.9, Math.PI * 2.1);
+      ctx.lineTo(hx + 4 * f, hy + 3);
+      ctx.lineTo(hx - 11 * f, hy + 14);
+      ctx.closePath();
+      ctx.fill();
+      break;
     case 'pelt':
       // a wolf pelt worn as a hood, ears up, the hide hanging down the back
       ctx.fillStyle = '#5a4430';
@@ -2971,6 +2998,18 @@ function drawMine(ctx, m, hover) {
     }
   }
   ctx.restore();
+  if (m.saltT > 0) {
+    // salted by a saboteur: a white crust over the rocks, fading as it wears off
+    ctx.fillStyle = `rgba(240,238,232,${0.25 + 0.5 * Math.min(1, m.saltT / 10)})`;
+    for (let i = 0; i < 9; i++) {
+      const a = i * 2.39 + m.seed, r = m.size * (0.25 + (i % 3) * 0.22);
+      ctx.fillRect(m.x + Math.cos(a) * r - 1.5, m.y - m.size * 0.5 + Math.sin(a) * r * 0.6 - 1, 3, 2);
+    }
+    ctx.font = '600 10px "Segoe UI", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = 'rgba(240,238,232,0.9)';
+    ctx.fillText(`salted ${Math.ceil(m.saltT)}s`, m.x, m.y + 14);
+  }
   if (hover) {
     ctx.font = '600 13px "Segoe UI", sans-serif';
     ctx.textAlign = 'center';
@@ -3284,6 +3323,13 @@ function drawUnitIcon(cv, type) {
       c.fillStyle = '#bdb5a2'; c.beginPath(); c.arc(13, 26, 3.2, 0, TAU); c.fill();
       break;
     }
+    case 'saboteur':
+      // a hooded face and a sack spilling salt
+      c.fillStyle = '#26241f'; c.beginPath(); c.arc(15, 15, 10, Math.PI * 0.9, Math.PI * 2.1); c.lineTo(20, 22); c.lineTo(6, 26); c.closePath(); c.fill();
+      c.fillStyle = '#c0432f'; c.fillRect(14, 14, 6, 2);
+      c.fillStyle = '#d8d2c0'; c.strokeStyle = '#3a2e22'; c.lineWidth = 1.2; c.beginPath(); c.ellipse(28, 27, 7, 8, 0, 0, TAU); c.fill(); c.stroke();
+      c.fillStyle = '#f0eee8'; for (const [x, y] of [[22, 35], [25, 37], [19, 37], [28, 38]]) c.fillRect(x, y, 2, 2);
+      break;
     case 'beastmaster':
       // a sling whirling a stone, and a giant's horn
       c.strokeStyle = 'rgba(216,207,188,0.45)'; c.lineWidth = 1; c.setLineDash([2, 3]); c.beginPath(); c.arc(16, 15, 10, 0, TAU); c.stroke(); c.setLineDash([]);
@@ -3670,6 +3716,17 @@ function drawUpgradeIcon(cv, type, key) {
       }
       break;
     // ---- ballista
+    // ---- saboteur
+    case 'sappers':
+      c.fillStyle = '#6a5440'; c.beginPath(); c.moveTo(4, 36); c.quadraticCurveTo(10, 22, 18, 20); c.lineTo(26, 20); c.lineTo(30, 36); c.closePath(); c.fill();
+      c.strokeStyle = '#2a1e14'; c.lineWidth = 1.4; c.beginPath(); c.moveTo(17, 22); c.lineTo(21, 30); c.lineTo(18, 36); c.stroke();
+      c.strokeStyle = wood; c.lineWidth = 2.4; c.beginPath(); c.moveTo(34, 6); c.lineTo(24, 22); c.stroke();
+      c.strokeStyle = steel; c.lineWidth = 2.6; c.beginPath(); c.moveTo(27, 8); c.quadraticCurveTo(33, 9, 38, 15); c.stroke();
+      break;
+    case 'brine':
+      c.fillStyle = '#9ec8d8'; c.beginPath(); c.moveTo(20, 4); c.quadraticCurveTo(31, 18, 28, 26); c.quadraticCurveTo(20, 34, 12, 26); c.quadraticCurveTo(9, 18, 20, 4); c.fill();
+      c.fillStyle = '#f0eee8'; for (const [x, y] of [[8, 34], [14, 36], [26, 36], [32, 33], [20, 37]]) c.fillRect(x, y, 3, 3);
+      break;
     // ---- beastmaster
     case 'stones':
       c.fillStyle = '#6a6d70'; c.strokeStyle = dark; c.lineWidth = 1.2;

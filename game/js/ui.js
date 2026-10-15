@@ -173,6 +173,13 @@ function issueCommand(wx, wy) {
   }
   const mine = mineAt(wx, wy, true);
   if (mine) {
+    // saboteurs go and salt it
+    const sabs = sel.filter(u => u.type === 'saboteur');
+    if (sabs.length && mine.gold > 0) {
+      for (const u of sabs) setOrder(u, { type: 'salt', mine });
+      marker(mine.x, mine.y, '#f0eee8');
+      if (sabs.length === sel.length) return;
+    }
     const prospectors = sel.filter(u => u.type === 'miner' && u.perks.prospect);
     if (mine.gold <= 0 && prospectors.length) {
       for (const u of prospectors) setOrder(u, { type: 'replenish', mine });
@@ -181,6 +188,7 @@ function issueCommand(wx, wy) {
     }
     if (mine.gold > 0) {
       for (const u of sel) {
+        if (u.type === 'saboteur') continue;   // already off to salt it
         if (u.type === 'miner') { setMine(u, mine); setOrder(u, { type: 'work' }); }
         else setOrder(u, { type: 'move', x: mine.x - me.dir * 40, y: clamp(u.y, LANE_TOP, LANE_BOT) });
       }
@@ -327,6 +335,7 @@ const ICONS = {
   wall: '<path d="M2 20h5l3-9h5l3 9h4" stroke-width="1.8"/><path d="M15 15l6-4M13 12l5-4" stroke-width="1.6"/><path d="M3 20l2 2h0" stroke-width="1.4"/>',
   reinforce: '<path d="M6 21V9l2-3 2 3v12M11 21V8l2-3 2 3v13M16 21V9l2-3 2 3v12" stroke-width="1.6"/><path d="M4 15h18" stroke-width="1.4"/>',
   repair: '<path d="M14 3l-8 14" stroke-width="2"/><path d="M4 15l4 3-2 4-4-3z" fill="currentColor" stroke="none"/><path d="M13 21h9l-3-6h-4z" stroke-width="1.6"/>',
+  salt: '<path d="M8 4h8l2 5H6z" fill="currentColor" stroke="none"/><path d="M6 9h12v6a6 6 0 0 1-12 0z" stroke-width="1.8"/><path d="M9 21h1M13 22h1M16 20h1" stroke-width="2"/>',
   replenish: '<path d="M4 21l4-7h8l4 7z" fill="currentColor" stroke="none"/><path d="M12 11V3M8 7l4-4 4 4" stroke-width="2"/>',
   refit: '<path d="M4 18h16M7 18v-4h10v4M9 14V9h6v5M12 9V4" stroke-width="2"/>',
   stars: '<path d="M12 2l2.2 7.8L22 12l-7.8 2.2L12 22l-2.2-7.8L2 12l7.8-2.2z" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="2" fill="#120d0a" stroke="none"/>',
@@ -349,6 +358,7 @@ const COMMANDS = [
   { id: 'reinforce', label: 'Palisade', key: 'J', show: s => s.fort, run: () => startPlacing('reinforce') },
   { id: 'repair', label: 'Repair', key: 'Y', show: s => s.build, run: () => { const w = repairTrenches(G.teams[0], builderSelection()); if (w) G.markers.push({ x: w.x, y: LANE_BOT, t: 0, color: '#c9b27a' }); else toast('None of your trenches need repair'); } },
   { id: 'replenish', label: 'Replenish', key: 'N', show: s => s.prosp, run: () => startPlacing('replenish') },
+  { id: 'salt', label: 'Salt mine', key: 'RMB', show: s => s.sab, run: () => { UI.placing = 'salt'; } },
   { id: 'refit', label: 'Refit', key: 'R', show: () => true, run: refitSelected },
   { id: 'auto', label: 'Auto-cast', key: 'L', show: s => s.mage, run: toggleAutoCast, on: () => mageSel().every(u => u.auto) },
   { id: 'stars', label: s => `Weapon: ${STAR_MODE_NAMES[s.stars]}`, key: 'M', show: s => !!s.stars, run: cycleStarMode, on: () => starSelection().every(u => u.starMode === 'ranged') },
@@ -381,6 +391,7 @@ function selectionCaps() {
     prosp: prospectorSelection().length > 0,
     mage: mageSel().length > 0,
     stars: starSelection().length ? starSelection()[0].starMode : null,
+    sab: liveSel().some(u => u.type === 'saboteur'),
     spells: Object.keys(SPELLS).filter(k => mageSel().some(u => u.type === SPELLS[k].owner && u.perks[SPELLS[k].perk])),
   };
 }
@@ -408,6 +419,12 @@ function placeAt(wx, wy, keep) {
     if (castAt(UI.placing.slice(6), wx, wy)) UI.placing = null;
   } else if (UI.placing === 'reinforce') {
     if (reinforceWall(me, wallAt(wx, wy), fortifierSelection())) UI.placing = null;
+  } else if (UI.placing === 'salt') {
+    const m = mineAt(wx, wy, false);
+    if (!m) return toast('Click a gold deposit');
+    for (const u of liveSel().filter(u => u.type === 'saboteur')) setOrder(u, { type: 'salt', mine: m });
+    G.markers.push({ x: m.x, y: m.y, t: 0, color: '#f0eee8' });
+    UI.placing = null;
   } else if (UI.placing === 'replenish') {
     const m = mineAt(wx, wy, true);
     if (!m) return toast('Click a gold deposit');
@@ -619,6 +636,7 @@ const CMD_TIPS = {
   replenish: 'Restore a gold deposit, even an exhausted one.',
   refit: `Walk back to their building and take every upgrade they're missing (${REFIT_COST} gold and ${REFIT_TIME}s each).`,
   auto: `When on, mages cast their spells on their own and answer enemy spells with the opposite one. They keep ${SPELL_RESERVE} mana in reserve. You can still force any spell yourself.`,
+  salt: `Click a gold deposit (or right-click it): the saboteurs sneak over and salt it. For ${SABOTEUR.saltDur}s enemy miners keep only half the gold they dig there.`,
   stars: 'Switch the selected ninjas between Auto (stars against Kestrels and giants, or when badly wounded; blade otherwise), Blade only and Stars only. The ambush blow only works with the blade.',
 };
 
@@ -854,7 +872,7 @@ function unitJob(u, me) {
     return { garrison: 'Garrisoned', defend: 'Defending', attack: 'Attacking' }[s] + (u.ownStance ? ' (own order)' : '');
   }
   if (u.order.type === 'group') return { attack: 'Attacking together', advance: 'Advancing together', retreat: 'Retreating together' }[u.order.g.mode];
-  return { move: 'Moving', hold: 'Holding', attack: 'Attacking a target', garrison: 'Garrisoned', refit: 'Going to refit', manwall: u.onWall ? 'Defending the trench' : 'Climbing the rampart' }[u.order.type] || '';
+  return { salt: u.salting ? 'Salting a deposit' : 'Sneaking to a deposit', move: 'Moving', hold: 'Holding', attack: 'Attacking a target', garrison: 'Garrisoned', refit: 'Going to refit', manwall: u.onWall ? 'Defending the trench' : 'Climbing the rampart' }[u.order.type] || '';
 }
 
 function selectionInfoHTML(me) {

@@ -126,10 +126,9 @@ const CLANS = {
     dmg: { all: 1.15 },
     lockUnits: ['spear'],
     lockUpgrades: { miner: ['walls'] },
-    ai: { ninja: 0.2 },
-    strengths: ['Every unit deals 15% more damage', 'Starts with 2 ninjas and Throwing Stars', 'Ninjas cost 125 and vanish again after 3s'],
+    ai: { ninja: 0.2, saboteur: 0.06 },
+    strengths: ['Every unit deals 15% more damage', 'Starts with 2 ninjas and Throwing Stars', 'Ninjas cost 125 and vanish again after 3s', 'Clan unit: Saboteur, an unseen infiltrator that wrecks trenches and salts enemy gold mines'],
     weaknesses: ['Every unit has 15% less health', 'No Spearton', 'Can\'t dig trenches'],
-    coming: ['Saboteur: wrecks trenches and salts enemy gold mines'],
   },
 
   sky: {

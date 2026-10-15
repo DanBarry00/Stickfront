@@ -594,6 +594,7 @@ function update(dt) {
     if (G.autopilot) G.autopilot.update(dt);
   }
   updateShrine(dt);
+  for (const m of G.mines) if (m.saltT > 0) m.saltT -= dt;   // salt wears off
   recordHistory();
   assignDefendSlots();
   updateGroups(dt);

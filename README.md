@@ -20,10 +20,10 @@ Each clan sets your starting gold, mana and army, which upgrades are already res
 | **Mercenary** | 4 miners, 1 plain Swordwrath | Bigger Bags, Steel Pickaxes, Iron Pans, Prospecting, Statue Offerings; every kill pays 20% of the victim's gold cost; clan-only Mule Packs (carry 100), Diamond Picks (17 per swing), Gilded Statue (4 gold/s) | Praying gives half the mana; weakest starting army |
 | **Arcane Circle** | 150 mana; 2 miners, a Cleric and a Warlock | Clan unit: the **Spirit Golem**; Healing Pool and Blight Pool; mages cost 35 mana; praying gives 50% more | Swordwrath and Spearton −10% health; 1 castle archer; no Giants |
 | **Beast** | 2 miners, a Swordwrath and a Beastmaster | Clan unit: the **Beastmaster**; Giants cost 340 gold + 90 mana and take 3 population; Blinders researched | No Archers or Kestrels (only Beastmasters, Warlocks and Javelins reach flyers) |
-| **Shadow** | 2 miners, 2 ninjas | All units +15% damage; ninjas cost 125, vanish again after 3s; Throwing Stars researched | All units −15% health; no Spearton; no trenches |
+| **Shadow** | 2 miners, 2 ninjas | Clan unit: the **Saboteur**; All units +15% damage; ninjas cost 125, vanish again after 3s; Throwing Stars researched | All units −15% health; no Spearton; no trenches |
 | **Sky** | 2 miners, 2 Kestrels | Kestrels cost 150 and crit 10% of the time; clan-only Hawk Eye (20% crit), Spyglass (range 480), Barbed Bolts II (damage 26) | Swordwrath and Spearton −10% health; no Giants |
 
-Clan-only upgrades and units appear only for their clan. Still to come: the Saboteur and Firebird. The setup screen lists these as "coming soon" for each clan.
+Clan-only upgrades and units appear only for their clan. Still to come: the Firebird. The setup screen lists these as "coming soon" for each clan.
 
 ## Units
 | Unit | Cost | Building | Role |
@@ -40,6 +40,7 @@ Clan-only upgrades and units appear only for their clan. Still to come: the Sabo
 | Ballista | 250 + 50 mana | Siege Workshop (Defense Clan only) | Long-range siege engine that wrecks trenches and statues; helpless up close (2 population) |
 | Spirit Golem | 150 + 250 mana | Golem Forge (Arcane Circle only) | Commandable 700 hp tank; Hunker Down to soak damage and draw attacks; half damage from Warlock magic (3 population) |
 | Beastmaster | 140 | Beast Pen (Beast Clan only) | Slinger: hits flyers, double damage to giants, tames nearby friendly giants |
+| Saboteur | 150 + 25 mana | Hideout (Shadow Clan only) | Fast infiltrator that vanishes while running; triple damage to trenches; salts enemy gold deposits |
 
 ## Giants
 - **Targeting:** a giant always goes for the enemy with the most health, ignoring taunts. Each blow also splashes the 2 enemies beside its target, unless the target is another giant.
@@ -145,6 +146,14 @@ A slinger in a wolf-pelt hood, trained in the Ranged group (hotkey `'`). It come
 - **Giant-tamer:** each Beastmaster near a friendly giant counts as 3 troops (1 plus 2 extra) toward the giant's obedience, so it wears more chains and listens better.
 - **Upgrades (Beast Pen, from the ⚒ on its button):** Heavy Stones (damage 20) and Beast Lore (counts as 5 troops instead of 3).
 - The computer playing the Beast Clan keeps two miners praying and saves its gold and mana for its first giant.
+
+## Saboteur (Shadow Clan)
+A hooded infiltrator with a satchel of salt, trained in the Infantry group (hotkey `;`). It drops off the rampart by the Dojo. 150 gold + 25 mana, 60 hp, very fast, and weak in a fight (6 damage).
+- **Vanishes while running**, exactly like a ninja, so it can slip past the enemy line.
+- **Undermines trenches:** triple damage to them.
+- **Salt the Mine:** right-click a gold deposit (or use the Salt mine button and click one). The saboteur sneaks over, kneels to salt it for 2.5 seconds, then waits there. For 30 seconds, enemy miners keep only half the gold they dig from it; the rest is spoiled. A salted deposit shows a white crust and a countdown. Kneeling reveals the saboteur.
+- **Upgrades (Hideout, from the ⚒ on its button):** Sappers' Picks (5× trench damage) and Brine (salt lasts 50 seconds).
+- The computer playing the Shadow Clan keeps a saboteur or two busy salting the deposits your miners are working, one per deposit, and sends them at your trenches otherwise.
 
 ## Javelins (Spear Hall, every clan)
 150 gold + 25 mana. Each Spearton carries one javelin and hurls it automatically at the nearest flyer within 250 (30 damage). It gets a new one each time it garrisons. It's the main answer to flyers for clans without good ranged units, like the Sword Clan.

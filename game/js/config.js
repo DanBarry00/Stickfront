@@ -126,13 +126,19 @@ const UNIT_TYPES = {
     dmg: 14, range: 260, atkTime: 1.2, aggro: 300, hotkey: "'", code: 'Quote', clans: ['beast'],
     desc: 'A slinger in a beast-hide cloak. Its stones reach flyers and do double damage to enemy giants, and nearby friendly giants obey it as if more troops were around.',
   },
+  // Shadow Clan infiltrator: slips past the line unseen to wreck trenches and salt enemy gold.
+  saboteur: {
+    key: 'saboteur', name: 'Saboteur', building: 'Hideout', cost: 150, mana: 25, time: 6, hp: 60, speed: 135, pop: 1,
+    dmg: 6, range: 26, atkTime: 0.9, aggro: 200, hotkey: ';', code: 'Semicolon', clans: ['shadow'],
+    desc: 'A cloaked infiltrator, very fast, that vanishes while running like a ninja. Weak in a fight, but does triple damage to trenches, and can Salt a gold deposit (right-click it): for 30s enemy miners get only half the gold they dig there.',
+  },
 };
-const UNIT_ORDER = ['miner', 'sword', 'archer', 'spear', 'cleric', 'warlock', 'giant', 'ninja', 'flyer', 'ballista', 'golem', 'beastmaster'];
+const UNIT_ORDER = ['miner', 'sword', 'archer', 'spear', 'cleric', 'warlock', 'giant', 'ninja', 'flyer', 'ballista', 'golem', 'beastmaster', 'saboteur'];
 // Training groups: each group trains one unit at a time from a shared queue (so a Swordwrath
 // waits for the Spearton ahead of it). Colors tint the training bar.
 const TRAIN_GROUPS = [
   { key: 'workers', name: 'Workers', color: '#c9a23a', types: ['miner'] },
-  { key: 'infantry', name: 'Infantry', color: '#c0503a', types: ['sword', 'spear', 'ninja'] },
+  { key: 'infantry', name: 'Infantry', color: '#c0503a', types: ['sword', 'spear', 'ninja', 'saboteur'] },
   { key: 'ranged', name: 'Ranged', color: '#7aa84a', types: ['archer', 'flyer', 'ballista', 'beastmaster'] },
   { key: 'mages', name: 'Mages', color: '#9a62d8', types: ['cleric', 'warlock'] },
   { key: 'giants', name: 'Giants', color: '#8f8a80', types: ['giant', 'golem'] },
@@ -149,7 +155,7 @@ const trainCode = def => def.code || 'Digit' + def.hotkey;
 // all four halls stand. The giant pit is outside the gate.
 const GIANT_PIT_X = 655;
 const RAMPART_HALL_X = { cleric: 150, warlock: 222, ninja: 340, flyer: 462 };
-const DOOR_X = { ...BUILD_X, cleric: 52, warlock: 52, giant: GIANT_PIT_X, ninja: RAMPART_HALL_X.ninja, flyer: RAMPART_HALL_X.flyer, ballista: 500, golem: GIANT_PIT_X, beastmaster: GIANT_PIT_X };   // beastmasters come out of the pit with the giants   // ballistas roll out by the gate
+const DOOR_X = { ...BUILD_X, cleric: 52, warlock: 52, giant: GIANT_PIT_X, ninja: RAMPART_HALL_X.ninja, flyer: RAMPART_HALL_X.flyer, ballista: 500, golem: GIANT_PIT_X, beastmaster: GIANT_PIT_X, saboteur: RAMPART_HALL_X.ninja };   // beastmasters come out of the pit with the giants   // ballistas roll out by the gate
 
 // Ninjas
 const NINJA_AMBUSH = 3;           // damage multiplier of the first blow of a fight (or out of stealth)
@@ -178,6 +184,10 @@ const GOLEM = { scale: 1.5, armor: 0.1, spellMul: 0.5, regen: 3 };
 // Beastmaster (Beast Clan): double damage to giants; within auraRange each one counts as this many
 // extra troops for a friendly giant's obedience (more with Beast Lore).
 const BEASTMASTER = { giantMul: 2, aura: 2, auraLore: 4, auraRange: 280 };
+
+// Saboteur (Shadow Clan): trench damage multiplier (Sappers) and Salt the Mine: seconds spent salting,
+// how long the salt lasts (Brine), and the share of dug gold enemy miners keep from a salted deposit.
+const SABOTEUR = { trenchMul: 3, trenchMulSappers: 5, saltTime: 2.5, saltDur: 30, saltDurBrine: 50, saltKeep: 0.5 };
 
 // Giants
 const GIANT_SCALE = 2.1;          // base size; each Protein Diet tier adds 13%
@@ -282,6 +292,10 @@ const UPGRADES = {
     { key: 'stones', name: 'Heavy Stones', cost: 175, mana: 0, time: 20, desc: 'Sling damage 14 → 20.' },
     { key: 'lore', name: 'Beast Lore', cost: 175, mana: 50, time: 25, desc: `Each Beastmaster counts as ${BEASTMASTER.auraLore} extra troops for nearby giants' obedience instead of ${BEASTMASTER.aura}.` },
   ],
+  saboteur: [
+    { key: 'sappers', name: "Sappers' Picks", cost: 175, mana: 25, time: 20, desc: `Trench damage ${SABOTEUR.trenchMul}× → ${SABOTEUR.trenchMulSappers}×.` },
+    { key: 'brine', name: 'Brine', cost: 150, mana: 50, time: 20, desc: `Salted deposits stay spoiled for ${SABOTEUR.saltDurBrine}s instead of ${SABOTEUR.saltDur}s.` },
+  ],
   spear: [
     { key: 'shield', name: 'Shields', cost: 175, mana: 0, time: 20, desc: '+20% armor and +40 hp, and unlocks Shield Wall (X): they stop attacking, take 60% less damage and draw enemy attacks.' },
     { key: 'shield2', name: 'Tower Shields', cost: 200, mana: 50, time: 25, requires: 'shield', desc: '+10% more armor and +40 hp; Shield Wall blocks 75% and draws attackers even harder.' },
@@ -371,6 +385,7 @@ const GEAR = {
   ballista: [['band'], ['horns']],
   golem: [['none'], ['none']],
   beastmaster: [['pelt'], ['pelt']],
+  saboteur: [['cowl'], ['cowl']],
 };
 
 const THEMES = [

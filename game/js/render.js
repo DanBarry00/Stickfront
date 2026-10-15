@@ -221,7 +221,7 @@ function drawUnitInAir(ctx, u, dying, fall, alpha, lift) {
     flash: u.lastStand > 0 ? (Math.sin(RT * 30) > 0 ? 1 : 0) : u.flash,
     wall: u.shieldWall, arch: u.type === 'archer' ? archPose(u, dying) : null, cast: u.swingKind === 'cast',
     chains: isGiant(u) ? giantChains(u) : 0, stone: u.isStatueGiant ? G.teams[u.team].statue.stone : null,
-    starRanged: u.starRanged, grounded: u.grounded, aimFa: u.aimFa, pace: u.pace, javelin: !!(u.perks.javelin && u.javelin),
+    starRanged: u.starRanged, grounded: u.grounded, aimFa: u.aimFa, pace: u.pace, salting: u.salting, javelin: !!(u.perks.javelin && u.javelin),
   });
   if (dying) return;
   drawBuffsOver(ctx, u);
@@ -590,6 +590,10 @@ function drawPlacing(ctx) {
     const ok = w && w.team === 0 && w.progress >= 1 && w.tier !== 2;
     ctx.fillStyle = ok ? '#d8f0c8' : '#9c8f76';
     ctx.fillText(ok ? `Raise a palisade here (${w.reinforcing ? 'resume' : WALL_COST + ' gold'})` : 'Click one of your finished trenches', x, y - 24);
+  } else if (UI.placing === 'salt') {
+    const m = mineAt(x, y, false);
+    ctx.fillStyle = m ? '#f0eee8' : '#9c8f76';
+    ctx.fillText(m ? 'Salt this deposit' : 'Click a gold deposit to salt', x, y - 24);
   } else if (UI.placing === 'replenish') {
     const m = mineAt(x, y, true);
     ctx.fillStyle = m ? '#e0bf5a' : '#9c8f76';

@@ -434,7 +434,8 @@ function onSwingHit(u) {
     if (m && m.gold > 0) {
       const take = Math.min(u.goldPerSwing, m.gold, u.carryCap - u.carry);
       m.gold -= take;
-      u.carry += take;
+      // a deposit salted by the enemy yields only part of what is dug (the rest is spoiled)
+      u.carry += m.saltT > 0 && m.saltTeam !== u.team ? Math.ceil(take * SABOTEUR.saltKeep) : take;
       spawnBurst(u.x + u.facing * 20, u.y - 14, 4, { color: '#c99b2a', speed: 70, up: 90, g: 420, life: 0.6, size: 2 });
       if (m.gold <= 0) depleteMine(m);
     }
@@ -729,6 +730,25 @@ function keepRank(u, g, dt) {
   if (moveTo(u, slot.x, slot.y, dt) || g.mode === 'retreat') u.facing = team.dir;
 }
 
+// Salt the Mine: the saboteur slips up to a gold deposit, kneels and salts it for a few seconds,
+// then waits there. While salted, enemy miners keep only part of what they dig from it.
+function doSalt(u, team, dt) {
+  const m = u.order.mine;
+  if (!m || m.gold <= 0) { setOrder(u, { type: 'stance' }); return; }
+  if (u.swing >= 0) return;
+  const side = u.x <= m.x ? -1 : 1;
+  if (!moveTo(u, m.x + side * (m.size * 0.6 + 10), clamp(m.y + 10, LANE_TOP, LANE_BOT), dt)) { u.saltT = 0; return; }
+  u.facing = -side;
+  u.salting = true;
+  u.saltT += dt;
+  if (chance(dt * 14)) G.particles.push({ kind: 'spark', x: m.x + rnd(-m.size, m.size) * 0.5, y: m.y - rnd(0, m.size), vx: rnd(-10, 10), vy: rnd(-25, -5), life: 0.6, max: 0.6, color: '#f0eee8', size: rnd(1.2, 2) });
+  if (u.saltT < SABOTEUR.saltTime) return;
+  m.saltT = u.perks.brine ? SABOTEUR.saltDurBrine : SABOTEUR.saltDur;
+  m.saltTeam = u.team;
+  floatText(m.x, m.y - 50, 'Salted!', '#f0eee8');
+  setOrder(u, { type: 'hold', x: u.x, y: u.y });
+}
+
 // Stand on top of one of our walls. Damage taken there is split with the wall.
 function doManWall(u, team, dt) {
   const w = u.order.wall;
@@ -756,6 +776,7 @@ function updateFighter(u, dt) {
   const team = G.teams[u.team], o = u.order;
   if (o.type === 'refit') return doRefit(u, dt);
   if (o.type === 'manwall') return doManWall(u, team, dt);
+  if (o.type === 'salt') return doSalt(u, team, dt);
   if (handleBlocked(u, dt)) return;
   if (o.type === 'attack') {
     if (isValidTarget(o.target) && (o.target.isStructure || canTarget(u, o.target))) return engage(u, o.target, dt);
@@ -1015,6 +1036,7 @@ function setOrder(u, order) {
   u.capSpeed = null;
   u.settled = false;
   u.refitT = 0;
+  u.saltT = 0;
   u.order = order;
 }
 
@@ -1036,6 +1058,7 @@ function damage(t, amt, src, aoe) {
   if (t.isStructure) {
     if (t.dead) return;
     if (src && src.type === 'ballista') amt = Math.round(amt * BALLISTA.structureMul);   // siege bolts wreck trenches and statues
+    if (src && src.type === 'saboteur' && t.isWall) amt = Math.round(amt * (src.perks.sappers ? SABOTEUR.trenchMulSappers : SABOTEUR.trenchMul));   // saboteurs undermine trenches
     t.hp -= amt;
     t.flash = 0.15;
     if (src) debugDamage(src, amt, true);
@@ -1223,6 +1246,7 @@ function updateUnit(u, dt) {
   u.panning = false;
   u.panUsed = false;
   u.refitting = false;
+  u.salting = false;
   const fx = u.fx;
   for (const k of ['haste', 'slow', 'empower', 'enfeeble']) if (fx[k] > 0) fx[k] -= dt;
   if (fx.shieldT > 0) { fx.shieldT -= dt; if (fx.shieldT <= 0) fx.shield = 0; }
@@ -1252,7 +1276,7 @@ function updateUnit(u, dt) {
   else updateFighter(u, dt);
   if (!u.praying) u.pray = -1;
   if (u.type === 'miner' && !u.panUsed) freePanSlot(u);
-  if (u.type === 'ninja') updateStealth(u, dt);
+  if (u.type === 'ninja' || u.type === 'saboteur') updateStealth(u, dt);
   if (u.type === 'spear') updateJavelin(u);
   if (u.type === 'golem' && u.perks.core && u.hp < u.maxHp && u.lastStand <= 0) u.hp = Math.min(u.maxHp, u.hp + GOLEM.regen * dt);   // Mana Core
   // legs move in step with the distance actually covered, so a fast unit held to a slow
