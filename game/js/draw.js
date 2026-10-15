@@ -503,6 +503,126 @@ function drawCrossbow(ctx, x, y, ang, f, P, loaded) {
   }
 }
 
+// Ballista: a wheeled bolt-thrower, its crewman turning the windlass behind it. Between shots
+// the string is wound back over most of the reload, the bolt sits in the groove, and it snaps
+// forward at the release (swing 0.8). Mantlet adds a timber shield across the front.
+function drawBallista(ctx, o) {
+  const st = TEAM_STYLE[o.team], f = o.facing, P = o.perks || NO_PERKS;
+  ctx.save();
+  ctx.translate(o.x, o.y - (o.lift || 0));
+  if (o.fall) ctx.rotate(-f * o.fall * 0.5);
+  if (o.alpha !== undefined) ctx.globalAlpha *= o.alpha;
+  ctx.scale(o.scale, o.scale);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  const wood = o.flash > 0 ? '#7a2a20' : '#6a4a2c', dark = '#2a1c10', t = RT + o.seed, s = o.swing;
+  const pull = s < 0 ? 1 : s < 0.8 ? Math.min(1, s / 0.6) : 0;   // how far the string is wound back
+  const cranking = s >= 0 && s < 0.6;
+
+  // the crewman behind, hands on the windlass
+  const cx = -30 * f, col = o.flash > 0 ? '#6e1510' : st.body;
+  const crank = cranking ? Math.sin(t * 9) * 3 : 0;
+  ctx.strokeStyle = col;
+  ctx.lineWidth = 3.1;
+  ctx.beginPath();
+  ctx.moveTo(cx, -26); ctx.lineTo(cx - 4 * f, -13); ctx.lineTo(cx - 6 * f, 0);   // back leg
+  ctx.moveTo(cx - 4 * f, -13); ctx.lineTo(cx + 2 * f, -6); ctx.lineTo(cx + 4 * f, 0);   // front leg
+  ctx.moveTo(cx - 4 * f, -13); ctx.lineTo(cx, -36);   // spine
+  ctx.moveTo(cx, -33); ctx.lineTo(cx + 7 * f, -28 + crank); ctx.lineTo(cx + 13 * f, -27 + crank);   // arms to the windlass
+  ctx.stroke();
+  ctx.fillStyle = col;
+  ctx.beginPath();
+  ctx.arc(cx + 1 * f, -43, 6.5, 0, TAU);
+  ctx.fill();
+  drawGear(ctx, o.gear, cx + 1 * f, -43, f, st, t, o.team);
+
+  // wheels, spokes turning as it rolls
+  for (const wx of [-13, 11]) {
+    const x = wx * f;
+    ctx.fillStyle = dark;
+    ctx.beginPath();
+    ctx.arc(x, -7, 7, 0, TAU);
+    ctx.fill();
+    ctx.strokeStyle = '#8a6a44';
+    ctx.lineWidth = 1.2;
+    ctx.beginPath();
+    for (let i = 0; i < 3; i++) {
+      const a = (o.walk || 0) * 0.6 * f + (i / 3) * Math.PI;
+      ctx.moveTo(x - Math.cos(a) * 6, -7 - Math.sin(a) * 6);
+      ctx.lineTo(x + Math.cos(a) * 6, -7 + Math.sin(a) * 6);
+    }
+    ctx.stroke();
+  }
+  // carriage, trestle and the stock, tilted up a little
+  ctx.strokeStyle = wood;
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(-21 * f, -12); ctx.lineTo(19 * f, -12);
+  ctx.moveTo(-5 * f, -12); ctx.lineTo(-2 * f, -25);
+  ctx.moveTo(8 * f, -12); ctx.lineTo(5 * f, -26);
+  ctx.stroke();
+  ctx.lineWidth = 4.5;
+  ctx.beginPath();
+  ctx.moveTo(-19 * f, -24); ctx.lineTo(22 * f, -30);
+  ctx.stroke();
+  // windlass at the back of the stock
+  ctx.fillStyle = '#8a8d90';
+  ctx.beginPath();
+  ctx.arc(-17 * f, -24, 3, 0, TAU);
+  ctx.fill();
+  // bow arms at the front: bent back as the string is wound
+  const fx = 20 * f, fy = -29.5, bend = 6 * pull;
+  const top = [fx - bend * f, fy - 16], bot = [fx - bend * f, fy + 14];
+  ctx.strokeStyle = dark;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(...top); ctx.quadraticCurveTo(fx + 4 * f, fy - 6, fx, fy); ctx.quadraticCurveTo(fx + 4 * f, fy + 6, ...bot);
+  ctx.stroke();
+  // string to the nock, and the bolt lying in the groove while loaded
+  const nx = fx - (4 + 30 * pull) * f, ny = fy + 4.5 * pull;
+  ctx.strokeStyle = '#d8cfbc';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(...top); ctx.lineTo(nx, ny); ctx.lineTo(...bot);
+  ctx.stroke();
+  if (pull > 0.3) {
+    ctx.strokeStyle = '#4a3220';
+    ctx.lineWidth = 2.2;
+    ctx.beginPath();
+    ctx.moveTo(nx, ny - 1); ctx.lineTo(fx + 8 * f, fy - 2);
+    ctx.stroke();
+    ctx.fillStyle = P.ironbolt ? '#8a9096' : '#a9b0b6';
+    ctx.beginPath();
+    ctx.moveTo(fx + 13 * f, fy - 2.5); ctx.lineTo(fx + 7 * f, fy - 5); ctx.lineTo(fx + 7 * f, fy + 0.5);
+    ctx.closePath();
+    ctx.fill();
+  }
+  // Torsion Springs: twisted rope skeins at the bow's root
+  if (P.torsion) {
+    ctx.fillStyle = '#b8a070';
+    ctx.fillRect(fx - 4 * f - 2, fy - 7, 4, 14);
+    ctx.strokeStyle = '#6a5430';
+    ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    for (let i = -6; i < 7; i += 3) { ctx.moveTo(fx - 4 * f - 2, fy + i); ctx.lineTo(fx - 4 * f + 2, fy + i + 2); }
+    ctx.stroke();
+  }
+  // Mantlet: a timber shield across the front of the carriage
+  if (P.mantlet) {
+    ctx.fillStyle = '#5a3e24';
+    ctx.strokeStyle = dark;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(24 * f, -2); ctx.lineTo(24 * f, -22); ctx.lineTo(30 * f, -24); ctx.lineTo(30 * f, -2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = shade(st.accent, -0.2);
+    ctx.fillRect(Math.min(24 * f, 30 * f) + 1, -15, 4, 3);
+  }
+  ctx.restore();
+}
+
 // A slim, slightly curved ninja blade with a round guard and a wrapped grip.
 function drawKatana(ctx, x, y, ang, f, P, swing) {
   swingTrail(ctx, x, y, ang, 26, f, swing);
@@ -558,6 +678,7 @@ function drawStickman(ctx, o) {
   if (o.type === 'giant') return drawGiant(ctx, o);
   if (o.type === 'cleric' || o.type === 'warlock') return drawMage(ctx, o);
   if (o.type === 'flyer' && !o.grounded) return drawFlyer(ctx, o);
+  if (o.type === 'ballista') return drawBallista(ctx, o);
   const st = TEAM_STYLE[o.team], f = o.facing, P = o.perks || NO_PERKS;
   ctx.save();
   ctx.translate(o.x, o.y - (o.lift || 0));
@@ -3013,6 +3134,15 @@ function drawUnitIcon(cv, type) {
       c.fillStyle = '#bdb5a2'; c.beginPath(); c.arc(13, 26, 3.2, 0, TAU); c.fill();
       break;
     }
+    case 'ballista':
+      c.fillStyle = '#2a1c10';
+      for (const x of [11, 27]) { c.beginPath(); c.arc(x, 31, 5, 0, TAU); c.fill(); }
+      line('#7a5432', 3.4, [[4, 26], [34, 26]]);
+      line('#7a5432', 3.6, [[6, 21], [33, 15]]);
+      c.strokeStyle = '#1a120a'; c.lineWidth = 2.6; c.beginPath(); c.moveTo(29, 4); c.quadraticCurveTo(36, 12, 33, 15); c.quadraticCurveTo(36, 19, 31, 27); c.stroke();
+      line('#d8cfbc', 0.9, [[29, 4], [14, 18], [31, 27]]);
+      line(steel, 2, [[14, 17], [38, 13]]);
+      break;
     case 'giant':
       line('#4e3620', 8, [[9, 35], [27, 11]]);
       c.fillStyle = '#9a9da0';
@@ -3373,6 +3503,26 @@ function drawUpgradeIcon(cv, type, key) {
         c.strokeStyle = '#6a5a44'; c.lineWidth = 2.6; c.beginPath(); c.moveTo(6, 22 + dy); c.lineTo(28, 18 + dy); c.stroke();
         c.fillStyle = '#9aa0a6'; c.beginPath(); c.moveTo(36, 16 + dy); c.lineTo(27, 14 + dy); c.lineTo(29, 18 + dy); c.lineTo(27, 22 + dy); c.closePath(); c.fill();
       }
+      break;
+    // ---- ballista
+    case 'torsion':
+      c.fillStyle = '#b8a070'; c.fillRect(13, 6, 14, 28);
+      c.strokeStyle = '#6a5430'; c.lineWidth = 1.6; c.beginPath();
+      for (let y = 8; y < 34; y += 5) { c.moveTo(13, y); c.lineTo(27, y + 3); }
+      c.stroke();
+      c.fillStyle = '#5a5d60'; c.fillRect(10, 4, 20, 4); c.fillRect(10, 32, 20, 4);
+      break;
+    case 'ironbolt':
+      c.strokeStyle = '#3a2a1a'; c.lineWidth = 4; c.beginPath(); c.moveTo(5, 32); c.lineTo(28, 12); c.stroke();
+      c.strokeStyle = '#8a6a44'; c.lineWidth = 5; c.beginPath(); c.moveTo(5, 32); c.lineTo(10, 28); c.stroke();
+      c.fillStyle = '#8a9096'; c.beginPath(); c.moveTo(37, 4); c.lineTo(24, 10); c.lineTo(30, 17); c.closePath(); c.fill();
+      c.strokeStyle = dark; c.lineWidth = 1; c.stroke();
+      break;
+    case 'mantlet':
+      c.fillStyle = '#5a3e24'; c.strokeStyle = dark; c.lineWidth = 1.4;
+      c.beginPath(); c.moveTo(8, 36); c.lineTo(8, 9); c.lineTo(32, 4); c.lineTo(32, 36); c.closePath(); c.fill(); c.stroke();
+      c.beginPath(); c.moveTo(16, 7); c.lineTo(16, 36); c.moveTo(24, 5); c.lineTo(24, 36); c.stroke();
+      c.fillStyle = '#8a8d90'; c.fillRect(8, 15, 24, 2.5); c.fillRect(8, 27, 24, 2.5);
       break;
     case 'javelin':
       // a javelin arcing up toward a flyer's wing

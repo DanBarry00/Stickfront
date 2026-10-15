@@ -455,7 +455,19 @@ function updateArchers(team, dt) {
   for (const a of team.archers) updateCastleArcher(team, a, dt, garrisoned);
 }
 
-// opts.kind: 'arrow' | 'star' (ninja) | 'bolt' (kestrel crossbow); opts.crit marks a critical hit
+// A ballista bolt punches through its target into the next ground unit behind it.
+function ballistaPierce(p, t, src) {
+  const dir = Math.sign(p.vx) || 1;
+  let next = null, nd = 1e9;
+  for (const e of G.units) {
+    if (e === t || e.team === p.team || e.dead || e.inside || e.stealth || isFlying(e) || Math.abs(e.y - t.y) > 25) continue;
+    const d = (e.x - t.x) * dir;
+    if (d >= 0 && d < 70 && d < nd) { nd = d; next = e; }
+  }
+  if (next) damage(next, p.dmg * BALLISTA.pierce, src, true);
+}
+
+// opts.kind: 'arrow' | 'star' (ninja) | 'bolt' (kestrel crossbow) | 'javelin' | 'ballista'; opts.crit marks a critical hit
 function fireArrow(team, x, y, target, dmg, src, fire, opts = {}) {
   // lead a moving target by the arrow's actual flight time
   const v = !target.isStructure && target.moving ? target.facing * unitSpeed(target) : 0;
@@ -484,6 +496,7 @@ function updateProjectiles(dt) {
         if (p.crit) showCrit(t);
         if (p.fire && !t.isStructure && !t.dead) { t.burnT = BURN_TIME; t.burnSrc = src; }
         if (p.kind === 'star' && isGiant(t) && !t.dead) confuseGiant(t, STAR.confuse);   // stars disorient giants
+        if (p.kind === 'ballista' && !t.isStructure) ballistaPierce(p, t, src);
       }
       else if (p.kind !== 'star') G.particles.push({ kind: 'stuck', x: p.x, y: Math.max(p.y, LANE_TOP), ang: Math.atan2(p.vy, p.vx), life: 6, max: 6 });
       p.done = true;

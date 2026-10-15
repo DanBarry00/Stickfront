@@ -15,7 +15,7 @@ Each clan sets your starting gold, mana and army, which upgrades are already res
 |---|---|---|---|
 | **Base** | 2 miners, a veteran Swordwrath with every sword upgrade | Every unit and upgrade | No head start |
 | **Archer** | 2 miners, 2 archers | Recurve Bows, Eagle Eye, Vital Points, Long Sights; archers and Kestrels 15 gold cheaper; 4 castle archer slots; clan-only Longbows (range 600), Broadheads (damage 40), Steady Hands (reload 15% faster), Spyglass (Kestrel range 480) | No Iron/Crested Helmets or Tower Shields; giants can't get Blinders |
-| **Defense** | 2 miners; a trench held by a Spearton and an archer | Earthworks, Shields, Military Training, Rallying Cry, Recurve Bows, a second castle archer; 4 castle archer slots; clan-only Levy II (a free Spearton every minute too) | No Warlocks or Giants |
+| **Defense** | 2 miners; a trench held by a Spearton and an archer | Clan unit: the **Ballista**; Earthworks, Shields, Military Training, Rallying Cry, Recurve Bows, a second castle archer; 4 castle archer slots; clan-only Levy II (a free Spearton every minute too) | No Warlocks or Giants |
 | **Sword** | 2 miners, 2 Swordwrath | Population 35; Levy, Military Training, Adrenaline; clan-only Great Swords (damage 25, 10% slower swing) | No Kestrels or Throwing Stars (only archers and Javelins hit flyers); no Flaming Arrows; no trenches |
 | **Mercenary** | 4 miners, 1 plain Swordwrath | Bigger Bags, Steel Pickaxes, Iron Pans, Prospecting, Statue Offerings; every kill pays 20% of the victim's gold cost; clan-only Mule Packs (carry 100), Diamond Picks (17 per swing), Gilded Statue (4 gold/s) | Praying gives half the mana; weakest starting army |
 | **Arcane Circle** | 150 mana; 2 miners, a Cleric and a Warlock | Healing Pool and Blight Pool; mages cost 35 mana; praying gives 50% more | Swordwrath and Spearton −10% health; 1 castle archer; no Giants |
@@ -23,7 +23,7 @@ Each clan sets your starting gold, mana and army, which upgrades are already res
 | **Shadow** | 2 miners, 2 ninjas | All units +15% damage; ninjas cost 125, vanish again after 3s; Throwing Stars researched | All units −15% health; no Spearton; no trenches |
 | **Sky** | 2 miners, 2 Kestrels | Kestrels cost 150 and crit 10% of the time; clan-only Hawk Eye (20% crit), Spyglass (range 480), Barbed Bolts II (damage 26) | Swordwrath and Spearton −10% health; no Giants |
 
-Clan-only upgrades appear in their building's panel only for that clan. Still to come: the unique units (Ballista, Spirit Golem, Beastmaster, Saboteur, Firebird). The setup screen lists these as "coming soon" for each clan.
+Clan-only upgrades and units appear only for their clan. Still to come: the Spirit Golem, Beastmaster, Saboteur and Firebird. The setup screen lists these as "coming soon" for each clan.
 
 ## Units
 | Unit | Cost | Building | Role |
@@ -37,6 +37,7 @@ Clan-only upgrades appear in their building's panel only for that clan. Still to
 | Giant | 450 + 120 mana | Giant Pit | 900 hp, heavy club with splash (4 population). Can't be commanded directly |
 | Ninja | 150 | Dojo (on the rampart) | Fast, fragile assassin. Triple-damage first blow, cuts through armor, can't be targeted while running. Hunts the weakest enemy, archers first |
 | Kestrel | 175 | Aerie (on the rampart) | Flies over the battle with a small crossbow. Only ranged attacks can hit it |
+| Ballista | 250 + 50 mana | Siege Workshop (Defense Clan only) | Long-range siege engine that wrecks trenches and statues; helpless up close (2 population) |
 
 ## Giants
 - **Targeting:** a giant always goes for the enemy with the most health, ignoring taunts. Each blow also splashes the 2 enemies beside its target, unless the target is another giant.
@@ -119,6 +120,13 @@ The Cleric and Warlock are exact opposites. They have the same cost, health, ran
 - **Auto-cast is on by default:** mages pick good targets and counter enemy spells. They throw Sanctuary over allies an incoming Fireball is aimed at, a Healing Pool onto a Blight Pool, Haste onto slowed allies, and the reverse for Warlocks. Auto keeps 15 mana in reserve.
 - **Forcing a spell:** click a spell on the command card (or press 7 / 8 / 9 / 0), then click where to cast it. It works even with auto on. The nearest ready mage walks into range and casts. With both mage types selected, Shift + 7–0 casts the Warlock's spells.
 - **L** toggles auto-cast for the selected mages.
+
+## Ballista (Defense Clan)
+A crewed bolt-thrower, trained in the Ranged group (hotkey `]`). 250 gold + 50 mana, 2 population, 160 hp, slow (speed 40). It rolls out by the gate.
+- **Range 550**, longer than any archer's. One heavy bolt every 4 seconds for 45 damage, which punches through into the next ground unit behind the target for 60% of that.
+- **Siege:** double damage to trenches and statues.
+- **Weaknesses:** it can't hit flyers, and it can't shoot anything closer than 120. It backs away to get a clear shot, but it's slow, so melee troops and Kestrels that reach it can pick it apart. It prefers targets it can actually shoot.
+- **Upgrades (Siege Workshop, opened from the ⚒ on its button):** Torsion Springs (range 650), Iron-tipped Bolts (damage 60), Mantlet (+60 hp and 20% armor).
 
 ## Javelins (Spear Hall, every clan)
 150 gold + 25 mana. Each Spearton carries one javelin and hurls it automatically at the nearest flyer within 250 (30 damage). It gets a new one each time it garrisons. It's the main answer to flyers for clans without good ranged units, like the Sword Clan.

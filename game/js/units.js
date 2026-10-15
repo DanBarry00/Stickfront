@@ -167,6 +167,11 @@ function applyPerks(u) {
       u.atk = P.winch ? d.atkTime * 0.7 : d.atkTime;
       u.crit = P.hawkeye ? CRIT.upgraded : G && G.teams ? clanOf(G.teams[u.team]).kestrelCrit || 0 : 0;   // Sky Clan Kestrels crit
     }
+  } else if (u.type === 'ballista') {
+    u.range = P.torsion ? 650 : d.range;
+    u.aggro = u.range + 40;
+    u.dmg = P.ironbolt ? 60 : d.dmg;
+    if (P.mantlet) { u.maxHp += 60; u.armor = 0.2; }
   } else if (u.type === 'spear') {
     u.armor = 0.1 + (P.shield ? 0.2 : 0) + (P.shield2 ? 0.1 : 0) + (P.helm ? 0.15 : 0);
     u.maxHp += (P.shield ? 40 : 0) + (P.shield2 ? 40 : 0);
@@ -244,7 +249,7 @@ function isValidTarget(t) {
 }
 
 // Who can hit flying units: ranged attackers (and castle archers, and a ninja that can switch to stars).
-const canHitAir = u => !u || u.castle || isRanged(u) || (u.type === 'ninja' && u.perks.stars && u.starMode === 'auto');
+const canHitAir = u => !u || u.castle || (isRanged(u) && u.type !== 'ballista') || (u.type === 'ninja' && u.perks.stars && u.starMode === 'auto');
 
 // Can attacker u pick e as a target at all? (Vanished ninjas and, for melee, flyers are out of reach.)
 function canTarget(u, e) {
@@ -257,6 +262,7 @@ function targetScore(u, e, d) {
   const ninja = u && u.type === 'ninja';
   let s = ninja ? e.hp + d * 0.25 - (e.type === 'archer' ? 300 : 0) : d;
   if (!(ninja && u.perks.focus)) s -= tauntBias(e) * (ninja ? 4 : 1);
+  if (u && u.type === 'ballista' && d < BALLISTA.minRange + 20) s += 2000;   // too close to aim at: anything else first
   return s;
 }
 
@@ -264,6 +270,7 @@ function inReach(u, t, slack) {
   if (isFlying(t) && !isRanged(u)) return false;   // the blade can't reach the sky
   const bulk = isGiant(t) ? 8 * t.scale : 0;   // giants are wide targets
   const dx = Math.abs(t.x - u.x) - (t.isStructure ? t.halfW : 0) - bulk;
+  if (u.type === 'ballista' && !t.isStructure && dx < BALLISTA.minRange) return false;   // too close to aim at
   if (isRanged(u)) return dx <= u.range + slack;
   const dy = t.isStructure ? 0 : Math.abs(t.y - u.y);
   return dx <= u.range + slack && dy <= 16 + slack + (isGiant(t) || isGiant(u) ? 18 : 0);
@@ -414,8 +421,9 @@ function onSwingHit(u) {
       const aim = u.facing === 1 ? u.aimFa : Math.PI - u.aimFa;
       const lift = (u.onWall ? wallHeight(u.onWall) : 0) + (u.alt || 0);
       const c = rollCrit(u, u.dmg * dmgMult(u));
-      const kind = u.type === 'ninja' ? 'star' : u.type === 'flyer' ? 'bolt' : 'arrow';
-      fireArrow(u.team, u.x + Math.cos(aim) * 14 * u.scale, u.y - lift - 46 * u.scale + Math.sin(aim) * 14, t, c.amt, u, u.fire, { kind, crit: c.crit });
+      const kind = u.type === 'ninja' ? 'star' : u.type === 'flyer' ? 'bolt' : u.type === 'ballista' ? 'ballista' : 'arrow';
+      const muzzle = u.type === 'ballista' ? 26 : 46;   // the ballista fires from its low stock
+      fireArrow(u.team, u.x + Math.cos(aim) * 14 * u.scale, u.y - lift - muzzle * u.scale + Math.sin(aim) * 14, t, c.amt, u, u.fire, { kind, crit: c.crit });
     }
   } else if (u.swingKind === 'gold') {
     const m = u.mine;
@@ -593,7 +601,7 @@ function doRefit(u, dt) {
 
 // Rank offsets from the front of a formation: spearton in front, swordwrath behind them,
 // archers and mages at the back.
-const RANK_OFF = { spear: 22, sword: 0, ninja: -8, flyer: -60, archer: -85, warlock: -95, cleric: -110 };
+const RANK_OFF = { spear: 22, sword: 0, ninja: -8, flyer: -60, archer: -85, warlock: -95, cleric: -110, ballista: -140 };
 
 // Where the idx-th unit of a type stands: up to six abreast, extra units form more columns.
 function rankSlot(type, idx, count, frontX, dir) {
@@ -1023,6 +1031,7 @@ function damage(t, amt, src, aoe) {
   amt = Math.max(1, Math.round(amt));
   if (t.isStructure) {
     if (t.dead) return;
+    if (src && src.type === 'ballista') amt = Math.round(amt * BALLISTA.structureMul);   // siege bolts wreck trenches and statues
     t.hp -= amt;
     t.flash = 0.15;
     if (src) debugDamage(src, amt, true);

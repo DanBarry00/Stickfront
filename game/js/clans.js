@@ -55,10 +55,9 @@ const CLANS = {
     free: { miner: ['walls'], spear: ['shield', 'inspire'], sword: ['drill'], archer: ['bow'], castle: ['archer2'] },
     castleArchers: 4,
     lockUnits: ['warlock', 'giant'],
-    ai: { spear: 0.12, archer: 0.05 },
-    strengths: ['Starts with a trench, held by a Spearton and an archer', 'Earthworks, Shields, Military Training, Rallying Cry, Recurve Bows and a second castle archer', 'Clan-only: Levy II, a free Spearton every minute', '4 castle archer slots'],
+    ai: { spear: 0.12, archer: 0.05, ballista: 0.12 },
+    strengths: ['Starts with a trench, held by a Spearton and an archer', 'Earthworks, Shields, Military Training, Rallying Cry, Recurve Bows and a second castle archer', 'Clan unit: Ballista, a siege engine with range 550 that wrecks trenches and statues', 'Clan-only: Levy II, a free Spearton every minute', '4 castle archer slots'],
     weaknesses: ['No Warlocks and no Giants'],
-    coming: ['Ballista siege unit'],
   },
 
   sword: {
@@ -152,7 +151,8 @@ const CLAN_ORDER = ['base', 'archer', 'defense', 'sword', 'mercenary', 'arcane',
 // ---------------------------------------------------------------- lookups used by the game
 
 const clanOf = team => CLANS[team.clanKey] || CLANS.base;
-const canTrain = (team, type) => !(clanOf(team).lockUnits || []).includes(type);
+// Clan units (like the Defense Clan's Ballista) list their clans in UNIT_TYPES.
+const canTrain = (team, type) => !(clanOf(team).lockUnits || []).includes(type) && (!UNIT_TYPES[type].clans || UNIT_TYPES[type].clans.includes(team.clanKey));
 function upgradeLocked(team, type, key) {
   const locked = (clanOf(team).lockUpgrades || {})[type] || [];
   // a later tier is locked along with the tier it builds on; clan-only tiers belong to their clans

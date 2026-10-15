@@ -457,6 +457,29 @@ function drawProjectiles(ctx) {
   for (const p of G.projectiles) {
     const a = Math.atan2(p.vy, p.vx), c = Math.cos(a), s = Math.sin(a);
     if (p.kind === 'star') { drawStar(ctx, p.x, p.y, 4, p.t * 25); continue; }
+    if (p.kind === 'ballista') {
+      // a heavy siege bolt with leather fletching
+      ctx.strokeStyle = '#3a2a1a';
+      ctx.lineWidth = 3.4;
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y);
+      ctx.lineTo(p.x - c * 26, p.y - s * 26);
+      ctx.stroke();
+      ctx.strokeStyle = '#8a6a44';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(p.x - c * 20, p.y - s * 20);
+      ctx.lineTo(p.x - c * 26, p.y - s * 26);
+      ctx.stroke();
+      ctx.fillStyle = '#9aa0a6';
+      ctx.beginPath();
+      ctx.moveTo(p.x + c * 6, p.y + s * 6);
+      ctx.lineTo(p.x - s * 3.5, p.y + c * 3.5);
+      ctx.lineTo(p.x + s * 3.5, p.y - c * 3.5);
+      ctx.closePath();
+      ctx.fill();
+      continue;
+    }
     if (p.kind === 'javelin') {
       // a long throwing spear
       ctx.strokeStyle = '#6a4a2a';

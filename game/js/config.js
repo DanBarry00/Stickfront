@@ -108,14 +108,20 @@ const UNIT_TYPES = {
     dmg: 15, range: 300, atkTime: 1.15, aggro: 340, hotkey: '[', code: 'BracketLeft',
     desc: 'Glides above the battle with a small crossbow, over trenches and out of reach of melee: only archers, warlocks, castle archers, thrown stars and other Kestrels can hit it. Weaker shots than an archer.',
   },
+  // Defense Clan siege engine: out-ranges everything, wrecks trenches and statues, helpless up close.
+  ballista: {
+    key: 'ballista', name: 'Ballista', building: 'Siege Workshop', cost: 250, mana: 50, time: 10, hp: 160, speed: 40, pop: 2,
+    dmg: 45, range: 550, atkTime: 4, aggro: 590, hotkey: ']', code: 'BracketRight', clans: ['defense'],
+    desc: 'A crewed bolt-thrower. Range 550, one heavy bolt every 4s that punches through into a second unit, double damage to trenches and statues. It cannot hit flyers or anything closer than 120, so it backs away from attackers. Slow.',
+  },
 };
-const UNIT_ORDER = ['miner', 'sword', 'archer', 'spear', 'cleric', 'warlock', 'giant', 'ninja', 'flyer'];
+const UNIT_ORDER = ['miner', 'sword', 'archer', 'spear', 'cleric', 'warlock', 'giant', 'ninja', 'flyer', 'ballista'];
 // Training groups: each group trains one unit at a time from a shared queue (so a Swordwrath
 // waits for the Spearton ahead of it). Colors tint the training bar.
 const TRAIN_GROUPS = [
   { key: 'workers', name: 'Workers', color: '#c9a23a', types: ['miner'] },
   { key: 'infantry', name: 'Infantry', color: '#c0503a', types: ['sword', 'spear', 'ninja'] },
-  { key: 'ranged', name: 'Ranged', color: '#7aa84a', types: ['archer', 'flyer'] },
+  { key: 'ranged', name: 'Ranged', color: '#7aa84a', types: ['archer', 'flyer', 'ballista'] },
   { key: 'mages', name: 'Mages', color: '#9a62d8', types: ['cleric', 'warlock'] },
   { key: 'giants', name: 'Giants', color: '#8f8a80', types: ['giant'] },
 ];
@@ -125,13 +131,13 @@ const isGiant = u => u.type === 'giant';
 // Kestrels are airborne until Feather Fall drops them to the ground (then they fight with a knife).
 const isFlying = u => u.type === 'flyer' && !u.grounded;
 // Ninjas count as ranged while throwing stars (u.starRanged is decided each frame).
-const isRanged = u => u.type === 'archer' || u.type === 'warlock' || isFlying(u) || (u.type === 'ninja' && !!u.starRanged);
+const isRanged = u => u.type === 'archer' || u.type === 'warlock' || u.type === 'ballista' || isFlying(u) || (u.type === 'ninja' && !!u.starRanged);
 const trainCode = def => def.code || 'Digit' + def.hotkey;
 // Mages come down the castle ladder; the Dojo and Aerie troops leave straight off the rampart, where
 // all four halls stand. The giant pit is outside the gate.
 const GIANT_PIT_X = 655;
 const RAMPART_HALL_X = { cleric: 150, warlock: 222, ninja: 340, flyer: 462 };
-const DOOR_X = { ...BUILD_X, cleric: 52, warlock: 52, giant: GIANT_PIT_X, ninja: RAMPART_HALL_X.ninja, flyer: RAMPART_HALL_X.flyer };
+const DOOR_X = { ...BUILD_X, cleric: 52, warlock: 52, giant: GIANT_PIT_X, ninja: RAMPART_HALL_X.ninja, flyer: RAMPART_HALL_X.flyer, ballista: 500 };   // ballistas roll out by the gate
 
 // Ninjas
 const NINJA_AMBUSH = 3;           // damage multiplier of the first blow of a fight (or out of stealth)
@@ -148,6 +154,10 @@ const GROUNDED = { hp: 45, dmg: 6, range: 26, atkTime: 0.9, speed: 70 };   // af
 
 // Critical hits (archers and ninjas): double damage
 const CRIT = { chance: 0.1, upgraded: 0.2, mult: 2 };
+
+// Ballista (Defense Clan): can't shoot closer than minRange; each bolt also hits the next unit
+// behind its target for a share of the damage; structures (trenches, statues) take extra.
+const BALLISTA = { minRange: 120, pierce: 0.6, structureMul: 2 };
 
 // Giants
 const GIANT_SCALE = 2.1;          // base size; each Protein Diet tier adds 13%
@@ -239,6 +249,11 @@ const UPGRADES = {
     { key: 'barbs2', name: 'Barbed Bolts II', cost: 225, mana: 50, time: 25, requires: 'barbs', clans: ['sky'], desc: 'Bolt damage 21 → 26.' },
     { key: 'hawkeye', name: 'Hawk Eye', cost: 175, mana: 50, time: 25, clans: ['sky'], desc: `Kestrel critical hit chance ${CRIT.chance * 100}% → ${CRIT.upgraded * 100}%.` },
   ],
+  ballista: [
+    { key: 'torsion', name: 'Torsion Springs', cost: 200, mana: 50, time: 25, desc: 'Range 550 → 650.' },
+    { key: 'ironbolt', name: 'Iron-tipped Bolts', cost: 225, mana: 50, time: 25, desc: 'Bolt damage 45 → 60.' },
+    { key: 'mantlet', name: 'Mantlet', cost: 175, mana: 25, time: 20, desc: 'A timber shield for the crew: +60 hp and 20% armor.' },
+  ],
   spear: [
     { key: 'shield', name: 'Shields', cost: 175, mana: 0, time: 20, desc: '+20% armor and +40 hp, and unlocks Shield Wall (X): they stop attacking, take 60% less damage and draw enemy attacks.' },
     { key: 'shield2', name: 'Tower Shields', cost: 200, mana: 50, time: 25, requires: 'shield', desc: '+10% more armor and +40 hp; Shield Wall blocks 75% and draws attackers even harder.' },
@@ -325,6 +340,7 @@ const GEAR = {
   giant: [['none'], ['horns']],
   ninja: [['ninja'], ['ninja']],
   flyer: [['goggles'], ['goggles']],
+  ballista: [['band'], ['horns']],
 };
 
 const THEMES = [

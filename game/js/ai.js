@@ -81,6 +81,7 @@ const AI_RESEARCH = [
   ['ninja', 'parry'], ['ninja', 'vital'], ['flyer', 'winch'], ['ninja', 'focus'], ['flyer', 'feather'],
   ['sword', 'greatsword'], ['archer', 'longbow'], ['archer', 'broadheads'], ['flyer', 'hawkeye'], ['flyer', 'scope2'],
   ['flyer', 'barbs2'], ['archer', 'steady'], ['castle', 'levy2'], ['spear', 'javelin'],
+  ['ballista', 'torsion'], ['ballista', 'ironbolt'], ['ballista', 'mantlet'],
   ['cleric', 'big'], ['warlock', 'pool'], ['cleric', 'speed'], ['warlock', 'speed'], ['cleric', 'might'],
   ['warlock', 'might'], ['miner', 'pick2'], ['miner', 'bag2'], ['spear', 'shield2'], ['archer', 'fire'],
   ['sword', 'leap'], ['sword', 'rage2'], ['giant', 'stun'], ['giant', 'protein2'], ['castle', 'tithe2'],
@@ -134,6 +135,8 @@ class SmartAI {
     if (front && count(front) < n * share('spear', 0.2)) return front;
     if (can('flyer') && count('flyer') < Math.floor(n * share('flyer', c.flyers)) + (enemyFlyers ? 1 : 0)) return 'flyer';
     if (can('ninja') && count('ninja') < Math.floor(n * share('ninja', c.ninjas))) return 'ninja';
+    // a ballista or two once the army has a line to stand behind
+    if (can('ballista') && n >= 5 && count('ballista') < Math.floor(n * share('ballista', 0)) && team.mana >= unitCost(team, 'ballista').mana) return 'ballista';
     return 'sword';
   }
 
@@ -149,8 +152,8 @@ class SmartAI {
       if (this.cfg.research === 'basic' && (d.requires || ['giant', 'cleric', 'warlock', 'castle'].includes(type))) continue;
       if (d.requires && !team.upgrades[type][d.requires]) continue;
       if (team.research[type]) continue;
-      // no point researching for ninjas or Kestrels it hasn't trained
-      if ((type === 'ninja' || type === 'flyer') && !G.units.some(u => u.team === this.id && !u.dead && u.type === type)) continue;
+      // no point researching for ninjas, Kestrels or ballistas it hasn't built
+      if (['ninja', 'flyer', 'ballista'].includes(type) && !G.units.some(u => u.team === this.id && !u.dead && u.type === type)) continue;
       return { type, d };
     }
     return null;
