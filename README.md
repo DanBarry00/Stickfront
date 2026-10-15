@@ -19,9 +19,11 @@ Each clan sets your starting gold, mana and army, which upgrades are already res
 | **Sword** | 2 miners, 2 Swordwrath | Population 35; Levy, Military Training, Adrenaline; clan-only Great Swords (damage 25, 10% slower swing) | No Kestrels or Throwing Stars (only archers and Javelins hit flyers); no Flaming Arrows; no trenches |
 | **Mercenary** | 4 miners, 1 plain Swordwrath | Bigger Bags, Steel Pickaxes, Iron Pans, Prospecting, Statue Offerings; every kill pays 20% of the victim's gold cost; clan-only Mule Packs (carry 100), Diamond Picks (17 per swing), Gilded Statue (4 gold/s) | Praying gives half the mana; weakest starting army |
 | **Arcane Circle** | 150 mana; 2 miners, a Cleric and a Warlock | Clan unit: the **Spirit Golem**; Healing Pool and Blight Pool; mages cost 35 mana; praying gives 50% more | Swordwrath and Spearton −10% health; 1 castle archer; no Giants |
-| **Beast** | 2 miners, a Swordwrath and a Beastmaster | Clan unit: the **Beastmaster**; Giants cost 340 gold + 90 mana and take 3 population; Blinders researched | No Archers or Kestrels (only Beastmasters, Warlocks and Javelins reach flyers) |
-| **Shadow** | 2 miners, 2 ninjas | Clan unit: the **Saboteur**; All units +15% damage; ninjas cost 125, vanish again after 3s; Throwing Stars researched | All units −15% health; no Spearton; no trenches |
-| **Sky** | 2 miners, 2 Kestrels | Clan unit: the **Firebird**; Kestrels cost 150 and crit 10% of the time; clan-only Hawk Eye (20% crit), Spyglass (range 480), Barbed Bolts II (damage 26) | Swordwrath and Spearton −10% health; no Giants |
+| **Beast** | 2 miners, a giant and a Beastmaster | Clan unit: the **Beastmaster**; giants cost 300 gold + 75 mana, take 3 population and have 20% more health; Thick Hide (archers get no bonus damage against its giants); Beastmasters cost 120; Blinders researched | No Archers or Kestrels (only Beastmasters, Warlocks and Javelins reach flyers) |
+| **Shadow** | 2 miners, 3 ninjas | Clan unit: the **Saboteur**; all units +20% damage; ninjas cost 110, vanish again after 3s; Throwing Stars, Vital Points and Parry researched | All units −10% health; no Spearton; no trenches |
+| **Sky** | 2 miners, 3 Kestrels | Clan unit: the **Firebird**; Kestrels cost 140, deal 30% more damage, have 25% more health and crit 10% of the time; Long Sights and clan-only Hawk Eye (20% crit) researched; clan-only Spyglass (range 480), Barbed Bolts II (damage 26) | Swordwrath and Spearton −10% health; no Giants |
+
+Every clan beats the Base Clan when the Hard AI plays both sides (`runClanTest(clan, 'base', 3)`, 6 games each): Defense, Sword, Mercenary and Arcane 6–0; Archer, Shadow and Sky 5–1; Beast 4–2 (9 of 12 over a longer run).
 
 Clan-only upgrades and units appear only for their clan. The setup screen lists these as "coming soon" for each clan.
 
@@ -93,6 +95,8 @@ Choose it on the setup screen. The pause menu shows the current setting. The com
 - **Normal:** a steady economy, a mixed army and tier-1 research. It holds its line in front of its mines, pulls its miners inside when raided, attacks when it has the edge (castle archers count as defenders) and falls back when it is losing. Meant to need some strategy and formations to beat.
 - **Hard:** researches everything it uses (all but Earthworks, Palisade and Prospecting), uses mana, mages and giants, refits veterans, braces shield walls against archers, and attacks and retreats in formation. Meant to challenge a good player who still wins most of the time.
 
+Normal and Hard never attack with fewer than 5 soldiers. They weigh armies by what the units cost (hurt units count for less, giants for 60%) and count each enemy castle archer as 300 more defence. Their giants march with the army instead of waiting at the muster point, and formations wait for giants that fall behind.
+
 Both Normal and Hard claim the Monolith when their army is strong enough, and save up for research when they've gone too long without any (unless they're behind). A harder level above Hard is planned.
 
 ## Maps
@@ -146,7 +150,7 @@ A slinger in a wolf-pelt hood, trained in the Ranged group (hotkey `'`). It come
 - **Giant-killer:** double damage to enemy giants.
 - **Giant-tamer:** each Beastmaster near a friendly giant counts as 3 troops (1 plus 2 extra) toward the giant's obedience, so it wears more chains and listens better.
 - **Upgrades (Beast Pen, from the ⚒ on its button):** Heavy Stones (damage 20) and Beast Lore (counts as 5 troops instead of 3).
-- The computer playing the Beast Clan keeps two miners praying and saves its gold and mana for its first giant.
+- The computer playing the Beast Clan saves its gold and mana for its giants.
 
 ## Saboteur (Shadow Clan)
 A hooded infiltrator with a satchel of salt, trained in the Infantry group (hotkey `;`). It drops off the rampart by the Dojo. 150 gold + 25 mana, 60 hp, very fast, and weak in a fight (6 damage).

@@ -129,7 +129,7 @@ function spawnUnit(team, type, x, y) {
       // the small mine / pray / pan toggle decides where fresh miners head
       if (team.minerDefault === 'pray') u.order = { type: 'mana' };
       else if (team.minerDefault === 'pan') u.order = { type: 'pan' };
-    } else if (team.musterX !== null) {
+    } else if (team.musterX !== null && type !== 'giant') {   // giants follow the army instead (with Blinders a muster order would park them there)
       // new soldiers gather at the muster point, ranked by type
       const off = type === 'spear' ? 22 : type === 'archer' ? -80 : 0;
       u.order = { type: 'move', x: team.musterX + team.dir * off + rnd(-12, 12), y: u.slotY };

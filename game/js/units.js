@@ -654,6 +654,16 @@ function updateGroups(dt) {
     for (const [type, list] of Object.entries(byType)) list.forEach((u, i) => { u.groupSlot = rankSlot(type, i, list.length, g.anchor, dir); });
     // the formation moves at its slowest member's pace; a raised shield wall slows everyone
     let sp = Math.min(...g.members.map(u => baseSpeed(u) * spellSpeed(u)));
+    // friendly giants following the line (they can't join a formation) set the pace too, so the
+    // army arrives together instead of leaving them behind
+    let giantLag = false;
+    if (g.mode !== 'retreat') {
+      for (const gi of G.units) {
+        if (gi.team !== g.team || !isGiant(gi) || gi.dead || gi.inside || gi.isStatueGiant || Math.abs(gi.x - g.anchor) >= 1200) continue;
+        sp = Math.min(sp, baseSpeed(gi) * spellSpeed(gi));
+        if (dir * (g.anchor - gi.x) > 220) giantLag = true;   // wait for it to catch up
+      }
+    }
     if (g.members.some(u => u.shieldWall)) sp *= 0.45;
     if (g.mode === 'advance') sp *= 0.75;
     if (g.mode === 'retreat') sp *= 0.7;
@@ -664,7 +674,7 @@ function updateGroups(dt) {
     // Archers, warlocks and Kestrels shooting from the back don't stop the march: they fire and
     // then hurry back into rank, and the line only waits if one falls far behind.
     const fighting = g.mode !== 'retreat' && g.members.some(u => u.grpFighting && !isRanged(u));
-    const behind = g.members.some(u => Math.abs(u.x - u.groupSlot.x) > (g.mode === 'retreat' ? 120 : isRanged(u) ? 200 : 70));
+    const behind = giantLag || g.members.some(u => Math.abs(u.x - u.groupSlot.x) > (g.mode === 'retreat' ? 120 : isRanged(u) ? 200 : 70));
     const prev = g.anchor;
     // form up first (spearton to the front, archers to the back), then march
     if (g.forming === undefined) g.forming = g.mode === 'retreat' ? 0 : 4;
@@ -1085,7 +1095,7 @@ function damage(t, amt, src, aoe) {
   // archers are the giant-killers: extra damage, and a chance to send it into a confused rage
   if (isGiant(t) && src && src.type === 'beastmaster') amt = Math.round(amt * BEASTMASTER.giantMul);   // the giant-killer's sling
   if (isGiant(t) && src && src.type === 'archer') {
-    amt = Math.round(amt * ARCHER_VS_GIANT);
+    if (!clanOf(G.teams[t.team]).thickHide) amt = Math.round(amt * ARCHER_VS_GIANT);   // Beast Clan giants' thick hides shrug off the bonus
     confuseGiant(t, GIANT_CONFUSE.chance);
   }
   // Parry: a ninja turns aside one blow every few seconds, stunning a melee attacker

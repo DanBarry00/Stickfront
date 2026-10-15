@@ -20,6 +20,7 @@
 //   vanishCd               ninja vanish cooldown (default NINJA_VANISH_CD)
 //   giantPop               population a giant takes (default 4)
 //   kestrelCrit            Kestrels' critical hit chance (default 0)
+//   thickHide              its giants take no extra damage from archers
 //   ai                     extra share of the army the computer aims for: { unitType: share }
 //   aiPray                 miners the computer keeps praying (at least)
 //   coming                 clan features not in the game yet (listed on the setup screen)
@@ -104,43 +105,46 @@ const CLANS = {
   beast: {
     name: 'Beast Clan',
     tagline: 'Giants, and the keepers who tame them.',
-    army: [{ type: 'miner', n: 2 }, { type: 'sword', n: 1 }, { type: 'beastmaster', n: 1 }],
+    army: [{ type: 'miner', n: 2 }, { type: 'giant', n: 1 }, { type: 'beastmaster', n: 1 }],
     free: { giant: ['blinders'] },
-    cost: { giant: { gold: -110, mana: -30 } },
+    cost: { giant: { gold: -150, mana: -45 }, beastmaster: { gold: -20 } },
     giantPop: 3,
+    hp: { giant: 1.2 },   // thick hides...
+    thickHide: true,      // ...that archers get no bonus against
     lockUnits: ['archer', 'flyer'],
-    ai: { giant: 0.08, spear: 0.08, beastmaster: 0.1 },
-    aiPray: 2,   // the computer keeps two miners praying for giant mana
-    strengths: ['Starts with a Swordwrath and a Beastmaster', 'Giants cost 340 gold + 90 mana and take 3 population', 'Blinders already researched', 'Clan unit: Beastmaster, a slinger who hits flyers, does double damage to giants and keeps your giants in line'],
+    ai: { giant: 0.12, spear: 0.08 },
+    strengths: ['Starts with a giant and a Beastmaster', 'Giants cost 300 gold + 75 mana, take 3 population and have 20% more health', 'Thick Hide: archers get no bonus damage against its giants', 'Beastmasters cost 120', 'Blinders already researched', 'Clan unit: Beastmaster, a slinger who hits flyers, does double damage to giants and keeps your giants in line'],
     weaknesses: ['No Archers and no Kestrels: only Beastmasters, Warlocks and Javelins reach flyers'],
   },
 
   shadow: {
     name: 'Shadow Clan',
     tagline: 'Glass cannons that strike from nowhere.',
-    army: [{ type: 'miner', n: 2 }, { type: 'ninja', n: 2 }],
-    free: { ninja: ['stars'] },
-    cost: { ninja: { gold: -25 } },
+    army: [{ type: 'miner', n: 2 }, { type: 'ninja', n: 3 }],
+    free: { ninja: ['stars', 'vital', 'parry'] },
+    cost: { ninja: { gold: -40 } },
     vanishCd: 3,
-    hp: { all: 0.85 },
-    dmg: { all: 1.15 },
+    hp: { all: 0.9 },
+    dmg: { all: 1.2 },
     lockUnits: ['spear'],
     lockUpgrades: { miner: ['walls'] },
     ai: { ninja: 0.2, saboteur: 0.06 },
-    strengths: ['Every unit deals 15% more damage', 'Starts with 2 ninjas and Throwing Stars', 'Ninjas cost 125 and vanish again after 3s', 'Clan unit: Saboteur, an unseen infiltrator that wrecks trenches and salts enemy gold mines'],
-    weaknesses: ['Every unit has 15% less health', 'No Spearton', 'Can\'t dig trenches'],
+    strengths: ['Every unit deals 20% more damage', 'Starts with 3 ninjas, Throwing Stars, Vital Points and Parry', 'Ninjas cost 110 and vanish again after 3s', 'Clan unit: Saboteur, an unseen infiltrator that wrecks trenches and salts enemy gold mines'],
+    weaknesses: ['Every unit has 10% less health', 'No Spearton', 'Can\'t dig trenches'],
   },
 
   sky: {
     name: 'Sky Clan',
     tagline: 'Rule the air; the ground is an afterthought.',
-    army: [{ type: 'miner', n: 2 }, { type: 'flyer', n: 2 }],
-    cost: { flyer: { gold: -25 } },
+    army: [{ type: 'miner', n: 2 }, { type: 'flyer', n: 3 }],
+    cost: { flyer: { gold: -35 } },
+    free: { flyer: ['scope', 'hawkeye'] },
     kestrelCrit: 0.1,
-    hp: { sword: 0.9, spear: 0.9 },
+    hp: { sword: 0.9, spear: 0.9, flyer: 1.25, firebird: 1.25 },
+    dmg: { flyer: 1.3 },
     lockUnits: ['giant'],
-    ai: { flyer: 0.15, firebird: 0.12 },
-    strengths: ['Starts with 2 Kestrels', 'Kestrels cost 150 and have a 10% critical hit chance', 'Clan-only: Hawk Eye (20% crit), Spyglass, Barbed Bolts II', 'Clan unit: Firebird, a flying bomber that drops fire pots on the ground below'],
+    ai: { flyer: 0.35, firebird: 0.12 },
+    strengths: ['Starts with 3 Kestrels, Long Sights (range 400, out-ranging archers) and Hawk Eye (20% crits)', 'Kestrels cost 140, deal 30% more damage and have 25% more health', 'Clan-only: Spyglass, Barbed Bolts II', 'Clan unit: Firebird, a flying bomber that drops fire pots on the ground below'],
     weaknesses: ['Swordwrath and Spearton have 10% less health', 'No Giants'],
   },
 };

@@ -97,7 +97,9 @@ function armyPower(teamId, nearX, radius) {
   for (const u of G.units) {
     if (u.team !== teamId || u.dead || u.type === 'miner') continue;
     if (nearX !== undefined && (u.inside || Math.abs(u.x - nearX) > radius)) continue;
-    p += (u.def.cost + (u.def.mana || 0)) * Math.max(0.2, u.hp / u.maxHp);
+    // what the unit cost this clan; giants count for less (archers shred them and they wander)
+    const c = unitCost(G.teams[u.team], u.type);
+    p += (c.gold + c.mana) * (isGiant(u) ? 0.6 : 1) * Math.max(0.2, u.hp / u.maxHp);
   }
   return p;
 }
@@ -135,8 +137,11 @@ class SmartAI {
     if ((c.mages || extra.warlock) && can('warlock') && count('warlock') < Math.floor(n * share('warlock', 1 / 7)) && team.mana > mageMana('warlock')) return 'warlock';
     // enemy Kestrels can only be answered from range: more archers (or whatever shoots for this clan)
     const enemyFlyers = G.units.filter(u => u.team !== this.id && !u.dead && isFlying(u)).length;
-    const shooter = can('archer') ? 'archer' : can('flyer') ? 'flyer' : can('beastmaster') ? 'beastmaster' : can('warlock') ? 'warlock' : null;
-    if (shooter && (shooter !== 'warlock' || team.mana > mageMana('warlock')) && count(shooter) < n * share(shooter, shooter === 'archer' ? 0.28 : 0.12) + enemyFlyers * 0.6) return shooter;
+    // the main ranged unit is the clan's favourite one (Kestrels for the Sky Clan, Beastmasters for the
+    // Beast Clan), otherwise archers; warlocks only when nothing else can shoot
+    const shooters = ['archer', 'flyer', 'beastmaster'].filter(can).sort((a, b) => (extra[b] || 0) - (extra[a] || 0));
+    const shooter = shooters[0] || (can('warlock') ? 'warlock' : null);
+    if (shooter && (shooter !== 'warlock' || team.mana > mageMana('warlock')) && count(shooter) < n * share(shooter, shooter === 'warlock' ? 0.12 : 0.28) + enemyFlyers * 0.6) return shooter;
     const front = can('spear') ? 'spear' : null;
     if (front && count(front) < n * share('spear', 0.2)) return front;
     if (can('flyer') && count('flyer') < Math.floor(n * share('flyer', c.flyers)) + (enemyFlyers ? 1 : 0)) return 'flyer';
@@ -263,9 +268,10 @@ class SmartAI {
 
     // also push out once the game has gone on a while and the armies are roughly even
     // attacking means walking into the enemy's castle archers, so they count as defenders
-    const fort = G.teams[foe].statue.dead ? 0 : G.teams[foe].archers.length * 150;
+    const fort = G.teams[foe].statue.dead ? 0 : G.teams[foe].archers.length * 300;   // long reach, faster when garrisoned
     const late = G.time > 210 && army.length >= 6 && ours > (theirs + fort) * 0.9;
-    const readyToAttack = (ours >= c.attackPower && ours > (theirs + fort) * c.edge) || (army.length >= c.bigArmy && ours > theirs) || late;
+    // never march with just a giant and a handful of troops: a lone giant charges off on its own
+    const readyToAttack = army.length >= 5 && ((ours >= c.attackPower && ours > (theirs + fort) * c.edge) || (army.length >= c.bigArmy && ours > theirs) || late);
     if (this.mode !== 'attack' && readyToAttack) {
       this.mode = 'attack';
       if (c.formations) formGroup(team, army, 'attack');
