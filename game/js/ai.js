@@ -25,13 +25,14 @@ class PoorAI {
       if (chance(0.75)) queueUnit(team, 'miner');
     } else if (chance(0.65)) {
       const r = Math.random();
-      queueUnit(team, r < 0.4 ? 'sword' : r < 0.58 ? 'archer' : r < 0.72 ? 'spear' : r < 0.8 ? 'ninja' : r < 0.86 ? 'flyer' : r < 0.93 ? 'cleric' : 'warlock');
+      const want = r < 0.4 ? 'sword' : r < 0.58 ? 'archer' : r < 0.72 ? 'spear' : r < 0.8 ? 'ninja' : r < 0.86 ? 'flyer' : r < 0.93 ? 'cleric' : 'warlock';
+      queueUnit(team, canTrain(team, want) ? want : 'sword');   // its clan may not have that unit
     } else if (chance(0.15)) queueUnit(team, 'miner');
 
     // Now and then wanders into a random upgrade when it has spare gold.
     if (team.gold > 320 && chance(0.2)) {
       const type = pick(RESEARCH_TYPES);
-      const options = UPGRADES[type].filter(u => !team.upgrades[type][u.key] && !['walls', 'prospect'].includes(u.key) && (!u.requires || team.upgrades[type][u.requires]));
+      const options = UPGRADES[type].filter(u => !team.upgrades[type][u.key] && !upgradeLocked(team, type, u.key) && !['walls', 'prospect'].includes(u.key) && (!u.requires || team.upgrades[type][u.requires]));
       if (options.length && !team.research[type]) startResearch(team, type, pick(options).key);
     }
 
@@ -81,7 +82,7 @@ const AI_RESEARCH = [
   ['cleric', 'big'], ['warlock', 'pool'], ['cleric', 'speed'], ['warlock', 'speed'], ['cleric', 'might'],
   ['warlock', 'might'], ['miner', 'pick2'], ['miner', 'bag2'], ['spear', 'shield2'], ['archer', 'fire'],
   ['sword', 'leap'], ['sword', 'rage2'], ['giant', 'stun'], ['giant', 'protein2'], ['castle', 'tithe2'],
-  ['castle', 'archer3'], ['miner', 'devout2'], ['miner', 'pan1'], ['miner', 'pan2'], ['giant', 'protein3'], ['castle', 'levy'],
+  ['castle', 'archer3'], ['castle', 'archer4'], ['miner', 'devout2'], ['miner', 'pan1'], ['miner', 'pan2'], ['giant', 'protein3'], ['castle', 'levy'],
 ];
 // Never researched by the AI because it doesn't use them: Masonry, Fortification, Prospecting.
 
@@ -112,24 +113,31 @@ class SmartAI {
     const c = this.cfg;
     const army = G.units.filter(u => u.team === this.id && !u.dead && u.type !== 'miner');
     const count = t => army.filter(u => u.type === t).length + queuedCount(team, t);
+    const can = t => canTrain(team, t);
+    const extra = clanOf(team).ai || {};   // the clan's favourite units get a bigger share
+    const share = (t, base) => base + (extra[t] || 0);
     // aim for a mixed army: a spear wall, plenty of swords, archers behind, some magic and a giant
     const n = army.length + 1;
-    if (c.giants && n >= 6 && count('giant') < 1 + Math.floor(n / 14) && team.mana > 200 && team.gold >= UNIT_TYPES.giant.cost) return 'giant';
-    if (c.mages && count('cleric') < Math.floor(n / 7) && team.mana > 120) return 'cleric';
-    if (c.mages && count('warlock') < Math.floor(n / 7) && team.mana > 120) return 'warlock';
-    // enemy Kestrels can only be answered from range: more archers (and some of our own Kestrels)
+    const giantCost = unitCost(team, 'giant');
+    if ((c.giants || extra.giant) && can('giant') && n >= 6 && count('giant') < 1 + Math.floor(n * share('giant', 1 / 14)) && team.mana > giantCost.mana + 80 && team.gold >= giantCost.gold) return 'giant';
+    const mageMana = t => unitCost(team, t).mana + 60;
+    if ((c.mages || extra.cleric) && can('cleric') && count('cleric') < Math.floor(n * share('cleric', 1 / 7)) && team.mana > mageMana('cleric')) return 'cleric';
+    if ((c.mages || extra.warlock) && can('warlock') && count('warlock') < Math.floor(n * share('warlock', 1 / 7)) && team.mana > mageMana('warlock')) return 'warlock';
+    // enemy Kestrels can only be answered from range: more archers (or whatever shoots for this clan)
     const enemyFlyers = G.units.filter(u => u.team !== this.id && !u.dead && isFlying(u)).length;
-    if (count('archer') < n * 0.28 + enemyFlyers * 0.6) return 'archer';
-    if (count('spear') < n * 0.2) return 'spear';
-    if (count('flyer') < Math.floor(n * c.flyers) + (enemyFlyers ? 1 : 0)) return 'flyer';
-    if (count('ninja') < Math.floor(n * c.ninjas)) return 'ninja';
+    const shooter = can('archer') ? 'archer' : can('flyer') ? 'flyer' : can('warlock') ? 'warlock' : null;
+    if (shooter && (shooter !== 'warlock' || team.mana > mageMana('warlock')) && count(shooter) < n * share(shooter, shooter === 'archer' ? 0.28 : 0.12) + enemyFlyers * 0.6) return shooter;
+    const front = can('spear') ? 'spear' : null;
+    if (front && count(front) < n * share('spear', 0.2)) return front;
+    if (can('flyer') && count('flyer') < Math.floor(n * share('flyer', c.flyers)) + (enemyFlyers ? 1 : 0)) return 'flyer';
+    if (can('ninja') && count('ninja') < Math.floor(n * share('ninja', c.ninjas))) return 'ninja';
     return 'sword';
   }
 
   // The next upgrade this AI wants (null when nothing is left or its building is busy).
   nextResearch(team) {
     for (const [type, key] of AI_RESEARCH) {
-      if (team.upgrades[type][key]) continue;
+      if (team.upgrades[type][key] || upgradeLocked(team, type, key)) continue;
       const d = upgradeDef(type, key);
       if (this.cfg.research === 'basic' && (d.requires || ['giant', 'cleric', 'warlock', 'castle'].includes(type))) continue;
       if (d.requires && !team.upgrades[type][d.requires]) continue;

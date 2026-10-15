@@ -17,7 +17,7 @@ const STATUE_HP = 2500;
 const STATUE_X = 800;        // distance of each statue from its world edge
 const GATE_X = 560;          // castle front wall (gate) distance from world edge
 const BUILD_X = { sword: 95, spear: 215, archer: 335, miner: 455 };   // building centers inside the castle
-const ARCHER_XS = [520, 400, 280];   // castle archer spots on the rampart (extra ones are castle upgrades)
+const ARCHER_XS = [520, 400, 280, 104];   // castle archer spots on the rampart (extra ones are castle upgrades; the 4th is for clans with 4 slots)
 // Castle archers cover the ground out to just past where an enemy archer with the same bow
 // upgrades has to stand to shoot the statue: statue + its half-width + archer range + this margin.
 const CASTLE_REACH_PAD = 60;
@@ -264,6 +264,7 @@ const UPGRADES = {
     { key: 'tithe2', name: 'Golden Idol', cost: 300, mana: 75, time: 35, team: true, requires: 'tithe', desc: `Statue income rises to ${TITHE_GOLD[2]} gold per second.` },
     { key: 'archer2', name: 'Second Castle Archer', cost: 200, mana: 50, time: 25, team: true, desc: 'Posts another archer on the rampart. Castle archers always use your researched archer upgrades.' },
     { key: 'archer3', name: 'Third Castle Archer', cost: 300, mana: 100, time: 30, team: true, requires: 'archer2', desc: 'Posts a third archer on the rampart.' },
+    { key: 'archer4', name: 'Fourth Castle Archer', cost: 400, mana: 150, time: 35, team: true, requires: 'archer3', desc: 'Posts a fourth archer on the rampart (clans with 4 castle archer slots only).' },
     { key: 'levy', name: 'Levy', cost: 300, mana: 100, time: 35, team: true, desc: `A free Swordwrath marches out of the Barracks every ${LEVY_INTERVAL} seconds (if you have room in your population).` },
   ],
 };
@@ -283,6 +284,13 @@ const MINE_LAYOUTS = {
   scarce: { name: 'Scarce, rich veins', first: [1100, 1200], gap: [380, 480], n: [2, 2], rich: 1.8, center: 1, weight: 1 },
 };
 // The Shrine stands in the middle of some maps. Hold the ground around it to own it.
+// How much gold the deposits hold (chosen in the skirmish setup, or rolled by the seed).
+const GOLD_LEVELS = [
+  { key: 'scarce', name: 'Scarce gold', mul: 0.6, weight: 1 },
+  { key: 'normal', name: 'Normal gold', mul: 1, weight: 2 },
+  { key: 'rich', name: 'Rich gold', mul: 1.6, weight: 1 },
+];
+// The Monolith (called the Shrine in the code) stands in the middle of some maps.
 const SHRINE = {
   chance: 0.4, radius: 170, capTime: 8,    // seconds for one uncontested unit (more units capture faster, up to 3x)
   gold: 1.5, mana: 0.75,                    // income per second for the owner

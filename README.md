@@ -1,9 +1,29 @@
 # Stickfront (prototype)
 
-A Stick War 2–style side-scrolling battle game. It's a test build with randomly generated maps (each with its own lane depth, gold layout and sometimes a Shrine to fight over), a castle you can garrison, statues with health and mana, gold mines, miners, seven soldier types plus giants (including vanishing ninjas and flying Kestrels), tiered upgrades, and a computer opponent with three difficulty levels.
+A Stick War 2–style side-scrolling battle game. It's a test build with randomly generated maps (each with its own lane depth, gold layout and sometimes a Monolith to fight over), nine clans to choose from, a castle you can garrison, statues with health and mana, gold mines, miners, seven soldier types plus giants (including vanishing ninjas and flying Kestrels), tiered upgrades, and a computer opponent with three difficulty levels.
 
 ## Run it
 Double-click **`Play Stickfront.bat`**. It opens the game in its own Microsoft Edge app window. If Edge isn't installed, it opens in your default browser. Nothing else needs to be installed.
+
+## Starting a skirmish
+The setup screen lets you choose **your clan** and the **enemy clan** (or **Random** for either; random clans are revealed when the battle begins, and both sides can draw the same clan), the opponent's **difficulty**, whether there is a **Monolith**, how much **gold** the deposits hold, and the map **seed**. The map behind the menu is a live preview of your choices. Your settings are remembered. Restart and Rematch keep the same clans and map.
+
+## Clans
+Each clan sets your starting gold, mana and army, which upgrades are already researched, which units and upgrades you can't use, some price changes and a few general buffs. The Base Clan is the standard game; every other clan is meant to be stronger overall, with a weakness to play around. Units your clan can't train are left off the training bar, and upgrades it can't research are left out of the building panels. Definitions live in `game/js/clans.js`.
+
+| Clan | Start | Strengths | Weaknesses |
+|---|---|---|---|
+| **Base** | 2 miners, a veteran Swordwrath with every sword upgrade | Every unit and upgrade | No head start |
+| **Archer** | 2 miners, 2 archers | Recurve Bows, Eagle Eye, Vital Points, Long Sights; archers and Kestrels 15 gold cheaper; 4 castle archer slots | No Iron/Crested Helmets or Tower Shields; giants can't get Blinders |
+| **Defense** | 2 miners; a trench held by a Spearton and an archer | Earthworks, Shields, Military Training, Rallying Cry, Recurve Bows, a second castle archer; 4 castle archer slots | No Warlocks or Giants |
+| **Sword** | 2 miners, 2 Swordwrath | Population 35; Levy, Military Training, Adrenaline | No Kestrels or Throwing Stars; no Flaming Arrows; no trenches |
+| **Mercenary** | 4 miners, 1 plain Swordwrath | Bigger Bags, Steel Pickaxes, Iron Pans, Prospecting, Statue Offerings; every kill pays 20% of the victim's gold cost | Praying gives half the mana; weakest starting army |
+| **Arcane Circle** | 150 mana; 2 miners, a Cleric and a Warlock | Healing Pool and Blight Pool; mages cost 35 mana; praying gives 50% more | Swordwrath and Spearton −10% health; 1 castle archer; no Giants |
+| **Beast** | 2 miners, 2 Swordwrath | Giants cost 340 gold + 90 mana and take 3 population; Blinders researched | No Archers or Kestrels |
+| **Shadow** | 2 miners, 2 ninjas | All units +15% damage; ninjas cost 125, vanish again after 3s; Throwing Stars researched | All units −15% health; no Spearton; no trenches |
+| **Sky** | 2 miners, 2 Kestrels | Kestrels cost 150 and crit 10% of the time | Swordwrath and Spearton −10% health; no Giants |
+
+Still to come: clan-only upgrades (Javelins, Great Swords, Longbows and the other extra tiers, Levy II, Hawk Eye, the extra mining tiers) and the unique units (Ballista, Spirit Golem, Beastmaster, Saboteur, Firebird). The setup screen lists these as "coming soon" for each clan.
 
 ## Units
 | Unit | Cost | Building | Role |
@@ -63,18 +83,19 @@ Attack together and Advance together march with Spearton in front, Swordwrath an
 The whole formation walks smoothly at the pace of its slowest member: faster troops simply walk slower (their legs slow down to match) instead of hurrying ahead and stopping. Archers, warlocks and Kestrels at the back fire on the move, stopping only for the shot itself and then hurrying back into rank, so their shooting never halts the march. The line only stops when its front-line troops are fighting in melee, or if someone falls far behind.
 
 ## Difficulty
-Choose it on the title screen. The pause menu shows the current setting.
+Choose it on the setup screen. The pause menu shows the current setting. The computer plays whichever clan it was given, using only that clan's units and upgrades and leaning toward its strengths.
 - **Easy:** the old distractible opponent. Meant for learning the game.
 - **Normal:** a steady economy, a mixed army and tier-1 research. It holds its line in front of its mines, pulls its miners inside when raided, attacks when it has the edge (castle archers count as defenders) and falls back when it is losing. Meant to need some strategy and formations to beat.
 - **Hard:** researches everything it uses (all but Earthworks, Palisade and Prospecting), uses mana, mages and giants, refits veterans, braces shield walls against archers, and attacks and retreats in formation. Meant to challenge a good player who still wins most of the time.
 
-Both Normal and Hard claim the Shrine when their army is strong enough, and save up for research when they've gone too long without any (unless they're behind). A harder level above Hard is planned.
+Both Normal and Hard claim the Monolith when their army is strong enough, and save up for research when they've gone too long without any (unless they're behind). A harder level above Hard is planned.
 
 ## Maps
-Every map comes from a seed (shown on the title screen). Besides its looks, each map rolls three layout features that change how it plays:
+Every map comes from a seed (shown on the setup screen; you can type one in). Besides its looks, each map has these layout features:
 - **Lane depth:** *Narrow pass* (tight ranks, so splash and fireballs hit more), *Open road*, or *Broad field* (room to spread out).
 - **Gold layout:** *Scattered gold* (the classic spread), *Gold close to home* (safe but poorer deposits), *Contested frontier* (richer deposits further out), or *Scarce, rich veins* (two big deposits per side). Both sides always get mirror-image deposits with the same gold. Some layouts add a rich vein in the middle.
-- **The Shrine** (on about 4 in 10 maps, in place of the middle vein): soldiers near it pull it toward their side while no enemy soldier contests it (more soldiers capture faster, up to 3×; miners don't count). Whoever owns it earns +1.5 gold and +0.75 mana per second. An owned shrine has to be neutralised before it changes hands.
+- **Gold amount** (setup option): *Scarce* (40% less in every deposit), *Normal*, *Rich* (60% more) or *Random*.
+- **The Monolith** (setup option: Off, On or Random, which puts it on about 4 in 10 maps), in place of the middle vein: soldiers near it pull it toward their side while no enemy soldier contests it (more soldiers capture faster, up to 3×; miners don't count). Whoever owns it earns +1.5 gold and +0.75 mana per second. An owned Monolith has to be neutralised before it changes hands.
 
 ## After the battle
 The victory/defeat screen compares both sides (units trained, gold, mana, kills, peak army, upgrades) and has timeline charts for army strength, gold gathered, miners, upgrades and kills. Key moments, like Shrine captures and statues falling, are marked on the charts. It also lists a few plain-language notes on where the battle was won or lost.
@@ -82,7 +103,7 @@ The victory/defeat screen compares both sides (units trained, gold, mana, kills,
 ## Balance / debug tools
 - **F3** toggles the debug overlay. For each side it shows gold/s and mana/s (30s average), bank, population, army value, kills, stance and AI mode, research in progress, and a table of damage per second by unit type (10s average, per unit and in total, castle archers included).
 - **F4** (with the overlay on) hands your side to an AI: Easy, Normal, Hard, then back to you. With **T** going up to 8× while the overlay is on, you can watch AI-vs-AI matches.
-- **Headless test:** open the browser console (F12) and run `runBalanceTest('hard', 'normal', 6)`. It plays 6 random maps twice each, with each AI on both sides, as fast as your computer can, then prints a table and the win counts. Run it after changing numbers in `config.js`.
+- **Headless tests:** open the browser console (F12). `runBalanceTest('hard', 'normal', 6)` plays 6 random maps twice each, with each AI on both sides (both on the Base Clan), as fast as your computer can, then prints a table and the win counts. `runClanTest('sword', 'archer', 6)` does the same for two clans, both played by the Hard AI (pass `'normal'` or `'easy'` as a 4th argument to change that). Run them after changing numbers in `config.js` or `clans.js`.
 
 ## Mages and spells
 The Cleric and Warlock are exact opposites. They have the same cost, health, range and heal/damage, and each research pair costs the same. Each spell is unlocked by research:
@@ -143,11 +164,12 @@ The Cleric and Warlock are exact opposites. They have the same cost, health, ran
 
 ## Code layout (`game/js`)
 - `config.js`: balance numbers, unit stats, upgrades and visual themes
-- `map.js`: generates the map from a seed (scenery, lane depth, gold layout, Shrine)
+- `map.js`: generates the map from a seed (scenery, lane depth, gold layout and amount, Monolith)
 - `draw.js`: stick figures and their animations, statues, the castle (with its stream), trenches, mines, props and icons
 - `units.js`: unit behaviour (mining, praying, panning, building, combat, trench defense, refit, buffs)
-- `game.js`: game state, training queues, research, trenches, castle archers, the Shrine, projectiles
+- `game.js`: game state, training queues, research, trenches, castle archers, the Monolith, projectiles
 - `giants.js`: giant obedience, targeting, splash, knockback and the statue giant
 - `ai.js`: the computer opponents (Easy, Normal, Hard)
-- `stats.js`: the battle timeline and end-screen charts, the debug overlay, autopilot and the headless balance test
+- `clans.js`: the clans (starting armies, free and locked upgrades, prices, buffs) and the helpers the game uses to apply them
+- `stats.js`: the battle timeline and end-screen charts, the debug overlay, autopilot and the headless balance and clan tests
 - `render.js`, `ui.js`, `main.js`: rendering, input, the HUD and command card, and the main loop

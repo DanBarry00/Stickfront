@@ -164,6 +164,7 @@ function applyPerks(u) {
       u.aggro = u.range + 40;
       u.dmg = P.barbs ? 21 : d.dmg;
       u.atk = P.winch ? d.atkTime * 0.7 : d.atkTime;
+      u.crit = G && G.teams ? clanOf(G.teams[u.team]).kestrelCrit || 0 : 0;   // Sky Clan Kestrels crit
     }
   } else if (u.type === 'spear') {
     u.armor = 0.1 + (P.shield ? 0.2 : 0) + (P.shield2 ? 0.1 : 0) + (P.helm ? 0.15 : 0);
@@ -182,6 +183,8 @@ function applyPerks(u) {
     u.giantScale = GIANT_SCALE * (1 + GIANT_TIER_STEP.size * tier);
     if (u.scale) u.scale = u.giantScale;
   }
+  // clan health buffs and penalties (e.g. Shadow Clan -15%, Arcane Swordwrath -10%)
+  if (G && G.teams) u.maxHp *= clanMul(G.teams[u.team], 'hp', u.type);
   if (u.hp !== undefined) u.hp = u.maxHp * frac;
 }
 
@@ -210,7 +213,7 @@ function updateStealth(u, dt) {
   u.vanishCd -= dt;
   if (u.stealth && (u.swing >= 0 || u.stillT > 0.3 || u.inside)) {
     u.stealth = false;
-    u.vanishCd = NINJA_VANISH_CD;
+    u.vanishCd = clanOf(G.teams[u.team]).vanishCd || NINJA_VANISH_CD;   // Shadow Clan ninjas vanish sooner
   } else if (!u.stealth && u.moving && u.vanishCd <= 0 && u.swing < 0 && !u.inside) {
     u.stealth = true;
   }
@@ -250,7 +253,7 @@ const rageOf = u => (u.lastStand > 0 ? 1 : u.perks.rage ? clamp(1 - u.hp / u.max
 // War Blessing / Enfeeble and Haste / Hex of Slowness are exact opposites, so they cancel out.
 const spellDmg = u => 1 + (u.fx.empower > 0 ? SPELLS.empower.power : 0) - (u.fx.enfeeble > 0 ? SPELLS.enfeeble.power : 0);
 const spellSpeed = u => 1 + (u.fx.haste > 0 ? SPELLS.haste.power : 0) - (u.fx.slow > 0 ? SPELLS.slow.power : 0);
-const dmgMult = u => (1 + 0.7 * rageOf(u)) * (1 + 0.04 * u.drillN) * (1 + 0.1 * u.insp) * spellDmg(u);
+const dmgMult = u => (1 + 0.7 * rageOf(u)) * (1 + 0.04 * u.drillN) * (1 + 0.1 * u.insp) * spellDmg(u) * clanMul(G.teams[u.team], 'dmg', u.type);
 const atkTimeOf = u => (u.atk * (1 - 0.45 * rageOf(u)) * (1 - 0.08 * u.insp)) / spellSpeed(u);
 const wallHeight = w => (w.tier === 2 ? WALL_H[1] : WALL_H[0]);
 
@@ -919,7 +922,7 @@ function doMana(u, team, dt) {
   const prev = u.pray;
   u.pray += dt / PRAY_TIME;
   if (Math.floor(prev + 0.5) < Math.floor(u.pray + 0.5)) {
-    const amt = Math.round(MANA_PER_PRAYER * u.manaMul);
+    const amt = Math.round(MANA_PER_PRAYER * u.manaMul * (clanOf(team).prayer || 1));   // Mercenaries pray poorly, the Arcane Circle well
     team.mana = Math.min(MAX_MANA, team.mana + amt);
     G.stats[u.team].mana += amt;
     st.glow = 1;
@@ -1102,7 +1105,17 @@ function killUnit(u, src) {
   freePanSlot(u);
   leaveWall(u);
   addDecal(u.x - u.facing * 14, u.y + 1, rnd(6, 10), 0.6);
-  if (src) G.stats[src.team].kills++;
+  if (src) {
+    G.stats[src.team].kills++;
+    // Mercenary bounty: a share of what the fallen unit cost
+    const bounty = clanOf(G.teams[src.team]).bounty;
+    if (bounty && src.team !== u.team) {
+      const pay = Math.round(unitCost(G.teams[u.team], u.type).gold * bounty);
+      G.teams[src.team].gold += pay;
+      G.stats[src.team].gold += pay;
+      if (src.team === 0) floatText(u.x, u.y - 60, `+${pay}`, '#e0bf5a');
+    }
+  }
   // victory: the statue is gone and now so is the giant that was sealed inside it
   if (u.isStatueGiant && !G.over) {
     G.over = { winner: 1 - u.team };

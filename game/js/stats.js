@@ -108,7 +108,7 @@ function debugTeamHTML(id) {
   const goldRate = rate(S, INCOME_WINDOW, s => s.gold[id]);
   const manaRate = rate(S, INCOME_WINDOW, s => s.mana[id]);
   const ai = id === 1 ? G.ai : G.autopilot;
-  const who = id === 1 ? `${AI_LEVELS[G.difficulty].name} AI` : G.autopilot ? `${AI_LEVELS[d.autopilotLevel].name} AI (autopilot)` : 'You';
+  const who = (id === 1 ? `${AI_LEVELS[G.difficulty].name} AI` : G.autopilot ? `${AI_LEVELS[d.autopilotLevel].name} AI (autopilot)` : 'You') + ` · ${clanOf(team).name}`;
   const rows = DBG_KINDS.map(k => {
     const n = k === 'castle' ? (team.statue.dead ? 0 : team.archers.length) : units.filter(u => u.type === k).length;
     const dps = rate(S, DPS_WINDOW, s => s.dmg[id][k] || 0);
@@ -121,7 +121,7 @@ function debugTeamHTML(id) {
     <div class="dteam t${id}">
       <h3>${who}</h3>
       <div class="dline"><span>Gold/s</span><b>${goldRate.toFixed(1)}</b><span>Mana/s</span><b>${manaRate.toFixed(1)}</b></div>
-      <div class="dline"><span>Bank</span><b>${Math.floor(team.gold)} / ${Math.floor(team.mana)}</b><span>Pop</span><b>${popUsed(team)}/${POP_CAP}</b></div>
+      <div class="dline"><span>Bank</span><b>${Math.floor(team.gold)} / ${Math.floor(team.mana)}</b><span>Pop</span><b>${popUsed(team)}/${popCap(team)}</b></div>
       <div class="dline"><span>Army value</span><b>${Math.round(armyPower(id))}</b><span>Kills</span><b>${G.stats[id].kills}</b></div>
       <div class="dline"><span>Stance</span><b>${team.stance}${ai && ai.mode ? ' · ' + ai.mode : ''}</b><span>Upgrades</span><b>${RESEARCH_TYPES.reduce((n, t) => n + Object.keys(team.upgrades[t]).length, 0)}</b></div>
       <table><tr><th>Unit</th><th>#</th><th>DPS</th><th>each</th><th>total</th></tr>${rows}</table>
@@ -132,7 +132,7 @@ function debugTeamHTML(id) {
 function refreshDebug() {
   if (!G.dbg.on) return;
   const s = G.shrine;
-  const shrine = s ? `Shrine: ${s.owner < 0 ? 'neutral' : s.owner === 0 ? 'yours' : 'enemy'} (${Math.round(s.cap * 100)}%${s.contest ? ', contested' : ''})` : 'No shrine';
+  const shrine = s ? `Monolith: ${s.owner < 0 ? 'neutral' : s.owner === 0 ? 'yours' : 'enemy'} (${Math.round(s.cap * 100)}%${s.contest ? ', contested' : ''})` : 'No Monolith';
   $('debug').innerHTML = `
     <div class="dhead">
       <b>Balance / debug</b>
@@ -154,13 +154,21 @@ function updateDebug(dt) {
 // From the browser console (F12): runBalanceTest('hard', 'normal', 6) plays 6 maps twice (each AI
 // gets both sides) as fast as the computer can, and reports who won. Useful after tuning config.js.
 
-function playHeadless(seed, left, right, maxTime) {
+// clans: [left, right] clan keys (default: both Base Clan, so AI-vs-AI tests compare AIs fairly)
+function playHeadless(seed, left, right, maxTime, clans = ['base', 'base']) {
   setDifficulty(right);
-  newGame(seed);
+  newGame(seed, clans);
   G.state = 'sim';
   G.autopilot = left === 'easy' ? new PoorAI(0) : new SmartAI(0, left);
   while (!G.over && G.time < maxTime) update(1 / 30);
-  return { seed, winner: G.over ? (G.over.winner === 0 ? left : right) : 'draw', time: Math.round(G.time), map: `${G.map.lane.key}/${G.map.mineLayout.key}${G.shrine ? '/shrine' : ''}` };
+  return { seed, clans: clans.join(' vs '), winner: G.over ? G.over.winner : 'draw', time: Math.round(G.time), map: `${G.map.lane.key}/${G.map.mineLayout.key}${G.shrine ? '/monolith' : ''}` };
+}
+
+// Restores the player's settings and shows the title screen after a test.
+function endTest(keep) {
+  setDifficulty(keep);
+  newGame(randomSeed());
+  showTitle();
 }
 
 function runBalanceTest(a, b, maps = 6, maxTime = 1500) {
@@ -169,13 +177,28 @@ function runBalanceTest(a, b, maps = 6, maxTime = 1500) {
     const seed = randomSeed();
     for (const [l, r] of [[a, b], [b, a]]) {
       const g = playHeadless(seed, l, r, maxTime);
-      wins[g.winner]++;
+      wins[g.winner === 'draw' ? 'draw' : g.winner === 0 ? l : r]++;
       games.push(g);
     }
   }
-  setDifficulty(keep);
-  newGame(randomSeed());
-  showTitle();
+  endTest(keep);
+  console.table(games);
+  return wins;
+}
+
+// Clan against clan, both played by the same AI level, each clan on both sides of every map.
+// From the console: runClanTest('sword', 'archer', 6) or runClanTest('sword', 'archer', 6, 'normal').
+function runClanTest(clanA, clanB, maps = 6, level = 'hard', maxTime = 1500) {
+  const keep = AI_DIFFICULTY, games = [], wins = { [clanA]: 0, [clanB]: 0, draw: 0 };
+  for (let i = 0; i < maps; i++) {
+    const seed = randomSeed();
+    for (const clans of [[clanA, clanB], [clanB, clanA]]) {
+      const g = playHeadless(seed, level, level, maxTime, clans);
+      wins[g.winner === 'draw' ? 'draw' : clans[g.winner]]++;
+      games.push(g);
+    }
+  }
+  endTest(keep);
   console.table(games);
   return wins;
 }
@@ -259,8 +282,8 @@ function battleInsights(won) {
   if (peak(me, 'army') < peak(foe, 'army') * 0.8) out.push(`Your strongest army was worth ${peak(me, 'army')}; the enemy's peaked at ${peak(foe, 'army')}.`);
   if (end.upgrades < endFoe.upgrades - 3) out.push(`Research: you finished ${end.upgrades} upgrades, the enemy ${endFoe.upgrades}.`);
   if (G.stats[me].kills < G.stats[foe].kills * 0.7) out.push(`Trades: you killed ${G.stats[me].kills} units and lost about ${G.stats[foe].kills}. Fight near your castle archers, or in formation behind a spear line.`);
-  const sh = G.events.find(e => e.text.includes('Shrine') && e.team === foe);
-  if (sh) out.push(`The enemy held the Shrine from ${Math.floor(sh.t / 60)}:${String(Math.floor(sh.t % 60)).padStart(2, '0')}, which pays ${SHRINE.gold} gold and ${SHRINE.mana} mana every second.`);
+  const sh = G.events.find(e => e.text.includes('Monolith') && e.team === foe);
+  if (sh) out.push(`The enemy held the Monolith from ${Math.floor(sh.t / 60)}:${String(Math.floor(sh.t % 60)).padStart(2, '0')}, which pays ${SHRINE.gold} gold and ${SHRINE.mana} mana every second.`);
   if (won && !out.length) out.push('A clean win: you matched or beat the enemy in economy, army and research.');
   return out.slice(0, 4);
 }

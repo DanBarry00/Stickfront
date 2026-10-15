@@ -11,6 +11,15 @@ function setDifficulty(d) {
   AI_DIFFICULTY = d;
   try { localStorage.setItem('stickfront.difficulty', d); } catch (e) { /* storage unavailable */ }
 }
+// Skirmish setup from the title screen, remembered between sessions. Clans may be 'random';
+// they are decided when the battle begins. monolith: off | on | random; gold: scarce | normal | rich | random.
+let SETUP = (() => {
+  const def = { clan: 'base', enemy: 'random', monolith: 'random', gold: 'random' };
+  try { return { ...def, ...JSON.parse(localStorage.getItem('stickfront.setup') || '{}') }; } catch (e) { return def; }
+})();
+function saveSetup() {
+  try { localStorage.setItem('stickfront.setup', JSON.stringify(SETUP)); } catch (e) { /* storage unavailable */ }
+}
 let RT = 0;     // real time in seconds, drives cosmetic animation
 
 const perType = (make, types = UNIT_ORDER) => Object.fromEntries(types.map(t => [t, make(t)]));
@@ -19,14 +28,14 @@ function makeCastleArcher(team, i) {
   return { x: team.edge(ARCHER_XS[i]), y: WALL_TOP - 8, phase: 'idle', k: rnd(0, 0.5), fa: 0.4, f: team.dir, seed: i * 3 + team.id };
 }
 
-function makeTeam(id, map) {
+function makeTeam(id, map, clanKey) {
   const dir = id === 0 ? 1 : -1;
   const edge = x => (id === 0 ? x : WORLD_W - x);
-  const style = TEAM_STYLE[id];
+  const style = TEAM_STYLE[id], clan = CLANS[clanKey];
   const team = {
-    id, dir, edge,
-    gold: START_GOLD,
-    mana: 0,
+    id, dir, edge, clanKey,
+    gold: clan.gold !== undefined ? clan.gold : START_GOLD,
+    mana: clan.mana || 0,
     stance: 'defend',
     musterX: null,            // where newly trained soldiers gather; null = follow the stance
     minerDefault: 'mine',     // what newly trained miners go do: 'mine' | 'pray' | 'pan'
@@ -45,14 +54,43 @@ function makeTeam(id, map) {
       stone: mixHex(grit(style.statue), map.theme.rock, 0.25),
     },
   };
-  team.archers = [makeCastleArcher(team, 0)];
+  // the clan's head start: upgrades already researched (extra castle archers are posted at once)
+  for (const [type, keys] of Object.entries(clan.free || {})) for (const k of keys) team.upgrades[type][k] = true;
+  team.archers = [];
+  for (let i = 0; i < ARCHER_XS.length; i++) if (i === 0 || team.upgrades.castle['archer' + (i + 1)]) team.archers.push(makeCastleArcher(team, i));
   // castle archers shoot as archers (extra damage and confusion against giants, kills credited)
   team.castleSrc = { team: id, type: 'archer', castle: true, isStructure: true, pierceHalf: false };
   return team;
 }
 
-function newGame(seed) {
-  const map = generateMap(seed);
+// The clan's starting army beside the statue (and its trench, for the Defense Clan). Starting
+// units carry the clan's researched upgrades; 'all' gives every upgrade of that unit.
+function spawnClanArmy(t) {
+  const clan = clanOf(t);
+  const trench = clan.trench ? placeWall(t, t.edge(1000), [], true) : null;
+  if (trench) { trench.progress = 1; trench.hp = trench.max; }
+  let k = 0;
+  for (const g of clan.army || []) {
+    for (let n = 0; n < g.n; n++) {
+      const miner = g.type === 'miner';
+      const x = t.statue.x + t.dir * (miner ? rnd(30, 100) : 150 + (k % 3) * 25), y = miner ? rnd(LANE_TOP + 10, LANE_BOT - 10) : LANE_TOP + 30 + (k++ % 4) * 22;
+      const u = spawnUnit(t, g.type, x, y);
+      u.perks = g.perks === 'all' ? Object.fromEntries(UPGRADES[g.type].map(d => [d.key, true])) : { ...t.upgrades[g.type] };
+      applyPerks(u);
+      u.hp = u.maxHp;
+      if (isFlying(u)) u.alt = FLY_ALT;
+      if (g.at === 'trench' && trench) {
+        if (u.type === 'sword' || u.type === 'spear') manWall(t, [u], trench);
+        else setOrder(u, { type: 'hold', x: trench.x - t.dir * 60, y: rowY(2 + n) });
+      }
+    }
+  }
+}
+
+// clans: [player, enemy] clan keys; by default taken from the setup (random ones decided now).
+function newGame(seed, clans) {
+  const map = generateMap(seed, { monolith: SETUP.monolith, gold: SETUP.gold });
+  clans = clans || [resolveClan(SETUP.clan), resolveClan(SETUP.enemy)];
   G = {
     map, seed,
     state: 'title', paused: false, speed: 1, time: 0,
@@ -65,15 +103,9 @@ function newGame(seed) {
     stats: [0, 1].map(() => ({ trained: 0, gold: 0, mana: 0, kills: 0 })),
     weather: [],
   };
-  G.teams = [0, 1].map(id => makeTeam(id, map));
-  for (const t of G.teams) {
-    for (let i = 0; i < 2; i++) spawnUnit(t, 'miner', t.statue.x + t.dir * rnd(30, 100), rnd(LANE_TOP + 10, LANE_BOT - 10));
-    // each side starts with one veteran Swordwrath carrying every sword upgrade
-    const vet = spawnUnit(t, 'sword', t.statue.x + t.dir * 150, LANE_TOP + 40);
-    for (const d of UPGRADES.sword) vet.perks[d.key] = true;
-    applyPerks(vet);
-    vet.hp = vet.maxHp;
-  }
+  G.clans = clans;
+  G.teams = [0, 1].map(id => makeTeam(id, map, clans[id]));
+  for (const t of G.teams) spawnClanArmy(t);
   G.difficulty = AI_DIFFICULTY;
   G.ai = AI_DIFFICULTY === 'easy' ? new PoorAI(1) : new SmartAI(1, AI_DIFFICULTY);
   initWeather();
@@ -109,8 +141,8 @@ function spawnUnit(team, type, x, y) {
 
 function popUsed(team) {
   let n = 0;
-  for (const g of TRAIN_GROUPS) for (const item of team.queues[g.key]) n += UNIT_TYPES[item.type].pop;
-  for (const u of G.units) if (u.team === team.id && !u.dead) n += u.def.pop;
+  for (const g of TRAIN_GROUPS) for (const item of team.queues[g.key]) n += unitPop(team, item.type);
+  for (const u of G.units) if (u.team === team.id && !u.dead) n += unitPop(team, u.type);
   return n;
 }
 
@@ -118,16 +150,17 @@ function popUsed(team) {
 const queuedCount = (team, type) => team.queues[groupOf(type).key].filter(item => item.type === type).length;
 
 function queueUnit(team, type) {
-  const def = UNIT_TYPES[type], q = team.queues[groupOf(type).key];
+  const def = UNIT_TYPES[type], q = team.queues[groupOf(type).key], cost = unitCost(team, type);
   const say = msg => { if (team.id === 0) toast(msg); return false; };
   if (G.over) return false;
-  if (team.gold < def.cost) return say('Not enough gold');
-  if (team.mana < (def.mana || 0)) return say('Not enough mana');
-  if (popUsed(team) + def.pop > POP_CAP) return say('Population limit reached');
+  if (!canTrain(team, type)) return say(`The ${clanOf(team).name} can't train ${def.name}s`);
+  if (team.gold < cost.gold) return say('Not enough gold');
+  if (team.mana < cost.mana) return say('Not enough mana');
+  if (popUsed(team) + unitPop(team, type) > popCap(team)) return say('Population limit reached');
   if (q.length >= QUEUE_MAX) return say(`The ${groupOf(type).name} queue is full`);
-  team.gold -= def.cost;
-  team.mana -= def.mana || 0;
-  q.push({ type, t: 0 });
+  team.gold -= cost.gold;
+  team.mana -= cost.mana;
+  q.push({ type, t: 0, cost });   // remember the price paid, for refunds
   return true;
 }
 
@@ -136,9 +169,9 @@ function dequeueUnit(team, type) {
   const q = team.queues[groupOf(type).key];
   const i = q.map(item => item.type).lastIndexOf(type);
   if (i < 0) return;
-  q.splice(i, 1);
-  team.gold += UNIT_TYPES[type].cost;
-  team.mana = Math.min(MAX_MANA, team.mana + (UNIT_TYPES[type].mana || 0));
+  const [item] = q.splice(i, 1);
+  team.gold += item.cost.gold;
+  team.mana = Math.min(MAX_MANA, team.mana + item.cost.mana);
 }
 
 // Each group trains the unit at the head of its queue; the rest wait their turn.
@@ -165,6 +198,7 @@ function startResearch(team, type, key) {
   const def = upgradeDef(type, key);
   const say = msg => { if (team.id === 0) toast(msg); return false; };
   if (G.over || team.upgrades[type][key]) return false;
+  if (upgradeLocked(team, type, key)) return say(`The ${clanOf(team).name} can't research ${def.name}`);
   if (def.requires && !team.upgrades[type][def.requires]) return say(`Requires ${upgradeDef(type, def.requires).name}`);
   if (team.research[type]) return say(`The ${buildingName(type)} is already researching`);
   if (team.gold < def.cost) return say('Not enough gold');
@@ -193,7 +227,7 @@ function updateResearch(team, dt) {
     if (r.t < def.time) continue;
     team.upgrades[type][r.key] = true;
     team.research[type] = null;
-    if ((def.key === 'archer2' || def.key === 'archer3') && team.archers.length < ARCHER_XS.length) team.archers.push(makeCastleArcher(team, team.archers.length));
+    if (/^archer\d$/.test(def.key) && team.archers.length < ARCHER_XS.length) team.archers.push(makeCastleArcher(team, team.archers.length));
     if (team.id === 0) {
       toast(def.team ? `${def.name} is ready` : `${def.name} researched — new ${UNIT_TYPES[type].name}s get it; refit veterans (R)`);
     }
@@ -209,12 +243,15 @@ function wallSpotOk(team, x) {
   return !G.walls.some(w => !w.dead && Math.abs(w.x - x) < 70);
 }
 
-function placeWall(team, x, builders) {
+// free: a clan's starting trench (no checks, no cost)
+function placeWall(team, x, builders, free) {
   const say = msg => { if (team.id === 0) toast(msg); return null; };
-  if (G.walls.filter(w => w.team === team.id && !w.dead).length >= WALL_MAX) return say(`Trench limit reached (${WALL_MAX})`);
-  if (!wallSpotOk(team, x)) return say('Cannot dig a trench there');
-  if (team.gold < WALL_COST) return say('Not enough gold');
-  team.gold -= WALL_COST;
+  if (!free) {
+    if (G.walls.filter(w => w.team === team.id && !w.dead).length >= WALL_MAX) return say(`Trench limit reached (${WALL_MAX})`);
+    if (!wallSpotOk(team, x)) return say('Cannot dig a trench there');
+    if (team.gold < WALL_COST) return say('Not enough gold');
+    team.gold -= WALL_COST;
+  }
   const w = {
     isWall: true, isStructure: true, team: team.id, x, y: LANE_BOT, halfW: 12,
     hp: 1, max: WALL_HP, progress: 0, dead: false, flash: 0, stone: mixHex('#6b5338', G.map.theme.ground[0], 0.3),   // earth (for dirt sprays)
@@ -303,7 +340,7 @@ function updateCastle(team, dt) {
   team.levyT += dt;
   if (team.levyT < LEVY_INTERVAL) return;
   team.levyT = 0;
-  if (popUsed(team) + UNIT_TYPES.sword.pop > POP_CAP) {
+  if (popUsed(team) + unitPop(team, 'sword') > popCap(team)) {
     if (team.id === 0) toast('Levy skipped: population limit reached');
     return;
   }
@@ -326,14 +363,14 @@ function updateShrine(dt) {
     s.cap = clamp(s.cap + (dir * Math.min(3, n)) / SHRINE.capTime * dt, -1, 1);
     // crossing the middle neutralises it; reaching the end claims it
     if (s.owner >= 0 && Math.sign(before) !== Math.sign(s.cap)) {
-      if (s.owner === 0) toast('You have lost the Shrine', 'warn');
+      if (s.owner === 0) toast('You have lost the Monolith', 'warn');
       s.owner = -1;
     }
     if (s.owner < 0 && Math.abs(s.cap) >= 1) {
       s.owner = s.cap > 0 ? 0 : 1;
       s.pulse = 1;
-      logEvent(s.owner === 0 ? 'You took the Shrine' : 'Enemy took the Shrine', s.owner);
-      toast(s.owner === 0 ? `The Shrine is yours: +${SHRINE.gold} gold and +${SHRINE.mana} mana per second` : 'The enemy has taken the Shrine', s.owner === 0 ? '' : 'warn');
+      logEvent(s.owner === 0 ? 'You took the Monolith' : 'Enemy took the Monolith', s.owner);
+      toast(s.owner === 0 ? `The Monolith is yours: +${SHRINE.gold} gold and +${SHRINE.mana} mana per second` : 'The enemy has taken the Monolith', s.owner === 0 ? '' : 'warn');
     }
   }
   if (s.owner >= 0) {

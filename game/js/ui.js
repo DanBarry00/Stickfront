@@ -514,8 +514,9 @@ function initInput() {
       case 'KeyX': toggleShieldWall(); break;
       case 'KeyR': refitSelected(); break;
       case 'KeyU': {
-        const i = RESEARCH_TYPES.indexOf(UI.panel);
-        openPanel(RESEARCH_TYPES[(i + 1) % RESEARCH_TYPES.length]);
+        // cycle through the buildings this clan can use (and the castle)
+        const open = RESEARCH_TYPES.filter(t => t === 'castle' || canTrain(G.teams[0], t)), i = open.indexOf(UI.panel);
+        openPanel(open[(i + 1) % open.length]);
         break;
       }
       case 'KeyP': togglePause(); break;
@@ -620,8 +621,8 @@ const CMD_TIPS = {
 function tipHTML(el) {
   const me = G.teams[0];
   if (el.dataset.unit) {
-    const d = UNIT_TYPES[el.dataset.unit];
-    return `<b>${d.name}</b><span class="cost"><i class="ico gold"></i>${d.cost}${d.mana ? ` <i class="ico mana"></i>${d.mana}` : ''} · pop ${d.pop} · key ${d.hotkey}</span><p>${d.desc}</p><em>Trained at the ${d.building} (${groupOf(d.key).name}: one unit at a time). Click to train · right-click cancels · ⚒ upgrades</em>`;
+    const d = UNIT_TYPES[el.dataset.unit], c = unitCost(me, d.key);
+    return `<b>${d.name}</b><span class="cost"><i class="ico gold"></i>${c.gold}${c.mana ? ` <i class="ico mana"></i>${c.mana}` : ''} · pop ${unitPop(me, d.key)} · key ${d.hotkey}</span><p>${d.desc}</p><em>Trained at the ${d.building} (${groupOf(d.key).name}: one unit at a time). Click to train · right-click cancels · ⚒ upgrades</em>`;
   }
   if (el.dataset.upg) {
     const [type, key] = el.dataset.upg.split(':');
@@ -657,34 +658,37 @@ function hideTip() { $('tip').classList.add('hidden'); }
 
 // ---------------------------------------------------------------- HUD
 
-function buildHUD() {
-  // Training bar: one color-coded block per training group, its unit buttons staggered over two
-  // rows. Each group trains one unit at a time. Click to train, right-click to cancel one,
-  // the small ⚒ opens that unit's building upgrades.
+// Training bar for the player's clan: one color-coded block per training group (groups the clan
+// can't use at all are left out), its unit buttons staggered over two rows. Each group trains one
+// unit at a time. Click to train, right-click to cancel one, the small ⚒ opens that unit's upgrades.
+function buildTrainBar() {
+  const me = G.teams[0];
   const bar = $('train');
   bar.innerHTML = '';
   const BTN = 42, STEP = 24, ROW = BTN + 3;
   for (const g of TRAIN_GROUPS) {
+    const types = g.types.filter(t => canTrain(me, t));
+    if (!types.length) continue;
     const grp = document.createElement('div');
     grp.className = 'tgrp';
     grp.style.setProperty('--gc', g.color);
-    grp.style.width = BTN + (g.types.length - 1) * STEP + 'px';
+    grp.style.width = BTN + (types.length - 1) * STEP + 'px';
     grp.dataset.tip = `<b>${g.name}</b><p>Trains one unit at a time, in the order you queue them.</p>`;
-    g.types.forEach((type, i) => {
-      const def = UNIT_TYPES[type];
+    types.forEach((type, i) => {
+      const def = UNIT_TYPES[type], cost = unitCost(me, type);
       const b = document.createElement('div');
       b.className = 'tb';
       b.dataset.type = type;
       b.dataset.unit = type;
       b.dataset.tip = '';
       b.style.left = i * STEP + 'px';
-      b.style.top = (g.types.length === 1 ? ROW / 2 : (i % 2) * ROW) + 'px';
+      b.style.top = (types.length === 1 ? ROW / 2 : (i % 2) * ROW) + 'px';
       b.innerHTML = `
         <canvas width="84" height="84"></canvas>
         <kbd>${def.hotkey}</kbd><span class="badge"></span>
         <button class="ub" data-tip="${def.building} upgrades (U)">⚒</button>
         <div class="prog"><i></i></div>
-        <span class="cost">${def.cost}${def.mana ? `<i class="ico mana"></i>${def.mana}` : ''}</span>`;
+        <span class="cost">${cost.gold}${cost.mana ? `<i class="ico mana"></i>${cost.mana}` : ''}</span>`;
       drawUnitIcon(b.querySelector('canvas'), type);
       b.addEventListener('click', e => {
         if (e.target.closest('.ub')) return UI.panel === type ? closePanel() : openPanel(type);
@@ -701,6 +705,10 @@ function buildHUD() {
   cb.innerHTML = '<svg viewBox="0 0 24 24"><path d="M3 22V9h3V6h3v3h2V3h2v6h2V6h3v3h3v13h-6v-5a2 2 0 0 0-4 0v5z"/></svg>';
   cb.addEventListener('click', () => (UI.panel === 'castle' ? closePanel() : openPanel('castle')));
   bar.appendChild(cb);
+}
+
+function buildHUD() {
+  buildTrainBar();
 
   document.querySelectorAll('#stances button[data-stance]').forEach(b => {
     b.addEventListener('click', () => setStance(G.teams[0], b.dataset.stance));
@@ -729,18 +737,24 @@ function buildHUD() {
 }
 
 // Group a building's upgrades into chains: a first tier followed by the tiers that require it.
+// Tiers the player's clan can't research are left out (a chain with none left disappears).
 function upgradeChains(type) {
-  const list = UPGRADES[type], chains = [];
+  const list = UPGRADES[type], chains = [], me = G.teams[0];
   for (const d of list) {
     if (d.requires) continue;
     const chain = [d];
     for (let next = list.find(x => x.requires === d.key); next; next = list.find(x => x.requires === next.key)) chain.push(next);
-    chains.push(chain);
+    const open = chain.filter(x => !upgradeLocked(me, type, x.key));
+    if (open.length) chains.push(open);
   }
   return chains;
 }
 
 function openPanel(type) {
+  if (type !== 'castle' && !canTrain(G.teams[0], type)) {
+    toast(`The ${clanOf(G.teams[0]).name} doesn't use the ${buildingName(type)}`);
+    return;
+  }
   UI.panel = type;
   UI.cardMode = '';   // force the card to rebuild
 }
@@ -878,12 +892,13 @@ function updateHUD(dt) {
   const me = G.teams[0];
   setText('goldTxt', String(Math.floor(me.gold)));
   setText('manaTxt', String(Math.floor(me.mana)));
-  setText('popTxt', `${popUsed(me)}/${POP_CAP}`);
+  setText('popTxt', `${popUsed(me)}/${popCap(me)}`);
   setHTML('prio', { mine: '⛏ Mine', pray: '◆ Pray', pan: '≈ Pan' }[me.minerDefault]);
   document.querySelectorAll('#train .tb').forEach(b => {
     const type = b.dataset.type, def = UNIT_TYPES[type], q = me.queues[groupOf(type).key];
     const n = queuedCount(me, type), training = q.length > 0 && q[0].type === type;
-    b.classList.toggle('poor', me.gold < def.cost || me.mana < (def.mana || 0));
+    const cost = unitCost(me, type);
+    b.classList.toggle('poor', me.gold < cost.gold || me.mana < cost.mana);
     b.classList.toggle('queued', n > 0);
     b.classList.toggle('training', training);
     b.querySelector('.badge').textContent = n ? n : '';
@@ -1026,12 +1041,12 @@ function togglePause() {
   if (G.state !== 'play') return;
   G.paused = !G.paused;
   $('pauseMenu').classList.toggle('hidden', !G.paused);
-  if (G.paused) $('pmMap').textContent = `${G.map.name} · ${mapLayoutText()} · ${AI_LEVELS[G.difficulty].name} opponent · ${Math.floor(G.time / 60)}:${String(Math.floor(G.time % 60)).padStart(2, '0')}`;
+  if (G.paused) $('pmMap').textContent = `${clanOf(G.teams[0]).name} vs ${clanOf(G.teams[1]).name} · ${G.map.name} · ${mapLayoutText()} · ${AI_LEVELS[G.difficulty].name} opponent · ${Math.floor(G.time / 60)}:${String(Math.floor(G.time % 60)).padStart(2, '0')}`;
 }
 
 function initPauseMenu() {
   $('pmResume').onclick = togglePause;
-  $('pmRestart').onclick = () => { $('pauseMenu').classList.add('hidden'); newGame(G.seed); startBattle(); };
+  $('pmRestart').onclick = () => { $('pauseMenu').classList.add('hidden'); newGame(G.seed, G.clans); startBattle(); };
   $('pmNew').onclick = () => { $('pauseMenu').classList.add('hidden'); newGame(randomSeed()); showTitle(); };
   $('pmHelp').onclick = toggleHelp;
 }
@@ -1040,43 +1055,62 @@ function toggleHelp() {
   $('help').classList.toggle('hidden');
 }
 
-const mapLayoutText = () => [G.map.lane.name, G.map.mineLayout.name, G.shrine ? 'Shrine' : null].filter(Boolean).join(' · ');
+const mapLayoutText = () => [G.map.lane.name, G.map.mineLayout.name, G.map.goldLevel.name, G.shrine ? 'Monolith' : null].filter(Boolean).join(' · ');
+const clanShort = key => (key === 'random' ? 'Random' : CLANS[key].name.replace(/ (Clan|Circle)$/, ''));
 
+// What a clan brings, for the setup screen.
+function clanInfoHTML(key) {
+  if (key === 'random') return '<p class="tag">A random clan, revealed when the battle begins. Both sides can end up with the same clan.</p>';
+  const c = CLANS[key], li = (cls, list) => (list || []).map(t => `<li class="${cls}">${t}</li>`).join('');
+  return `<p class="tag">${c.tagline}</p><ul>${li('plus', c.strengths)}${li('minus', c.weaknesses)}${li('soon', (c.coming || []).map(t => `Coming soon: ${t}`))}</ul>`;
+}
+
+// The skirmish setup: both clans (or random), opponent difficulty, map options and the seed.
+// The map in the background is a live preview of the chosen seed and options.
 function showTitle() {
   document.body.className = 'title';
   $('debug').classList.add('hidden');
   const th = G.map.theme;
+  const choice = (field, opts) => opts.map(([k, label, tip]) => `<button data-opt="${field}" data-val="${k}" class="${SETUP[field] === k ? 'on' : ''}"${tip ? ` data-tip="${tip}"` : ''}>${label}</button>`).join('');
+  const clanSide = (field, title) => `
+    <div class="side">
+      <h3>${title}</h3>
+      <div class="clanGrid">${['random', ...CLAN_ORDER].map(k => `<button data-clan="${field}" data-val="${k}" class="${SETUP[field] === k ? 'on' : ''}">${clanShort(k)}</button>`).join('')}</div>
+      <div class="clanInfo"><b>${SETUP[field] === 'random' ? 'Random clan' : CLANS[SETUP[field]].name}</b>${clanInfoHTML(SETUP[field])}</div>
+    </div>`;
   $('overlay').innerHTML = `
-    <div class="card">
+    <div class="card setup">
       <h1>STICKFRONT</h1>
-      <p class="sub">prototype battle test</p>
+      <p class="sub">skirmish</p>
+      <div class="clanPick">${clanSide('clan', 'Your clan')}${clanSide('enemy', 'Enemy clan')}</div>
+      <div class="opts">
+        <div class="opt"><span>Opponent</span>${Object.entries(AI_LEVELS).map(([k, l]) => `<button data-diff="${k}" class="${k === AI_DIFFICULTY ? 'on' : ''}" data-tip="${l.desc}">${l.name}</button>`).join('')}</div>
+        <div class="opt"><span>Monolith</span>${choice('monolith', [['off', 'Off'], ['on', 'On', `Hold the ground around it for +${SHRINE.gold} gold and +${SHRINE.mana} mana per second`], ['random', 'Random']])}</div>
+        <div class="opt"><span>Gold</span>${choice('gold', [['scarce', 'Scarce', 'Deposits hold 40% less gold'], ['normal', 'Normal'], ['rich', 'Rich', 'Deposits hold 60% more gold'], ['random', 'Random']])}</div>
+        <div class="opt"><span>Seed</span><input id="seedIn" type="text" inputmode="numeric" value="${G.seed}" data-tip="The same seed and options always make the same map"><button id="btnReroll" data-tip="Roll a new seed">New map</button></div>
+      </div>
       <div class="mapinfo">
         <div class="mapname">${G.map.name}</div>
-        <div class="maptheme">${th.name} · ${G.mines.length} gold deposits · seed ${G.seed}</div>
+        <div class="maptheme">${th.name} · ${G.mines.length} gold deposits</div>
         <div class="maplayout">${mapLayoutText()}</div>
-        ${G.shrine ? `<div class="maptheme">A Shrine stands in the middle: hold the ground around it for +${SHRINE.gold} gold and +${SHRINE.mana} mana per second.</div>` : ''}
       </div>
-      <div class="diff">
-        <span>Opponent</span>
-        ${Object.entries(AI_LEVELS).map(([k, l]) => `<button data-diff="${k}" class="${k === AI_DIFFICULTY ? 'on' : ''}" data-tip="${l.desc}">${l.name}</button>`).join('')}
-      </div>
-      <div class="row">
-        <button id="btnStart" class="big">Begin Battle</button>
-        <button id="btnReroll">New Map</button>
-      </div>
-      <p class="hint">Train miners for gold, soldiers to fight. Destroy the enemy statue — then kill the giant that bursts out of it — to win.<br>Click the buildings in your castle for upgrades. Press <kbd>H</kbd> in game for controls.</p>
+      <div class="row"><button id="btnStart" class="big">Begin Battle</button></div>
+      <p class="hint">Destroy the enemy statue, then kill the giant that bursts out of it, to win. Press <kbd>H</kbd> in game for controls.</p>
     </div>`;
   $('overlay').classList.remove('hidden');
-  $('btnStart').onclick = startBattle;
-  $('btnReroll').onclick = () => { newGame(randomSeed()); showTitle(); };
-  $('overlay').querySelectorAll('[data-diff]').forEach(b => {
-    b.onclick = () => {
-      setDifficulty(b.dataset.diff);
-      G.difficulty = AI_DIFFICULTY;
-      G.ai = AI_DIFFICULTY === 'easy' ? new PoorAI(1) : new SmartAI(1, AI_DIFFICULTY);
-      $('overlay').querySelectorAll('[data-diff]').forEach(o => o.classList.toggle('on', o === b));
-    };
-  });
+  const ov = $('overlay');
+  const refresh = (seed = G.seed) => { saveSetup(); newGame(seed); showTitle(); };
+  ov.querySelectorAll('[data-clan]').forEach(b => { b.onclick = () => { SETUP[b.dataset.clan] = b.dataset.val; refresh(); }; });
+  ov.querySelectorAll('[data-opt]').forEach(b => { b.onclick = () => { SETUP[b.dataset.opt] = b.dataset.val; refresh(); }; });
+  ov.querySelectorAll('[data-diff]').forEach(b => { b.onclick = () => { setDifficulty(b.dataset.diff); refresh(); }; });
+  $('btnReroll').onclick = () => refresh(randomSeed());
+  $('seedIn').onchange = e => {
+    const s = parseInt(e.target.value, 10);
+    if (Number.isFinite(s) && s > 0) refresh(s);
+    else e.target.value = G.seed;
+  };
+  // the battle uses fresh clans: random picks are decided now
+  $('btnStart').onclick = () => { newGame(G.seed); startBattle(); };
 }
 
 function startBattle() {
@@ -1092,7 +1126,8 @@ function startBattle() {
   UI.placing = null;
   UI.panel = null;
   UI.cardMode = '';
-  toast(`Battle of ${G.map.name}`);
+  buildTrainBar();
+  toast(`${clanOf(G.teams[0]).name} vs ${clanOf(G.teams[1]).name} · Battle of ${G.map.name}`);
 }
 
 function showEnd() {
@@ -1104,7 +1139,7 @@ function showEnd() {
   $('overlay').innerHTML = `
     <div class="card wide ${won ? 'win' : 'lose'}">
       <h1>${won ? 'VICTORY' : 'DEFEAT'}</h1>
-      <p class="sub">${won ? 'The enemy statue and the giant within it have fallen.' : 'Your statue lies in ruins and its giant is slain.'} · ${mins}:${secs} · ${G.map.name}</p>
+      <p class="sub">${won ? 'The enemy statue and the giant within it have fallen.' : 'Your statue lies in ruins and its giant is slain.'} · ${mins}:${secs} · ${clanOf(G.teams[0]).name} vs ${clanOf(G.teams[1]).name}</p>
       ${endScreenHTML(won)}
       <div class="row">
         <button id="btnAgain" class="big">Rematch</button>
@@ -1113,7 +1148,7 @@ function showEnd() {
     </div>`;
   $('overlay').classList.remove('hidden');
   wireEndCharts();
-  $('btnAgain').onclick = () => { newGame(G.seed); startBattle(); };
+  $('btnAgain').onclick = () => { newGame(G.seed, G.clans); startBattle(); };
   $('btnNew').onclick = () => { newGame(randomSeed()); showTitle(); };
 }
 

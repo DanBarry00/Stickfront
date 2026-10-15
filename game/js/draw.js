@@ -3270,6 +3270,7 @@ function drawUpgradeIcon(cv, type, key) {
       break;
     case 'archer2':
     case 'archer3':
+    case 'archer4':
       c.fillStyle = '#6a645d'; c.strokeStyle = dark; c.lineWidth = 1.2;
       c.fillRect(6, 22, 28, 14); c.strokeRect(6, 22, 28, 14);
       for (let x = 6; x < 34; x += 8) { c.fillRect(x, 18, 5, 4); c.strokeRect(x, 18, 5, 4); }
@@ -3277,7 +3278,7 @@ function drawUpgradeIcon(cv, type, key) {
       c.beginPath(); c.arc(20, 9, 3, 0, TAU); c.moveTo(20, 12); c.lineTo(20, 18); c.moveTo(20, 14); c.lineTo(26, 12); c.stroke();
       c.strokeStyle = '#4e3018'; c.lineWidth = 1.6; c.beginPath(); c.arc(25, 12, 5, -1.2, 1.2); c.stroke();
       c.fillStyle = gold; c.font = 'bold 9px Georgia, serif'; c.textAlign = 'left';
-      c.fillText(key === 'archer3' ? 'III' : 'II', 4, 11);
+      c.fillText({ archer2: 'II', archer3: 'III', archer4: 'IV' }[key], 4, 11);
       break;
     case 'shield':
       c.fillStyle = '#4e3c28'; c.strokeStyle = '#7d8288'; c.lineWidth = 2;
