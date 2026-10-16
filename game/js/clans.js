@@ -14,7 +14,7 @@
 //   cost                   unit price changes: { unitType: { gold, mana } } (added to the normal price)
 //   pop                    population cap (default POP_CAP)
 //   castleArchers          most castle archers it can post (default 3)
-//   hp, dmg                health / damage multipliers: { all, unitType }
+//   hp, dmg                health / damage multipliers: { all, troops (everyone but miners), unitType }
 //   prayer                 mana from praying, multiplier
 //   bounty                 share of a killed enemy's gold cost paid to this clan
 //   vanishCd               ninja vanish cooldown (default NINJA_VANISH_CD)
@@ -82,8 +82,9 @@ const CLANS = {
     free: { miner: ['bag', 'pick', 'pan1', 'prospect'], castle: ['tithe'] },
     bounty: 0.2,
     prayer: 0.5,
+    hp: { troops: 0.9 },
     strengths: ['Starts with 4 miners, Bigger Bags, Steel Pickaxes, Iron Pans, Prospecting and Statue Offerings', 'Every kill pays 20% of the victim\'s gold cost', 'Clan-only: Mule Packs, Diamond Picks, Gilded Statue (4 gold/s)'],
-    weaknesses: ['Praying gives half the mana', 'Weakest starting army: one plain Swordwrath'],
+    weaknesses: ['Praying gives half the mana', "Troops have 10% less health (miners don't)", 'Weakest starting army: one plain Swordwrath'],
   },
 
   arcane: {
@@ -172,7 +173,7 @@ function unitCost(team, type) {
 }
 const popCap = team => clanOf(team).pop || POP_CAP;
 const unitPop = (team, type) => (type === 'giant' && clanOf(team).giantPop) || UNIT_TYPES[type].pop;
-const clanMul = (team, field, type) => { const m = clanOf(team)[field] || {}; return (m.all || 1) * (m[type] || 1); };
+const clanMul = (team, field, type) => { const m = clanOf(team)[field] || {}; return (m.all || 1) * (type !== 'miner' ? m.troops || 1 : 1) * (m[type] || 1); };
 
 // A skirmish's clans: 'random' picks any clan (the same clan may face itself).
 const resolveClan = key => (key === 'random' ? pick(CLAN_ORDER) : key);

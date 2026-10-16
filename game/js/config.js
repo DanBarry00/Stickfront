@@ -257,7 +257,6 @@ const UPGRADES = {
     { key: 'devout2', name: 'Zealous Faith', cost: 175, mana: 50, time: 25, requires: 'devout', desc: 'Prayers yield double mana.' },
     { key: 'pan1', name: 'Iron Pans', cost: 150, mana: 0, time: 20, desc: 'Pan the castle stream 35% faster.' },
     { key: 'pan2', name: 'Sluice Boxes', cost: 225, mana: 50, time: 25, requires: 'pan1', desc: 'Pan the castle stream 75% faster than plain pans.' },
-    { key: 'defense', name: 'Self-Defense Training', cost: 125, mana: 0, time: 15, desc: 'Sturdier miners who hit back much harder.' },
     { key: 'walls', name: 'Earthworks', cost: 175, mana: 50, time: 25, desc: `Miners can dig defensive trenches behind an earth rampart (B), and repair damaged ones (Y or right-click). ${WALL_COST} gold each, up to ${WALL_MAX}.` },
     { key: 'walls2', name: 'Palisade', cost: 200, mana: 50, time: 25, requires: 'walls', desc: `Miners can raise a sharpened log palisade on a finished trench (J or right-click it) for ${WALL_COST} gold: taller, +${WALL_HP2} hp.` },
     { key: 'prospect', name: 'Prospecting', cost: 150, mana: 50, time: 25, desc: 'Miners can replenish gold deposits (N), even exhausted ones, twice as fast as they could mine them.' },
@@ -384,54 +383,36 @@ const TEAM_STYLE = [
   { name: 'Chaos', body: '#1c0e0e', accent: '#a82a24', accent2: '#ff5a44', crystal: '#b066e8', ui: '#c0432f', statue: '#686268' },
 ];
 
-// Random cosmetic headgear per unit type per team.
-const GEAR = {
-  miner: [['lamp', 'band', 'none', 'hood', 'lamp'], ['hood', 'horns', 'none', 'lamp']],
-  sword: [['band', 'band', 'wrap', 'none'], ['horns', 'mask', 'band', 'none']],
-  archer: [['hood', 'band', 'hood'], ['hood', 'mask', 'horns']],
-  spear: [['band', 'wrap', 'none'], ['horns', 'mask', 'none']],
-  cleric: [['none'], ['none']],
-  warlock: [['none'], ['none']],
-  giant: [['none'], ['horns']],
-  ninja: [['ninja'], ['ninja']],
-  flyer: [['goggles'], ['goggles']],
-  ballista: [['band'], ['horns']],
-  golem: [['none'], ['none']],
-  beastmaster: [['pelt'], ['pelt']],
-  saboteur: [['cowl'], ['cowl']],
-  firebird: [['goggles'], ['goggles']],
-};
-
 const THEMES = [
   {
     name: 'Amber Dusk', sky: ['#2e2440', '#f2a65a'], sun: '#ffd27a', hills: ['#a0697a', '#6e4a5e', '#463243'],
     haze: '#f2a65a', ground: ['#6a5440', '#3b2e25'], path: '#8a6c4e', grass: '#7a7240', rock: '#7b6e66',
-    prop: '#2e2420', weather: 'embers', cloud: '#f7c9a0',
+    prop: '#2e2420', weather: 'embers', cloud: '#f7c9a0', shade: 0.3,
   },
   {
     name: 'Sunbaked Desert', sky: ['#6fa8d6', '#f5e2b8'], sun: '#fff6d8', hills: ['#e2c495', '#c99d68', '#a57945'],
     haze: '#f5e2b8', ground: ['#c49660', '#86613a'], path: '#d8b07a', grass: '#a49450', rock: '#a58e74',
-    prop: '#4a3826', weather: 'dust', cloud: '#ffffff',
+    prop: '#4a3826', weather: 'dust', cloud: '#ffffff', shade: 0.12,
   },
   {
     name: 'Grey Highlands', sky: ['#5f6f7d', '#c8d0cc'], sun: '#eef2f0', hills: ['#97a39a', '#71806f', '#4f5d4c'],
     haze: '#c8d0cc', ground: ['#5d6e46', '#34402a'], path: '#7e7656', grass: '#86a05a', rock: '#848a86',
-    prop: '#252b22', weather: 'leaves', cloud: '#e6ebe8',
+    prop: '#252b22', weather: 'leaves', cloud: '#e6ebe8', shade: 0.24,
   },
   {
     name: 'Ashen Wastes', sky: ['#1f1717', '#b25a3c'], sun: '#ff8a4a', hills: ['#6b3d33', '#4a2b26', '#2e1b19'],
     haze: '#b25a3c', ground: ['#4d3c34', '#231a16'], path: '#6a5246', grass: '#5e4c32', rock: '#5d524e',
-    prop: '#1a1312', weather: 'embers', cloud: '#8c5a4a',
+    prop: '#1a1312', weather: 'embers', cloud: '#8c5a4a', shade: 0.4,
   },
   {
     name: 'Frostfall', sky: ['#8fb0d4', '#eaf0f6'], sun: '#ffffff', hills: ['#cbd8e6', '#a5b8cc', '#7d92a9'],
     haze: '#eaf0f6', ground: ['#e4ebf1', '#a3b2c2'], path: '#c5ced8', grass: '#9fb0bf', rock: '#8d99a6',
-    prop: '#3b4652', weather: 'snow', cloud: '#ffffff',
+    prop: '#3b4652', weather: 'snow', cloud: '#ffffff', shade: 0.16,
   },
   {
     name: 'Verdant Morning', sky: ['#79b3e0', '#f6e9c6'], sun: '#fff3c4', hills: ['#9cc2a0', '#6f9d77', '#4c7a55'],
     haze: '#f6e9c6', ground: ['#5f8a3e', '#355224'], path: '#9a8558', grass: '#7fb04c', rock: '#8a8a80',
-    prop: '#26351d', weather: 'leaves', cloud: '#ffffff',
+    prop: '#26351d', weather: 'leaves', cloud: '#ffffff', shade: 0.12,
   },
 ];
 

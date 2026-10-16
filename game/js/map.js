@@ -235,7 +235,7 @@ function generateMap(seed, opts = {}) {
       towerH: r.range(105, 140),
       roof: r.pick(['spire', 'flat', 'dome']),
       banner: r.pick(['stripe', 'chevron', 'emblem', 'plain']),
-      torches: r.chance(0.65),
+      torches: true,   // the lighting relies on them
       stone: shade(theme.rock, r.range(-0.12, 0.15)),
     };
   });

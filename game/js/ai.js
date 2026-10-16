@@ -84,7 +84,7 @@ const AI_RESEARCH = [
   ['miner', 'bag'], ['archer', 'bow'], ['castle', 'tithe'], ['spear', 'helm'], ['sword', 'drill'],
   ['miner', 'devout'], ['cleric', 'pool'], ['warlock', 'big'], ['spear', 'inspire'], ['archer', 'quiver'],
   ['castle', 'archer2'], ['sword', 'rage'], ['giant', 'protein'], ['giant', 'blinders'], ['spear', 'halberd'],
-  ['cleric', 'focus'], ['warlock', 'focus'], ['miner', 'defense'],
+  ['cleric', 'focus'], ['warlock', 'focus'],
   ['ninja', 'serrated'], ['flyer', 'barbs'], ['archer', 'eye'], ['ninja', 'stars'], ['flyer', 'scope'],
   ['ninja', 'parry'], ['ninja', 'vital'], ['flyer', 'winch'], ['ninja', 'focus'], ['flyer', 'feather'],
   ['sword', 'greatsword'], ['archer', 'longbow'], ['archer', 'broadheads'], ['flyer', 'hawkeye'], ['flyer', 'scope2'],

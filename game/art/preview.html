@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Unit Icons</title>
+<style>
+  body { margin: 0; padding: 20px; background: #17120d; color: #e9dcc0; font: 14px/1.4 Georgia, serif; }
+  h1 { font-size: 20px; margin: 0 0 4px; color: #d8ac2c; letter-spacing: 0.04em; }
+  p { margin: 0 0 12px; color: #a8987a; max-width: 760px; }
+  h2 { font-size: 13px; margin: 18px 0 8px; color: #c9b27a; text-transform: uppercase; letter-spacing: 0.12em; }
+  .ic svg { display: block; width: 100%; height: 100%; }
+  .bar { display: flex; gap: 6px; flex-wrap: wrap; padding: 8px; background: rgba(20, 15, 10, 0.92); border: 1px solid #4a3a24; border-radius: 4px; width: fit-content; margin-bottom: 6px; }
+  .bar .ic { width: 42px; height: 42px; border-radius: 3px; overflow: hidden; outline: 1px solid #5a4a30; }
+  .bar.big .ic { width: 64px; height: 64px; }
+  .label { font-size: 12px; color: #8a7a5e; margin: 0 0 4px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, 140px); gap: 14px; }
+  .card { text-align: center; }
+  .card .ic { width: 140px; height: 140px; border-radius: 6px; overflow: hidden; outline: 1px solid #3a2e1e; margin-bottom: 4px; }
+  .card b { display: block; font-weight: normal; }
+  .card i { font-style: normal; font-size: 12px; color: #8a7a5e; }
+</style>
+</head>
+<body>
+<h1>Stickfront unit icons: close-up (draft C)</h1>
+<p>Head-and-shoulders portraits with glowing white eyes, a gold key light, a rim of the group colour from behind, a backlit halo, light rays and a little atmosphere.</p>
+<h2>Close up</h2>
+<div class="grid" id="grid"></div>
+<h2>In the training bar (42 px)</h2>
+<div class="label">C · Close-up</div>
+<div class="bar" id="barC"></div>
+<div class="label">A · Portrait (previous draft, for comparison)</div>
+<div class="bar" id="barA"></div>
+<h2>At 64 px</h2>
+<div class="bar big" id="barC64"></div>
+<script src="icons.js"></script>
+<script src="closeup.js"></script>
+<script>
+  const NAMES = { miner: ['Miner', 'Workers'], sword: ['Swordwrath', 'Infantry'], spear: ['Spearton', 'Infantry'], ninja: ['Ninja', 'Infantry'], saboteur: ['Saboteur', 'Infantry · Shadow'], archer: ['Archer', 'Ranged'], flyer: ['Kestrel', 'Ranged'], firebird: ['Firebird', 'Ranged · Sky'], ballista: ['Ballista', 'Ranged · Defense'], beastmaster: ['Beastmaster', 'Ranged · Beast'], cleric: ['Cleric', 'Mages'], warlock: ['Warlock', 'Mages'], giant: ['Giant', 'Giants'], golem: ['Spirit Golem', 'Giants · Arcane'] };
+  const Cc = t => `<div class="ic">${unitIconCloseup(t)}</div>`, A = t => `<div class="ic">${unitIconSVG(t)}</div>`;
+  document.getElementById('grid').innerHTML = ICON_TYPES.map(t => `<div class="card">${Cc(t)}<b>${NAMES[t][0]}</b><i>${NAMES[t][1]}</i></div>`).join('');
+  document.getElementById('barC').innerHTML = ICON_TYPES.map(Cc).join('');
+  document.getElementById('barA').innerHTML = ICON_TYPES.map(A).join('');
+  document.getElementById('barC64').innerHTML = ICON_TYPES.map(Cc).join('');
+</script>
+</body>
+</html>

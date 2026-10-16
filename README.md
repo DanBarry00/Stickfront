@@ -17,7 +17,7 @@ Each clan sets your starting gold, mana and army, which upgrades are already res
 | **Archer** | 2 miners, 2 archers | Recurve Bows, Eagle Eye, Vital Points, Long Sights; archers and Kestrels 15 gold cheaper; 4 castle archer slots; clan-only Longbows (range 600), Broadheads (damage 40), Steady Hands (reload 15% faster), Spyglass (Kestrel range 480) | No Iron/Crested Helmets or Tower Shields; giants can't get Blinders |
 | **Defense** | 2 miners; a trench held by a Spearton and an archer | Clan unit: the **Ballista**; Earthworks, Shields, Military Training, Rallying Cry, Recurve Bows, a second castle archer; 4 castle archer slots; clan-only Levy II (a free Spearton every minute too) | No Warlocks or Giants |
 | **Sword** | 2 miners, 2 Swordwrath | Population 35; Levy, Military Training, Adrenaline; clan-only Great Swords (damage 25, 10% slower swing) | No Kestrels or Throwing Stars (only archers and Javelins hit flyers); no Flaming Arrows; no trenches |
-| **Mercenary** | 4 miners, 1 plain Swordwrath | Bigger Bags, Steel Pickaxes, Iron Pans, Prospecting, Statue Offerings; every kill pays 20% of the victim's gold cost; clan-only Mule Packs (carry 100), Diamond Picks (17 per swing), Gilded Statue (4 gold/s) | Praying gives half the mana; weakest starting army |
+| **Mercenary** | 4 miners, 1 plain Swordwrath | Bigger Bags, Steel Pickaxes, Iron Pans, Prospecting, Statue Offerings; every kill pays 20% of the victim's gold cost; clan-only Mule Packs (carry 100), Diamond Picks (17 per swing), Gilded Statue (4 gold/s) | Praying gives half the mana; troops (not miners) −10% health; weakest starting army |
 | **Arcane Circle** | 150 mana; 2 miners, a Cleric and a Warlock | Clan unit: the **Spirit Golem**; Healing Pool and Blight Pool; mages cost 35 mana; praying gives 50% more | Swordwrath and Spearton −10% health; 1 castle archer; no Giants |
 | **Beast** | 2 miners, a giant and a Beastmaster | Clan unit: the **Beastmaster**; giants cost 250 gold + 110 mana, take 3 population and have 20% more health; Thick Hide (archers get no bonus damage against its giants); Beastmasters cost 120; Blinders researched | No Archers or Kestrels (only Beastmasters, Warlocks and Javelins reach flyers) |
 | **Shadow** | 2 miners, 3 ninjas | Clan unit: the **Saboteur**; all units +25% damage; ninjas cost 100, vanish again after 3s; Throwing Stars, Vital Points and Parry researched | All units −10% health; no Spearton; no trenches |
@@ -164,7 +164,7 @@ A hooded infiltrator with a satchel of salt, trained in the Infantry group (hotk
 - The computer playing the Shadow Clan keeps a saboteur or two busy salting the deposits your miners are working, one per deposit, and sends them at your trenches otherwise.
 
 ## Firebird (Sky Clan)
-A rider on a big flame-feathered glider, trained in the Ranged group (hotkey `/`). It launches from the Aerie. 200 gold + 50 mana, 2 population, 90 hp.
+A rider under big flame-membraned da Vinci wings, trained in the Ranged group (hotkey `/`). It launches from the Aerie. 200 gold + 50 mana, 2 population, 90 hp.
 - **Flies like a Kestrel:** only ranged attacks (archers, warlocks, castle archers, ninja stars, Beastmasters, Javelins, Kestrels) can reach it, and it glides over trenches.
 - **Fire pots:** every 3 seconds it drops a pot on the ground units directly below it. The pot bursts for 20 damage on every enemy within 45, sets them burning for 3 seconds, and does half damage to trenches and the statue.
 - **It can't hit flyers.**
@@ -181,7 +181,7 @@ A rider on a big flame-feathered glider, trained in the Ranged group (hotkey `/`
 
 ## Economy
 - **Mining** about 2.3 gold/s per miner. **Praying** at the statue about 2.3 mana/s (4 at a time).
-- **Panning:** garrisoned miners (up to 5) kneel at the stream inside the castle and get 1 gold + 1 mana per tick, about 1.1 of each per second. That's half of prayer's mana rate, and it's completely safe.
+- **Panning:** garrisoned miners (up to 5) kneel on the quay over the stream that winds along the front of the castle and get 1 gold + 1 mana per tick, about 1.1 of each per second. That's half of prayer's mana rate, and it's completely safe.
 - The small **New:** toggle in the top bar sets where newly trained miners go: Mine, Pray or Pan.
 - The statue earns no passive gold until you buy the **Statue Offerings** / **Golden Idol** castle upgrades.
 
@@ -220,7 +220,8 @@ A rider on a big flame-feathered glider, trained in the Ranged group (hotkey `/`
 ## Code layout (`game/js`)
 - `config.js`: balance numbers, unit stats, upgrades and visual themes
 - `map.js`: generates the map from a seed (scenery, lane depth, gold layout and amount, Monolith)
-- `draw.js`: stick figures and their animations, statues, the castle (with its stream), trenches, mines, props and icons
+- `draw.js`: stick figures and their animations (gear comes from upgrades, never chance), giants, the da Vinci wings, the two-man ballista, statues, the weathered castle and its winding stream, trenches, mines, props and icons
+- `light.js`: the lighting pass (the day's shade, gloomy keeps, and torches, braziers, crystals, lamps, fire and spells as light sources)
 - `units.js`: unit behaviour (mining, praying, panning, building, combat, trench defense, refit, buffs)
 - `game.js`: game state, training queues, research, trenches, castle archers, the Monolith, projectiles
 - `giants.js`: giant obedience, targeting, splash, knockback and the statue giant
