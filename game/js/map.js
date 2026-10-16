@@ -125,7 +125,9 @@ function weightedPick(r, items) {
   return items[items.length - 1];
 }
 
-function generateMap(seed) {
+// opts (from the skirmish setup): monolith 'off' | 'on' | 'random', gold 'scarce' | 'normal' | 'rich' | 'random'.
+// 'random' is decided by the seed, so a seed always gives the same map for the same options.
+function generateMap(seed, opts = {}) {
   const r = makeRng(seed);
   const theme = gritTheme(r.pick(THEMES));
   const map = { seed, theme, name: `${r.pick(MAP_PRE)} ${r.pick(MAP_SUF)}` };
@@ -136,9 +138,11 @@ function generateMap(seed) {
   map.lane = weightedPick(lr, LANE_DEPTHS);
   LANE_BOT = map.lane.bot;
   map.mineLayout = weightedPick(lr, Object.entries(MINE_LAYOUTS).map(([key, l]) => ({ key, ...l })));
-  map.shrine = lr.chance(SHRINE.chance)
-    ? { x: WORLD_W / 2, y: LANE_TOP - 6, owner: -1, cap: 0, contest: false, pulse: 0 }
-    : null;
+  const rolledMonolith = lr.chance(SHRINE.chance);
+  const monolith = opts.monolith === 'on' ? true : opts.monolith === 'off' ? false : rolledMonolith;
+  map.shrine = monolith ? { x: WORLD_W / 2, y: LANE_TOP - 6, owner: -1, cap: 0, contest: false, pulse: 0 } : null;
+  const rolledGold = weightedPick(lr, GOLD_LEVELS);
+  map.goldLevel = GOLD_LEVELS.find(g => g.key === opts.gold) || rolledGold;
   map.weather = r.chance(0.7) ? theme.weather : 'none';
   map.sun = { fx: r.range(0.12, 0.88), y: r.range(70, 210), r: r.range(26, 58) };
 
@@ -207,15 +211,15 @@ function generateMap(seed) {
   const ml = map.mineLayout, spots = [];
   let mx = lr.range(...ml.first);
   for (let i = 0, n = lr.int(...ml.n); i < n; i++) {
-    spots.push([mx, lr.range(LANE_TOP + 12, LANE_BOT - 22), Math.round(lr.range(1600, 2400) * ml.rich)]);
+    spots.push([mx, lr.range(LANE_TOP + 12, LANE_BOT - 22), Math.round(lr.range(1600, 2400) * ml.rich * map.goldLevel.mul)]);
     mx += lr.range(...ml.gap);
     if (mx > WORLD_W / 2 - 260) break;
   }
   for (const team of [0, 1]) {
     for (const [x, y, gold] of spots) map.mines.push(makeMine(r, team === 0 ? x : WORLD_W - x, y, theme, ml.rich, gold));
   }
-  // a rich vein in the middle (the shrine takes that spot when there is one)
-  if (!map.shrine && lr.chance(ml.center)) map.mines.push(makeMine(r, WORLD_W / 2 + lr.range(-120, 120), lr.range(LANE_TOP + 15, LANE_BOT - 20), theme, 1.6 * Math.max(1, ml.rich)));
+  // a rich vein in the middle (the Monolith takes that spot when there is one)
+  if (!map.shrine && lr.chance(ml.center)) map.mines.push(makeMine(r, WORLD_W / 2 + lr.range(-120, 120), lr.range(LANE_TOP + 15, LANE_BOT - 20), theme, 1.6 * Math.max(1, ml.rich), Math.round(lr.range(1600, 2400) * 1.6 * Math.max(1, ml.rich) * map.goldLevel.mul)));
 
   // distant smoke from old battles, drawn on the mid hill layer
   map.smoke = [];

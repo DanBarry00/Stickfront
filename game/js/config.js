@@ -17,11 +17,12 @@ const STATUE_HP = 2500;
 const STATUE_X = 800;        // distance of each statue from its world edge
 const GATE_X = 560;          // castle front wall (gate) distance from world edge
 const BUILD_X = { sword: 95, spear: 215, archer: 335, miner: 455 };   // building centers inside the castle
-const ARCHER_XS = [520, 400, 280];   // castle archer spots on the rampart (extra ones are castle upgrades)
+const ARCHER_XS = [520, 498, 476, 454];   // castle archer spots on the rampart, shoulder to shoulder from the front (extra ones are castle upgrades; the 4th is for clans with 4 slots)
 // Castle archers cover the ground out to just past where an enemy archer with the same bow
 // upgrades has to stand to shoot the statue: statue + its half-width + archer range + this margin.
 const CASTLE_REACH_PAD = 60;
-const TITHE_GOLD = [0, 1, 2.5];      // statue income per second: none / Offerings / Golden Idol
+const TITHE_GOLD = [0, 1, 2.5, 4];   // statue income per second: none / Offerings / Golden Idol / Gilded Statue (Mercenary)
+const JAVELIN = { range: 250, dmg: 30 };   // Spearton javelins (one each, refilled by garrisoning), thrown only at flyers
 const LEVY_INTERVAL = 60;    // seconds between free Swordwrath with the Levy castle upgrade
 const DEFEND_OFFSET = 250;   // defend line distance in front of statue
 const GARRISON_HEAL = 9;     // hp per second inside the castle
@@ -107,30 +108,60 @@ const UNIT_TYPES = {
     dmg: 15, range: 300, atkTime: 1.15, aggro: 340, hotkey: '[', code: 'BracketLeft',
     desc: 'Glides above the battle with a small crossbow, over trenches and out of reach of melee: only archers, warlocks, castle archers, thrown stars and other Kestrels can hit it. Weaker shots than an archer.',
   },
+  // Defense Clan siege engine: out-ranges everything, wrecks trenches and statues, helpless up close.
+  ballista: {
+    key: 'ballista', name: 'Ballista', building: 'Siege Workshop', cost: 250, mana: 50, time: 10, hp: 160, speed: 40, pop: 2,
+    dmg: 45, range: 550, atkTime: 4, aggro: 590, hotkey: ']', code: 'BracketRight', clans: ['defense'],
+    desc: 'A crewed bolt-thrower. Range 550, one heavy bolt every 4s that punches through into a second unit, double damage to trenches and statues. It cannot hit flyers or anything closer than 120, so it backs away from attackers. Slow.',
+  },
+  // Arcane Circle construct: a commandable tank. Hunker Down to soak damage and draw attacks.
+  golem: {
+    key: 'golem', name: 'Spirit Golem', building: 'Golem Forge', cost: 150, mana: 250, time: 12, hp: 700, speed: 45, pop: 3,
+    dmg: 30, range: 40, atkTime: 1.6, aggro: 280, hotkey: '\\', code: 'Backslash', clans: ['arcane'],
+    desc: 'A rune-carved stone construct that takes your orders, unlike a giant. 700 hp, hits one target at a time, and takes half damage from Warlock magic. Hunker Down (X): half speed, 60% less damage, enemies prefer to hit it, and it stops attacking.',
+  },
+  // Beast Clan slinger: the giant-killer (and giant-tamer). Its stones reach flyers too.
+  beastmaster: {
+    key: 'beastmaster', name: 'Beastmaster', building: 'Beast Pen', cost: 140, time: 5, hp: 90, speed: 80, pop: 1,
+    dmg: 14, range: 260, atkTime: 1.2, aggro: 300, hotkey: "'", code: 'Quote', clans: ['beast'],
+    desc: 'A slinger in a beast-hide cloak. Its stones reach flyers and do double damage to enemy giants, and nearby friendly giants obey it as if more troops were around.',
+  },
+  // Shadow Clan infiltrator: slips past the line unseen to wreck trenches and salt enemy gold.
+  saboteur: {
+    key: 'saboteur', name: 'Saboteur', building: 'Hideout', cost: 150, mana: 25, time: 6, hp: 60, speed: 135, pop: 1,
+    dmg: 6, range: 26, atkTime: 0.9, aggro: 200, hotkey: ';', code: 'Semicolon', clans: ['shadow'],
+    desc: 'A cloaked infiltrator, very fast, that vanishes while running like a ninja. Weak in a fight, but does triple damage to trenches, and can Salt a gold deposit (right-click it): for 30s enemy miners get only half the gold they dig there.',
+  },
+  // Sky Clan bomber: glides over the enemy and drops fire pots on the ground below.
+  firebird: {
+    key: 'firebird', name: 'Firebird', building: 'Aerie', cost: 200, mana: 50, time: 9, hp: 90, speed: 85, pop: 2,
+    dmg: 20, range: 40, atkTime: 3, aggro: 320, hotkey: '/', code: 'Slash', clans: ['sky'],
+    desc: 'A rider on a flame-feathered glider. Every 3s it drops a fire pot on the ground units below it: 20 damage to everyone in a small area, and they burn. It cannot hit other flyers. Like a Kestrel, only ranged attacks can reach it.',
+  },
 };
-const UNIT_ORDER = ['miner', 'sword', 'archer', 'spear', 'cleric', 'warlock', 'giant', 'ninja', 'flyer'];
+const UNIT_ORDER = ['miner', 'sword', 'archer', 'spear', 'cleric', 'warlock', 'giant', 'ninja', 'flyer', 'ballista', 'golem', 'beastmaster', 'saboteur', 'firebird'];
 // Training groups: each group trains one unit at a time from a shared queue (so a Swordwrath
 // waits for the Spearton ahead of it). Colors tint the training bar.
 const TRAIN_GROUPS = [
   { key: 'workers', name: 'Workers', color: '#c9a23a', types: ['miner'] },
-  { key: 'infantry', name: 'Infantry', color: '#c0503a', types: ['sword', 'spear', 'ninja'] },
-  { key: 'ranged', name: 'Ranged', color: '#7aa84a', types: ['archer', 'flyer'] },
+  { key: 'infantry', name: 'Infantry', color: '#c0503a', types: ['sword', 'spear', 'ninja', 'saboteur'] },
+  { key: 'ranged', name: 'Ranged', color: '#7aa84a', types: ['archer', 'flyer', 'firebird', 'ballista', 'beastmaster'] },
   { key: 'mages', name: 'Mages', color: '#9a62d8', types: ['cleric', 'warlock'] },
-  { key: 'giants', name: 'Giants', color: '#8f8a80', types: ['giant'] },
+  { key: 'giants', name: 'Giants', color: '#8f8a80', types: ['giant', 'golem'] },
 ];
 const groupOf = type => TRAIN_GROUPS.find(g => g.types.includes(type));
 const isMage = u => u.type === 'cleric' || u.type === 'warlock';
 const isGiant = u => u.type === 'giant';
 // Kestrels are airborne until Feather Fall drops them to the ground (then they fight with a knife).
-const isFlying = u => u.type === 'flyer' && !u.grounded;
+const isFlying = u => (u.type === 'flyer' && !u.grounded) || u.type === 'firebird';
 // Ninjas count as ranged while throwing stars (u.starRanged is decided each frame).
-const isRanged = u => u.type === 'archer' || u.type === 'warlock' || isFlying(u) || (u.type === 'ninja' && !!u.starRanged);
+const isRanged = u => u.type === 'archer' || u.type === 'warlock' || u.type === 'ballista' || u.type === 'beastmaster' || isFlying(u) || (u.type === 'ninja' && !!u.starRanged);
 const trainCode = def => def.code || 'Digit' + def.hotkey;
 // Mages come down the castle ladder; the Dojo and Aerie troops leave straight off the rampart, where
 // all four halls stand. The giant pit is outside the gate.
 const GIANT_PIT_X = 655;
 const RAMPART_HALL_X = { cleric: 150, warlock: 222, ninja: 340, flyer: 462 };
-const DOOR_X = { ...BUILD_X, cleric: 52, warlock: 52, giant: GIANT_PIT_X, ninja: RAMPART_HALL_X.ninja, flyer: RAMPART_HALL_X.flyer };
+const DOOR_X = { ...BUILD_X, cleric: 52, warlock: 52, giant: GIANT_PIT_X, ninja: RAMPART_HALL_X.ninja, flyer: RAMPART_HALL_X.flyer, ballista: 500, golem: GIANT_PIT_X, beastmaster: GIANT_PIT_X, saboteur: RAMPART_HALL_X.ninja, firebird: RAMPART_HALL_X.flyer };   // beastmasters come out of the pit with the giants   // ballistas roll out by the gate
 
 // Ninjas
 const NINJA_AMBUSH = 3;           // damage multiplier of the first blow of a fight (or out of stealth)
@@ -147,6 +178,25 @@ const GROUNDED = { hp: 45, dmg: 6, range: 26, atkTime: 0.9, speed: 70 };   // af
 
 // Critical hits (archers and ninjas): double damage
 const CRIT = { chance: 0.1, upgraded: 0.2, mult: 2 };
+
+// Ballista (Defense Clan): can't shoot closer than minRange; each bolt also hits the next unit
+// behind its target for a share of the damage; structures (trenches, statues) take extra.
+const BALLISTA = { minRange: 120, pierce: 0.6, structureMul: 2, drawScale: 1.5 };   // drawScale: the engine is drawn bigger than its crewman
+
+// Spirit Golem (Arcane Circle): bigger than a man, stone armor, shrugs off Warlock magic;
+// Mana Core heals it slowly.
+const GOLEM = { scale: 1.5, armor: 0.1, spellMul: 0.5, regen: 3 };
+
+// Beastmaster (Beast Clan): double damage to giants; within auraRange each one counts as this many
+// extra troops for a friendly giant's obedience (more with Beast Lore).
+const BEASTMASTER = { giantMul: 2, aura: 2, auraLore: 4, auraRange: 280, prodDmg: 2, prodCd: 5, prodTime: 4 };   // prod: a stone that drives a stalled giant into a charge for prodTime seconds
+
+// Saboteur (Shadow Clan): trench damage multiplier (Sappers) and Salt the Mine: seconds spent salting,
+// how long the salt lasts (Brine), and the share of dug gold enemy miners keep from a salted deposit.
+// Firebird (Sky Clan): fire pot blast radius and burn time (bigger with Pitch Pots), and the faster
+// drop rate with Quick Fuse.
+const FIREBIRD = { radius: 45, radiusPitch: 65, burn: 3, burnPitch: 5, fuseAtk: 2.2 };
+const SABOTEUR = { trenchMul: 3, trenchMulSappers: 5, saltTime: 2.5, saltDur: 30, saltDurBrine: 50, saltKeep: 0.5 };
 
 // Giants
 const GIANT_SCALE = 2.1;          // base size; each Protein Diet tier adds 13%
@@ -189,6 +239,7 @@ const buildingName = type => (type === 'castle' ? 'Castle' : UNIT_TYPES[type].bu
 const UPGRADES = {
   sword: [
     { key: 'blades', name: 'Forged Blades', cost: 200, mana: 0, time: 25, desc: 'Swordwrath trade their clubs for iron swords. +50% damage.' },
+    { key: 'greatsword', name: 'Great Swords', cost: 250, mana: 75, time: 30, requires: 'blades', clans: ['sword'], desc: 'Heavy two-handed blades: damage 18 → 25, but each swing is 10% slower.' },
     { key: 'helm', name: 'Iron Helmets', cost: 175, mana: 0, time: 20, desc: 'Helmets that absorb 25% of incoming damage.' },
     { key: 'leap', name: 'Running Jump', cost: 150, mana: 50, time: 20, desc: 'After a sprint, the first strike is a leaping blow that deals double damage.' },
     { key: 'rage', name: 'Adrenaline', cost: 150, mana: 75, time: 25, desc: 'The more wounded they are, the faster and harder they hit.' },
@@ -198,8 +249,10 @@ const UPGRADES = {
   miner: [
     { key: 'bag', name: 'Bigger Bags', cost: 150, mana: 0, time: 20, desc: 'Carry 35 → 56 gold per trip.' },
     { key: 'bag2', name: 'Ox-hide Sacks', cost: 200, mana: 25, time: 25, requires: 'bag', desc: 'Carry 56 → 80 gold per trip.' },
+    { key: 'mule', name: 'Mule Packs', cost: 250, mana: 50, time: 30, requires: 'bag2', clans: ['mercenary'], desc: 'Carry 80 → 100 gold per trip.' },
     { key: 'pick', name: 'Steel Pickaxes', cost: 200, mana: 0, time: 25, desc: 'Swing faster and dig 7 → 11 gold per swing.' },
     { key: 'pick2', name: 'Tempered Picks', cost: 250, mana: 25, time: 30, requires: 'pick', desc: 'Swing faster still and dig 11 → 14 gold per swing.' },
+    { key: 'diamond', name: 'Diamond Picks', cost: 300, mana: 50, time: 35, requires: 'pick2', clans: ['mercenary'], desc: 'Swing faster again and dig 14 → 17 gold per swing.' },
     { key: 'devout', name: 'Devout', cost: 100, mana: 25, time: 20, desc: 'Prayers yield 50% more mana.' },
     { key: 'devout2', name: 'Zealous Faith', cost: 175, mana: 50, time: 25, requires: 'devout', desc: 'Prayers yield double mana.' },
     { key: 'pan1', name: 'Iron Pans', cost: 150, mana: 0, time: 20, desc: 'Pan the castle stream 35% faster.' },
@@ -211,10 +264,13 @@ const UPGRADES = {
   ],
   archer: [
     { key: 'bow', name: 'Recurve Bows', cost: 175, mana: 0, time: 20, desc: 'Range 380 → 500. Castle archers reach just as much further.' },
+    { key: 'longbow', name: 'Longbows', cost: 250, mana: 50, time: 30, requires: 'bow', clans: ['archer'], desc: 'Range 500 → 600: out-shoots enemy castle archers. Your castle archers reach further too.' },
     { key: 'arrows', name: 'Bodkin Arrows', cost: 175, mana: 0, time: 20, desc: 'Arrow damage 24 → 32, and the bodkin points ignore a third of the target’s armor.' },
     { key: 'fire', name: 'Flaming Arrows', cost: 225, mana: 75, time: 30, requires: 'arrows', desc: `Arrows set targets alight: ${BURN_DPS} damage per second for ${BURN_TIME}s on top of the hit.` },
+    { key: 'broadheads', name: 'Broadheads', cost: 225, mana: 50, time: 25, requires: 'arrows', clans: ['archer'], desc: 'Arrow damage 32 → 40.' },
     { key: 'quiver', name: 'Deep Quivers', cost: 150, mana: 50, time: 20, desc: 'Reload 30% faster.' },
     { key: 'eye', name: 'Eagle Eye', cost: 175, mana: 50, time: 25, desc: `Critical hit chance ${CRIT.chance * 100}% → ${CRIT.upgraded * 100}%. A critical hit does double damage.` },
+    { key: 'steady', name: 'Steady Hands', cost: 200, mana: 50, time: 25, requires: 'quiver', clans: ['archer'], desc: 'Reload another 15% faster.' },
   ],
   ninja: [
     { key: 'serrated', name: 'Serrated Blades', cost: 175, mana: 0, time: 20, desc: `Cuts through more armor: ignores ${NINJA_PIERCE[1] * 100}% of it instead of ${NINJA_PIERCE[0] * 100}%.` },
@@ -226,8 +282,32 @@ const UPGRADES = {
   flyer: [
     { key: 'feather', name: 'Feather Fall', cost: 175, mana: 50, time: 25, desc: `When shot down, the Kestrel glides to the ground and fights on with a knife (${GROUNDED.hp} hp, weak). On the ground anyone can hit it.` },
     { key: 'scope', name: 'Long Sights', cost: 175, mana: 0, time: 20, desc: 'Range 300 → 400.' },
+    { key: 'scope2', name: 'Spyglass', cost: 225, mana: 50, time: 25, requires: 'scope', clans: ['archer', 'sky'], desc: 'Range 400 → 480.' },
     { key: 'winch', name: 'Crank Winch', cost: 150, mana: 50, time: 20, desc: 'Reload 30% faster.' },
     { key: 'barbs', name: 'Barbed Bolts', cost: 175, mana: 0, time: 20, desc: 'Bolt damage 15 → 21.' },
+    { key: 'barbs2', name: 'Barbed Bolts II', cost: 225, mana: 50, time: 25, requires: 'barbs', clans: ['sky'], desc: 'Bolt damage 21 → 26.' },
+    { key: 'hawkeye', name: 'Hawk Eye', cost: 175, mana: 50, time: 25, clans: ['sky'], desc: `Kestrel critical hit chance ${CRIT.chance * 100}% → ${CRIT.upgraded * 100}%.` },
+  ],
+  ballista: [
+    { key: 'torsion', name: 'Torsion Springs', cost: 200, mana: 50, time: 25, desc: 'Range 550 → 650.' },
+    { key: 'ironbolt', name: 'Iron-tipped Bolts', cost: 225, mana: 50, time: 25, desc: 'Bolt damage 45 → 60.' },
+    { key: 'mantlet', name: 'Mantlet', cost: 175, mana: 25, time: 20, desc: 'A timber shield for the crew: +60 hp and 20% armor.' },
+  ],
+  golem: [
+    { key: 'plating', name: 'Runic Plating', cost: 200, mana: 75, time: 25, desc: 'Rune-etched plates: +20% armor.' },
+    { key: 'core', name: 'Mana Core', cost: 175, mana: 100, time: 25, desc: `A glowing core in its chest that slowly mends it: +${GOLEM.regen} hp per second.` },
+  ],
+  beastmaster: [
+    { key: 'stones', name: 'Heavy Stones', cost: 175, mana: 0, time: 20, desc: 'Sling damage 14 → 20.' },
+    { key: 'lore', name: 'Beast Lore', cost: 175, mana: 50, time: 25, desc: `Each Beastmaster counts as ${BEASTMASTER.auraLore} extra troops for nearby giants' obedience instead of ${BEASTMASTER.aura}.` },
+  ],
+  saboteur: [
+    { key: 'sappers', name: "Sappers' Picks", cost: 175, mana: 25, time: 20, desc: `Trench damage ${SABOTEUR.trenchMul}× → ${SABOTEUR.trenchMulSappers}×.` },
+    { key: 'brine', name: 'Brine', cost: 150, mana: 50, time: 20, desc: `Salted deposits stay spoiled for ${SABOTEUR.saltDurBrine}s instead of ${SABOTEUR.saltDur}s.` },
+  ],
+  firebird: [
+    { key: 'pitch', name: 'Pitch Pots', cost: 200, mana: 75, time: 25, desc: `Fire pots burst wider (radius ${FIREBIRD.radius} → ${FIREBIRD.radiusPitch}) and burn longer (${FIREBIRD.burn}s → ${FIREBIRD.burnPitch}s).` },
+    { key: 'fuse', name: 'Quick Fuse', cost: 175, mana: 50, time: 20, desc: `Drops a pot every ${FIREBIRD.fuseAtk}s instead of every 3s.` },
   ],
   spear: [
     { key: 'shield', name: 'Shields', cost: 175, mana: 0, time: 20, desc: '+20% armor and +40 hp, and unlocks Shield Wall (X): they stop attacking, take 60% less damage and draw enemy attacks.' },
@@ -235,6 +315,7 @@ const UPGRADES = {
     { key: 'helm', name: 'Crested Helmets', cost: 150, mana: 0, time: 20, desc: '+15% armor.' },
     { key: 'inspire', name: 'Rallying Cry', cost: 200, mana: 100, time: 30, desc: 'Inspires up to 8 nearby allies: +10% damage and 8% faster attacks per stack, up to 3 stacks. Every ally nearby gets one stack before anyone gets a second. Also unlocks Defend Trench.' },
     { key: 'halberd', name: 'Halberds', cost: 200, mana: 50, time: 25, desc: 'Armor piercing: ignores enemy armor and halves shield wall protection. Damage 18 → 28.' },
+    { key: 'javelin', name: 'Javelins', cost: 150, mana: 25, time: 20, desc: `Each Spearton carries one javelin and hurls it at the nearest flyer within ${JAVELIN.range} (${JAVELIN.dmg} damage). It gets a new one each time it garrisons.` },
   ],
   // Castle upgrades are bought from the castle itself (click the rampart/tower or the castle button).
   // Mirrored mage research: each pair costs exactly the same.
@@ -262,9 +343,12 @@ const UPGRADES = {
   castle: [
     { key: 'tithe', name: 'Statue Offerings', cost: 200, mana: 25, time: 25, team: true, desc: `Your statue earns ${TITHE_GOLD[1]} gold per second.` },
     { key: 'tithe2', name: 'Golden Idol', cost: 300, mana: 75, time: 35, team: true, requires: 'tithe', desc: `Statue income rises to ${TITHE_GOLD[2]} gold per second.` },
+    { key: 'gilded', name: 'Gilded Statue', cost: 400, mana: 100, time: 40, team: true, requires: 'tithe2', clans: ['mercenary'], desc: `Statue income rises to ${TITHE_GOLD[3]} gold per second.` },
     { key: 'archer2', name: 'Second Castle Archer', cost: 200, mana: 50, time: 25, team: true, desc: 'Posts another archer on the rampart. Castle archers always use your researched archer upgrades.' },
     { key: 'archer3', name: 'Third Castle Archer', cost: 300, mana: 100, time: 30, team: true, requires: 'archer2', desc: 'Posts a third archer on the rampart.' },
+    { key: 'archer4', name: 'Fourth Castle Archer', cost: 400, mana: 150, time: 35, team: true, requires: 'archer3', desc: 'Posts a fourth archer on the rampart (clans with 4 castle archer slots only).' },
     { key: 'levy', name: 'Levy', cost: 300, mana: 100, time: 35, team: true, desc: `A free Swordwrath marches out of the Barracks every ${LEVY_INTERVAL} seconds (if you have room in your population).` },
+    { key: 'levy2', name: 'Levy II', cost: 450, mana: 150, time: 40, team: true, requires: 'levy', clans: ['defense'], desc: `A free Spearton also marches out of the Spear Hall every ${LEVY_INTERVAL} seconds (if you have room in your population).` },
   ],
 };
 
@@ -283,6 +367,13 @@ const MINE_LAYOUTS = {
   scarce: { name: 'Scarce, rich veins', first: [1100, 1200], gap: [380, 480], n: [2, 2], rich: 1.8, center: 1, weight: 1 },
 };
 // The Shrine stands in the middle of some maps. Hold the ground around it to own it.
+// How much gold the deposits hold (chosen in the skirmish setup, or rolled by the seed).
+const GOLD_LEVELS = [
+  { key: 'scarce', name: 'Scarce gold', mul: 0.6, weight: 1 },
+  { key: 'normal', name: 'Normal gold', mul: 1, weight: 2 },
+  { key: 'rich', name: 'Rich gold', mul: 1.6, weight: 1 },
+];
+// The Monolith (called the Shrine in the code) stands in the middle of some maps.
 const SHRINE = {
   chance: 0.4, radius: 170, capTime: 8,    // seconds for one uncontested unit (more units capture faster, up to 3x)
   gold: 1.5, mana: 0.75,                    // income per second for the owner
@@ -304,6 +395,11 @@ const GEAR = {
   giant: [['none'], ['horns']],
   ninja: [['ninja'], ['ninja']],
   flyer: [['goggles'], ['goggles']],
+  ballista: [['band'], ['horns']],
+  golem: [['none'], ['none']],
+  beastmaster: [['pelt'], ['pelt']],
+  saboteur: [['cowl'], ['cowl']],
+  firebird: [['goggles'], ['goggles']],
 };
 
 const THEMES = [

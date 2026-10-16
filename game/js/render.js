@@ -221,7 +221,7 @@ function drawUnitInAir(ctx, u, dying, fall, alpha, lift) {
     flash: u.lastStand > 0 ? (Math.sin(RT * 30) > 0 ? 1 : 0) : u.flash,
     wall: u.shieldWall, arch: u.type === 'archer' ? archPose(u, dying) : null, cast: u.swingKind === 'cast',
     chains: isGiant(u) ? giantChains(u) : 0, stone: u.isStatueGiant ? G.teams[u.team].statue.stone : null,
-    starRanged: u.starRanged, grounded: u.grounded, aimFa: u.aimFa, pace: u.pace,
+    starRanged: u.starRanged, grounded: u.grounded, aimFa: u.aimFa, pace: u.pace, salting: u.salting, javelin: !!(u.perks.javelin && u.javelin),
   });
   if (dying) return;
   drawBuffsOver(ctx, u);
@@ -457,6 +457,65 @@ function drawProjectiles(ctx) {
   for (const p of G.projectiles) {
     const a = Math.atan2(p.vy, p.vx), c = Math.cos(a), s = Math.sin(a);
     if (p.kind === 'star') { drawStar(ctx, p.x, p.y, 4, p.t * 25); continue; }
+    if (p.kind === 'pot') {
+      ctx.fillStyle = '#7a4a2a';
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 4, 0, TAU);
+      ctx.fill();
+      ctx.fillStyle = Math.sin(RT * 30) > 0 ? '#ffd25a' : '#ff8a2e';
+      ctx.beginPath();
+      ctx.arc(p.x + 2, p.y - 4, 1.8, 0, TAU);
+      ctx.fill();
+      if (chance(0.5)) G.particles.push({ kind: 'spark', x: p.x, y: p.y - 4, vx: rnd(-8, 8), vy: rnd(-20, -5), life: 0.3, max: 0.3, color: '#ff9a2e', size: 1.4 });
+      continue;
+    }
+    if (p.kind === 'stone') {
+      ctx.fillStyle = '#7d7870';
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 2.6, 0, TAU);
+      ctx.fill();
+      continue;
+    }
+    if (p.kind === 'ballista') {
+      // a heavy siege bolt with leather fletching
+      ctx.strokeStyle = '#3a2a1a';
+      ctx.lineWidth = 3.4;
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y);
+      ctx.lineTo(p.x - c * 26, p.y - s * 26);
+      ctx.stroke();
+      ctx.strokeStyle = '#8a6a44';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(p.x - c * 20, p.y - s * 20);
+      ctx.lineTo(p.x - c * 26, p.y - s * 26);
+      ctx.stroke();
+      ctx.fillStyle = '#9aa0a6';
+      ctx.beginPath();
+      ctx.moveTo(p.x + c * 6, p.y + s * 6);
+      ctx.lineTo(p.x - s * 3.5, p.y + c * 3.5);
+      ctx.lineTo(p.x + s * 3.5, p.y - c * 3.5);
+      ctx.closePath();
+      ctx.fill();
+      continue;
+    }
+    if (p.kind === 'javelin') {
+      // a long throwing spear
+      ctx.strokeStyle = '#6a4a2a';
+      ctx.lineWidth = 2.2;
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y);
+      ctx.lineTo(p.x - c * 28, p.y - s * 28);
+      ctx.stroke();
+      ctx.fillStyle = '#a9b0b6';
+      ctx.beginPath();
+      ctx.moveTo(p.x + c * 5, p.y + s * 5);
+      ctx.lineTo(p.x - s * 2.5, p.y + c * 2.5);
+      ctx.lineTo(p.x + s * 2.5, p.y - c * 2.5);
+      ctx.closePath();
+      ctx.fill();
+      continue;
+    }
     if (p.kind === 'bolt') {
       // a short, heavy crossbow bolt
       ctx.strokeStyle = '#3a2a1a';
@@ -543,6 +602,10 @@ function drawPlacing(ctx) {
     const ok = w && w.team === 0 && w.progress >= 1 && w.tier !== 2;
     ctx.fillStyle = ok ? '#d8f0c8' : '#9c8f76';
     ctx.fillText(ok ? `Raise a palisade here (${w.reinforcing ? 'resume' : WALL_COST + ' gold'})` : 'Click one of your finished trenches', x, y - 24);
+  } else if (UI.placing === 'salt') {
+    const m = mineAt(x, y, false);
+    ctx.fillStyle = m ? '#f0eee8' : '#9c8f76';
+    ctx.fillText(m ? 'Salt this deposit' : 'Click a gold deposit to salt', x, y - 24);
   } else if (UI.placing === 'replenish') {
     const m = mineAt(x, y, true);
     ctx.fillStyle = m ? '#e0bf5a' : '#9c8f76';
@@ -611,8 +674,7 @@ function render(ctx) {
 
   for (const t of G.teams) {
     drawStatueBar(ctx, t.statue);
-    if (t.statue.dead) continue;
-    for (const a of t.archers) {
+    for (const a of t.archers) {   // still on the wall after the statue falls
       if (!inView(a.x)) continue;
       drawStickman(ctx, {
         x: a.x, y: a.y, facing: a.f, scale: 0.88, team: t.id, type: 'archer',

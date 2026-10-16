@@ -48,7 +48,8 @@ function unitAt(wx, wy, team) {
     if ((u.inside || u.stealth) && u.team !== 0) continue;   // vanished ninjas can't be clicked on
     if (team === 0 && !selectable(u)) continue;   // giants can't be picked without blinders
     const s = u.scale, uy = u.y - (u.onWall ? wallHeight(u.onWall) : 0) - u.alt;
-    if (Math.abs(wx - u.x) < 14 * s && wy < uy + 8 && wy > uy - 74 * s) {
+    const hw = u.type === 'ballista' ? 27 * BALLISTA.drawScale : 14;   // the ballista is a wide engine, crewman included
+    if (Math.abs(wx - u.x) < hw * s && wy < uy + 8 && wy > uy - 74 * s) {
       const d = Math.abs(wx - u.x) + Math.abs(wy - (uy - 35)) * 0.3;
       if (d < bd) { bd = d; best = u; }
     }
@@ -84,7 +85,8 @@ function buildingAt(wx, wy) {
     for (const [type, hx] of Object.entries(RAMPART_HALL_X)) if (Math.abs(wx - hx) < 28 && wy > WALL_TOP - 90) return type;
     return 'castle';
   }
-  if (Math.abs(wx - GIANT_PIT_X) < 52 && wy > LANE_TOP - 100 && wy < LANE_TOP + 2) return 'giant';
+  // the pit outside the gate: the Giant Pit, or the Golem Forge for the Arcane Circle
+  if (Math.abs(wx - GIANT_PIT_X) < 52 && wy > LANE_TOP - 100 && wy < LANE_TOP + 2) return canTrain(G.teams[0], 'golem') ? 'golem' : 'giant';
   if (wy < LANE_TOP - 128 || wy > LANE_TOP) return null;
   for (const [type, bx] of Object.entries(BUILD_X)) if (Math.abs(wx - bx) < 52) return type;
   return null;
@@ -113,7 +115,8 @@ const mageSel = () => liveSel().filter(u => isMage(u));
 const builderSelection = () => minerSel().filter(u => u.perks.walls);
 const fortifierSelection = () => minerSel().filter(u => u.perks.walls2);
 const prospectorSelection = () => minerSel().filter(u => u.perks.prospect);
-const shieldSelection = () => liveSel().filter(u => u.type === 'spear' && u.perks.shield);
+// Units that can brace: Spearton with Shields (Shield Wall) and Spirit Golems (Hunker Down).
+const shieldSelection = () => liveSel().filter(u => (u.type === 'spear' && u.perks.shield) || u.type === 'golem');
 const refitSelection = () => liveSel().filter(u => missingUpgrades(u).length);
 const starSelection = () => liveSel().filter(u => u.type === 'ninja' && u.perks.stars);
 
@@ -171,6 +174,13 @@ function issueCommand(wx, wy) {
   }
   const mine = mineAt(wx, wy, true);
   if (mine) {
+    // saboteurs go and salt it
+    const sabs = sel.filter(u => u.type === 'saboteur');
+    if (sabs.length && mine.gold > 0) {
+      for (const u of sabs) setOrder(u, { type: 'salt', mine });
+      marker(mine.x, mine.y, '#f0eee8');
+      if (sabs.length === sel.length) return;
+    }
     const prospectors = sel.filter(u => u.type === 'miner' && u.perks.prospect);
     if (mine.gold <= 0 && prospectors.length) {
       for (const u of prospectors) setOrder(u, { type: 'replenish', mine });
@@ -179,8 +189,9 @@ function issueCommand(wx, wy) {
     }
     if (mine.gold > 0) {
       for (const u of sel) {
+        if (u.type === 'saboteur') continue;   // already off to salt it
         if (u.type === 'miner') { setMine(u, mine); setOrder(u, { type: 'work' }); }
-        else setOrder(u, { type: 'move', x: mine.x - me.dir * 40, y: clamp(u.y, LANE_TOP, LANE_BOT) });
+        else setOrder(u, moveOrder(u, mine.x - me.dir * 40, clamp(u.y, LANE_TOP, LANE_BOT)));
       }
       marker(mine.x, mine.y, '#c99b2a');
       return;
@@ -189,25 +200,30 @@ function issueCommand(wx, wy) {
   if (st && st.team === 0) {
     for (const u of sel) {
       if (u.type === 'miner') setOrder(u, { type: 'mana' });
-      else setOrder(u, { type: 'move', x: st.x + me.dir * 90, y: clamp(u.y, LANE_TOP, LANE_BOT) });
+      else setOrder(u, moveOrder(u, st.x + me.dir * 90, clamp(u.y, LANE_TOP, LANE_BOT)));
     }
     marker(st.x, LANE_TOP - 30, TEAM_STYLE[0].crystal);
     return;
   }
   if (wx < GATE_X + 20 && wy > WALL_TOP - 20 && wy < LANE_BOT + 16) {
-    for (const u of sel) setOrder(u, u.type === 'miner' ? { type: 'pan' } : { type: 'garrison' });
+    for (const u of sel) if (!isGiant(u)) setOrder(u, u.type === 'miner' ? { type: 'pan' } : { type: 'garrison' });   // giants don't fit
     marker(GATE_X - 40, LANE_TOP + 14, '#8fb0c8');
     return;
   }
-  // plain move, spread into a small block
+  // move (attack-move for most units), spread into a small block
   const ty = clamp(wy, LANE_TOP, LANE_BOT);
   sel.forEach((u, i) => {
     const x = wx - me.dir * Math.floor(i / LANE_ROWS) * 24;
     const y = clamp(ty + ((i % LANE_ROWS) - (LANE_ROWS - 1) / 2) * 18, LANE_TOP, LANE_BOT);
-    setOrder(u, { type: 'move', x, y });
+    setOrder(u, moveOrder(u, x, y));
   });
   marker(wx, ty, '#96e078');
 }
+
+// Move orders are attack-moves: troops fight anything in range on the way and then carry on.
+// Ninjas and saboteurs move straight there, since they're meant to slip past and pick their targets.
+const PLAIN_MOVERS = ['ninja', 'saboteur'];
+const moveOrder = (u, x, y) => ({ type: 'move', x, y, attackMove: !PLAIN_MOVERS.includes(u.type) });
 
 function stopSelected() {
   for (const u of liveSel()) setOrder(u, { type: 'hold', x: u.x, y: u.y });
@@ -229,6 +245,7 @@ function startPlacing(mode) {
 function toggleShieldWall() {
   const s = shieldSelection();
   if (!s.length) {
+    if (canTrain(G.teams[0], 'golem')) return toast('Select Spirit Golems or Spearton with Shields');
     return toast(G.teams[0].upgrades.spear.shield ? 'Select Spearton with Shields (refit older ones with R)' : 'Research Shields at the Spear Hall first');
   }
   const on = !s.every(u => u.shieldWall);
@@ -248,8 +265,17 @@ function refitSelected() {
 
 function toggleMinerRecall() {
   const me = G.teams[0];
+  me.siege = false;   // taking manual control ends siege mode
   setMinerGarrison(me, !me.minersIn);
   toast(me.minersIn ? 'Miners are retreating into the castle to pan the stream' : 'Miners are back to work');
+}
+
+// Siege mode: miners shelter in the castle on their own whenever enemies threaten them.
+function toggleSiegeMode() {
+  const me = G.teams[0];
+  me.siege = !me.siege;
+  me.siegeT = 0;
+  toast(me.siege ? 'Siege mode on: miners shelter in the castle whenever enemies threaten them' : 'Siege mode off');
 }
 
 const MINER_DEFAULTS = ['mine', 'pray', 'pan'];
@@ -324,6 +350,7 @@ const ICONS = {
   wall: '<path d="M2 20h5l3-9h5l3 9h4" stroke-width="1.8"/><path d="M15 15l6-4M13 12l5-4" stroke-width="1.6"/><path d="M3 20l2 2h0" stroke-width="1.4"/>',
   reinforce: '<path d="M6 21V9l2-3 2 3v12M11 21V8l2-3 2 3v13M16 21V9l2-3 2 3v12" stroke-width="1.6"/><path d="M4 15h18" stroke-width="1.4"/>',
   repair: '<path d="M14 3l-8 14" stroke-width="2"/><path d="M4 15l4 3-2 4-4-3z" fill="currentColor" stroke="none"/><path d="M13 21h9l-3-6h-4z" stroke-width="1.6"/>',
+  salt: '<path d="M8 4h8l2 5H6z" fill="currentColor" stroke="none"/><path d="M6 9h12v6a6 6 0 0 1-12 0z" stroke-width="1.8"/><path d="M9 21h1M13 22h1M16 20h1" stroke-width="2"/>',
   replenish: '<path d="M4 21l4-7h8l4 7z" fill="currentColor" stroke="none"/><path d="M12 11V3M8 7l4-4 4 4" stroke-width="2"/>',
   refit: '<path d="M4 18h16M7 18v-4h10v4M9 14V9h6v5M12 9V4" stroke-width="2"/>',
   stars: '<path d="M12 2l2.2 7.8L22 12l-7.8 2.2L12 22l-2.2-7.8L2 12l7.8-2.2z" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="2" fill="#120d0a" stroke="none"/>',
@@ -333,12 +360,12 @@ const ICONS = {
 const COMMANDS = [
   { id: 'attack', label: 'Attack', key: '⇧E', show: s => s.mil, run: () => formGroup(G.teams[0], milSel(), 'attack'), on: () => inGroup('attack') },
   { id: 'defend', label: 'Defend', key: '⇧W', show: s => s.mil, run: () => milSel().forEach(u => setUnitStance(u, 'defend')), on: () => milSel().every(u => u.ownStance === 'defend' && u.order.type === 'stance') },
-  { id: 'garrison', label: s => (s.mil ? 'Garrison' : 'Garrison & pan'), key: '⇧Q', show: () => true, run: () => liveSel().forEach(u => setUnitStance(u, 'garrison')) },
+  { id: 'garrison', label: s => (s.minersOnly ? 'Garrison & pan' : 'Garrison'), key: '⇧Q', show: s => s.canGarrison, run: () => liveSel().forEach(u => setUnitStance(u, 'garrison')) },
   { id: 'advance', label: 'Advance', key: 'C', show: s => s.mil, run: () => formGroup(G.teams[0], milSel(), 'advance'), on: () => inGroup('advance') },
   { id: 'retreat', label: 'Retreat', key: '⇧C', show: s => s.mil, run: () => formGroup(G.teams[0], milSel(), 'retreat'), on: () => inGroup('retreat') },
   { id: 'hold', label: 'Hold', key: 'S', show: () => true, run: stopSelected },
   { id: 'manwall', label: 'Defend trench', key: 'K', show: s => s.melee && s.canWall, run: () => manWall(G.teams[0], meleeSel(), null), on: () => meleeSel().every(u => u.order.type === 'manwall') },
-  { id: 'shield', label: 'Shield wall', key: 'X', show: s => s.shield, run: toggleShieldWall, on: () => shieldSelection().every(u => u.shieldWall) },
+  { id: 'shield', label: s => (s.golemOnly ? 'Hunker down' : 'Shield wall'), key: 'X', show: s => s.shield, run: toggleShieldWall, on: () => shieldSelection().every(u => u.shieldWall) },
   { id: 'mine', label: 'Mine', key: 'I', show: s => s.miner, run: () => minerSel().forEach(u => setOrder(u, { type: 'stance' })) },
   { id: 'pray', label: 'Pray', key: 'O', show: s => s.miner, run: () => minerSel().forEach(u => setOrder(u, { type: 'mana' })) },
   { id: 'pan', label: 'Pan', key: '⇧Q', show: s => s.miner && s.mil, run: () => minerSel().forEach(u => setOrder(u, { type: 'pan' })) },
@@ -346,6 +373,7 @@ const COMMANDS = [
   { id: 'reinforce', label: 'Palisade', key: 'J', show: s => s.fort, run: () => startPlacing('reinforce') },
   { id: 'repair', label: 'Repair', key: 'Y', show: s => s.build, run: () => { const w = repairTrenches(G.teams[0], builderSelection()); if (w) G.markers.push({ x: w.x, y: LANE_BOT, t: 0, color: '#c9b27a' }); else toast('None of your trenches need repair'); } },
   { id: 'replenish', label: 'Replenish', key: 'N', show: s => s.prosp, run: () => startPlacing('replenish') },
+  { id: 'salt', label: 'Salt mine', key: 'RMB', show: s => s.sab, run: () => { UI.placing = 'salt'; } },
   { id: 'refit', label: 'Refit', key: 'R', show: () => true, run: refitSelected },
   { id: 'auto', label: 'Auto-cast', key: 'L', show: s => s.mage, run: toggleAutoCast, on: () => mageSel().every(u => u.auto) },
   { id: 'stars', label: s => `Weapon: ${STAR_MODE_NAMES[s.stars]}`, key: 'M', show: s => !!s.stars, run: cycleStarMode, on: () => starSelection().every(u => u.starMode === 'ranged') },
@@ -372,11 +400,15 @@ function selectionCaps() {
     miner: minerSel().length > 0,
     canWall: canManWalls(me),
     shield: shieldSelection().length > 0,
+    golemOnly: shieldSelection().length > 0 && shieldSelection().every(u => u.type === 'golem'),
     build: builderSelection().length > 0,
     fort: fortifierSelection().length > 0,
     prosp: prospectorSelection().length > 0,
     mage: mageSel().length > 0,
     stars: starSelection().length ? starSelection()[0].starMode : null,
+    sab: liveSel().some(u => u.type === 'saboteur'),
+    canGarrison: liveSel().some(u => !isGiant(u)),   // giants are too big for the castle
+    minersOnly: liveSel().length > 0 && liveSel().every(u => u.type === 'miner'),
     spells: Object.keys(SPELLS).filter(k => mageSel().some(u => u.type === SPELLS[k].owner && u.perks[SPELLS[k].perk])),
   };
 }
@@ -404,6 +436,12 @@ function placeAt(wx, wy, keep) {
     if (castAt(UI.placing.slice(6), wx, wy)) UI.placing = null;
   } else if (UI.placing === 'reinforce') {
     if (reinforceWall(me, wallAt(wx, wy), fortifierSelection())) UI.placing = null;
+  } else if (UI.placing === 'salt') {
+    const m = mineAt(wx, wy, false);
+    if (!m) return toast('Click a gold deposit');
+    for (const u of liveSel().filter(u => u.type === 'saboteur')) setOrder(u, { type: 'salt', mine: m });
+    G.markers.push({ x: m.x, y: m.y, t: 0, color: '#f0eee8' });
+    UI.placing = null;
   } else if (UI.placing === 'replenish') {
     const m = mineAt(wx, wy, true);
     if (!m) return toast('Click a gold deposit');
@@ -487,6 +525,7 @@ function initInput() {
     const trainKey = UNIT_ORDER.find(t => trainCode(UNIT_TYPES[t]) === e.code);
     if (trainKey) { queueUnit(me, trainKey); return; }
     // Shift + Q/W/E give the order to the selected units only; plain Q/W/E command the whole army.
+    if (e.shiftKey && e.code === 'KeyZ') { toggleSiegeMode(); return; }
     if (e.shiftKey && ['KeyQ', 'KeyW', 'KeyE', 'KeyC'].includes(e.code)) {
       runCommand({ KeyQ: 'garrison', KeyW: 'defend', KeyE: 'attack', KeyC: 'retreat' }[e.code]);
       return;
@@ -514,8 +553,9 @@ function initInput() {
       case 'KeyX': toggleShieldWall(); break;
       case 'KeyR': refitSelected(); break;
       case 'KeyU': {
-        const i = RESEARCH_TYPES.indexOf(UI.panel);
-        openPanel(RESEARCH_TYPES[(i + 1) % RESEARCH_TYPES.length]);
+        // cycle through the buildings this clan can use (and the castle)
+        const open = RESEARCH_TYPES.filter(t => t === 'castle' || canTrain(G.teams[0], t)), i = open.indexOf(UI.panel);
+        openPanel(open[(i + 1) % open.length]);
         break;
       }
       case 'KeyP': togglePause(); break;
@@ -599,12 +639,12 @@ function updateCamera(dt) {
 const CMD_TIPS = {
   attack: 'These units march on the enemy statue together: spearton in front, swordwrath behind, archers and mages at the back, at the pace of the slowest (slower still behind a shield wall). They break ranks to fight anything close. (The army-wide Attack button sends everyone at full speed instead.)',
   defend: 'These units hold the defend line at your muster point (or in front of your statue).',
-  garrison: 'These units go into the castle and heal. Miners pan the castle stream (up to 5): 1 gold + 1 mana per tick.',
+  garrison: s => (s.minersOnly ? 'These miners go into the castle and pan the stream (up to 5): 1 gold + 1 mana per tick.' : s.miner ? 'These units go into the castle: soldiers heal there, and miners pan the stream (up to 5) for 1 gold + 1 mana per tick.' : 'These units go into the castle and heal.'),
   advance: 'March forward together in formation, holding ranks and fighting only what is in reach. The line halts while it fights.',
   retreat: 'Fall back toward the castle together, facing the enemy and still fighting anything in reach.',
   hold: 'Stop and hold this spot, fighting anything that comes close.',
   manwall: `Melee troops climb onto the rampart of your nearest finished trench (one row, ${WALL_GUARDS} per trench). Blows against them are split half to the rampart.`,
-  shield: 'Spearton brace behind their shields: no attacks, big damage reduction, enemies prefer to hit them.',
+  shield: 'Spearton brace behind their shields, Spirit Golems hunker down: no attacks, half speed, big damage reduction, and enemies prefer to hit them.',
   mine: 'Go back to mining gold.',
   pray: 'Kneel at the statue and pray for mana (4 at a time).',
   pan: 'Go into the castle and pan the stream for gold and mana (5 at a time).',
@@ -614,14 +654,15 @@ const CMD_TIPS = {
   replenish: 'Restore a gold deposit, even an exhausted one.',
   refit: `Walk back to their building and take every upgrade they're missing (${REFIT_COST} gold and ${REFIT_TIME}s each).`,
   auto: `When on, mages cast their spells on their own and answer enemy spells with the opposite one. They keep ${SPELL_RESERVE} mana in reserve. You can still force any spell yourself.`,
+  salt: `Click a gold deposit (or right-click it): the saboteurs sneak over and salt it. For ${SABOTEUR.saltDur}s enemy miners keep only half the gold they dig there.`,
   stars: 'Switch the selected ninjas between Auto (stars against Kestrels and giants, or when badly wounded; blade otherwise), Blade only and Stars only. The ambush blow only works with the blade.',
 };
 
 function tipHTML(el) {
   const me = G.teams[0];
   if (el.dataset.unit) {
-    const d = UNIT_TYPES[el.dataset.unit];
-    return `<b>${d.name}</b><span class="cost"><i class="ico gold"></i>${d.cost}${d.mana ? ` <i class="ico mana"></i>${d.mana}` : ''} · pop ${d.pop} · key ${d.hotkey}</span><p>${d.desc}</p><em>Trained at the ${d.building} (${groupOf(d.key).name}: one unit at a time). Click to train · right-click cancels · ⚒ upgrades</em>`;
+    const d = UNIT_TYPES[el.dataset.unit], c = unitCost(me, d.key);
+    return `<b>${d.name}</b><span class="cost"><i class="ico gold"></i>${c.gold}${c.mana ? ` <i class="ico mana"></i>${c.mana}` : ''} · pop ${unitPop(me, d.key)} · key ${d.hotkey}</span><p>${d.desc}</p><em>Trained at the ${d.building} (${groupOf(d.key).name}: one unit at a time). Click to train · right-click cancels · ⚒ upgrades</em>`;
   }
   if (el.dataset.upg) {
     const [type, key] = el.dataset.upg.split(':');
@@ -638,7 +679,8 @@ function tipHTML(el) {
   }
   if (el.dataset.cmd) {
     const c = COMMANDS.find(c => c.id === el.dataset.cmd);
-    return CMD_TIPS[c.id] ? `<b>${typeof c.label === 'function' ? c.label(selectionCaps()) : c.label}</b><p>${CMD_TIPS[c.id]}</p><em>Key: ${c.key}</em>` : '';
+    const caps = selectionCaps(), tip = typeof CMD_TIPS[c.id] === 'function' ? CMD_TIPS[c.id](caps) : CMD_TIPS[c.id];
+    return tip ? `<b>${typeof c.label === 'function' ? c.label(caps) : c.label}</b><p>${tip}</p><em>Key: ${c.key}</em>` : '';
   }
   return el.dataset.tip;
 }
@@ -657,34 +699,37 @@ function hideTip() { $('tip').classList.add('hidden'); }
 
 // ---------------------------------------------------------------- HUD
 
-function buildHUD() {
-  // Training bar: one color-coded block per training group, its unit buttons staggered over two
-  // rows. Each group trains one unit at a time. Click to train, right-click to cancel one,
-  // the small ⚒ opens that unit's building upgrades.
+// Training bar for the player's clan: one color-coded block per training group (groups the clan
+// can't use at all are left out), its unit buttons staggered over two rows. Each group trains one
+// unit at a time. Click to train, right-click to cancel one, the small ⚒ opens that unit's upgrades.
+function buildTrainBar() {
+  const me = G.teams[0];
   const bar = $('train');
   bar.innerHTML = '';
   const BTN = 42, STEP = 24, ROW = BTN + 3;
   for (const g of TRAIN_GROUPS) {
+    const types = g.types.filter(t => canTrain(me, t));
+    if (!types.length) continue;
     const grp = document.createElement('div');
     grp.className = 'tgrp';
     grp.style.setProperty('--gc', g.color);
-    grp.style.width = BTN + (g.types.length - 1) * STEP + 'px';
+    grp.style.width = BTN + (types.length - 1) * STEP + 'px';
     grp.dataset.tip = `<b>${g.name}</b><p>Trains one unit at a time, in the order you queue them.</p>`;
-    g.types.forEach((type, i) => {
-      const def = UNIT_TYPES[type];
+    types.forEach((type, i) => {
+      const def = UNIT_TYPES[type], cost = unitCost(me, type);
       const b = document.createElement('div');
       b.className = 'tb';
       b.dataset.type = type;
       b.dataset.unit = type;
       b.dataset.tip = '';
       b.style.left = i * STEP + 'px';
-      b.style.top = (g.types.length === 1 ? ROW / 2 : (i % 2) * ROW) + 'px';
+      b.style.top = (types.length === 1 ? ROW / 2 : (i % 2) * ROW) + 'px';
       b.innerHTML = `
         <canvas width="84" height="84"></canvas>
         <kbd>${def.hotkey}</kbd><span class="badge"></span>
         <button class="ub" data-tip="${def.building} upgrades (U)">⚒</button>
         <div class="prog"><i></i></div>
-        <span class="cost">${def.cost}${def.mana ? `<i class="ico mana"></i>${def.mana}` : ''}</span>`;
+        <span class="cost">${cost.gold}${cost.mana ? `<i class="ico mana"></i>${cost.mana}` : ''}</span>`;
       drawUnitIcon(b.querySelector('canvas'), type);
       b.addEventListener('click', e => {
         if (e.target.closest('.ub')) return UI.panel === type ? closePanel() : openPanel(type);
@@ -701,6 +746,10 @@ function buildHUD() {
   cb.innerHTML = '<svg viewBox="0 0 24 24"><path d="M3 22V9h3V6h3v3h2V3h2v6h2V6h3v3h3v13h-6v-5a2 2 0 0 0-4 0v5z"/></svg>';
   cb.addEventListener('click', () => (UI.panel === 'castle' ? closePanel() : openPanel('castle')));
   bar.appendChild(cb);
+}
+
+function buildHUD() {
+  buildTrainBar();
 
   document.querySelectorAll('#stances button[data-stance]').forEach(b => {
     b.addEventListener('click', () => setStance(G.teams[0], b.dataset.stance));
@@ -712,6 +761,7 @@ function buildHUD() {
     toast('Muster point cleared: new troops follow the army stance');
   });
   $('btnMiners').addEventListener('click', toggleMinerRecall);
+  $('btnSiege').addEventListener('click', toggleSiegeMode);
   $('prio').addEventListener('click', cycleMinerDefault);
   $('card').addEventListener('click', e => {
     const c = e.target.closest('[data-cmd]');
@@ -729,18 +779,30 @@ function buildHUD() {
 }
 
 // Group a building's upgrades into chains: a first tier followed by the tiers that require it.
+// Tiers the player's clan can't research are left out (a chain with none left disappears).
 function upgradeChains(type) {
-  const list = UPGRADES[type], chains = [];
+  // A tier that branches off one already in a chain (e.g. Broadheads and Flaming Arrows both build
+  // on Bodkin Arrows) gets a button of its own.
+  const me = G.teams[0], list = UPGRADES[type].filter(d => !upgradeLocked(me, type, d.key));
+  const used = new Set(), chains = [];
   for (const d of list) {
-    if (d.requires) continue;
+    if (used.has(d.key)) continue;
     const chain = [d];
-    for (let next = list.find(x => x.requires === d.key); next; next = list.find(x => x.requires === next.key)) chain.push(next);
+    used.add(d.key);
+    for (let next; (next = list.find(x => x.requires === chain[chain.length - 1].key && !used.has(x.key)));) {
+      chain.push(next);
+      used.add(next.key);
+    }
     chains.push(chain);
   }
   return chains;
 }
 
 function openPanel(type) {
+  if (type !== 'castle' && !canTrain(G.teams[0], type)) {
+    toast(`The ${clanOf(G.teams[0]).name} doesn't use the ${buildingName(type)}`);
+    return;
+  }
   UI.panel = type;
   UI.cardMode = '';   // force the card to rebuild
 }
@@ -824,13 +886,13 @@ function unitJob(u, me) {
     return ({ mana: 'Praying for mana', pan: 'Going to pan', build: 'Working on a trench', replenish: 'Replenishing a deposit', refit: 'Going to refit', garrison: 'Garrisoned', move: 'Moving', hold: 'Holding', attack: 'Fighting' }[u.order.type]
       || (u.retaliateT > 0 ? 'Defending itself' : u.praying ? 'Praying for mana' : u.carry >= u.carryCap ? 'Returning gold' : u.mine ? 'Mining gold' : 'Idle'));
   }
-  if (u.shieldWall) return 'Shield wall';
+  if (u.shieldWall) return u.type === 'golem' ? 'Hunkered down' : 'Shield wall';
   if (u.order.type === 'stance') {
     const s = u.ownStance || me.stance;
     return { garrison: 'Garrisoned', defend: 'Defending', attack: 'Attacking' }[s] + (u.ownStance ? ' (own order)' : '');
   }
   if (u.order.type === 'group') return { attack: 'Attacking together', advance: 'Advancing together', retreat: 'Retreating together' }[u.order.g.mode];
-  return { move: 'Moving', hold: 'Holding', attack: 'Attacking a target', garrison: 'Garrisoned', refit: 'Going to refit', manwall: u.onWall ? 'Defending the trench' : 'Climbing the rampart' }[u.order.type] || '';
+  return { salt: u.salting ? 'Salting a deposit' : 'Sneaking to a deposit', move: 'Moving', hold: 'Holding', attack: 'Attacking a target', garrison: 'Garrisoned', refit: 'Going to refit', manwall: u.onWall ? 'Defending the trench' : 'Climbing the rampart' }[u.order.type] || '';
 }
 
 function selectionInfoHTML(me) {
@@ -878,12 +940,13 @@ function updateHUD(dt) {
   const me = G.teams[0];
   setText('goldTxt', String(Math.floor(me.gold)));
   setText('manaTxt', String(Math.floor(me.mana)));
-  setText('popTxt', `${popUsed(me)}/${POP_CAP}`);
+  setText('popTxt', `${popUsed(me)}/${popCap(me)}`);
   setHTML('prio', { mine: '⛏ Mine', pray: '◆ Pray', pan: '≈ Pan' }[me.minerDefault]);
   document.querySelectorAll('#train .tb').forEach(b => {
     const type = b.dataset.type, def = UNIT_TYPES[type], q = me.queues[groupOf(type).key];
     const n = queuedCount(me, type), training = q.length > 0 && q[0].type === type;
-    b.classList.toggle('poor', me.gold < def.cost || me.mana < (def.mana || 0));
+    const cost = unitCost(me, type);
+    b.classList.toggle('poor', me.gold < cost.gold || me.mana < cost.mana);
     b.classList.toggle('queued', n > 0);
     b.classList.toggle('training', training);
     b.querySelector('.badge').textContent = n ? n : '';
@@ -898,6 +961,7 @@ function updateHUD(dt) {
   document.querySelectorAll('#stances button[data-stance]').forEach(b => b.classList.toggle('on', b.dataset.stance === me.stance));
   $('btnFlag').classList.toggle('on', UI.placing === 'flag' || me.musterX !== null);
   $('btnMiners').classList.toggle('on', me.minersIn);
+  $('btnSiege').classList.toggle('on', me.siege);
 
   // command card: rebuild only when what it should show changes
   const sel = liveSel();
@@ -1026,12 +1090,12 @@ function togglePause() {
   if (G.state !== 'play') return;
   G.paused = !G.paused;
   $('pauseMenu').classList.toggle('hidden', !G.paused);
-  if (G.paused) $('pmMap').textContent = `${G.map.name} · ${mapLayoutText()} · ${AI_LEVELS[G.difficulty].name} opponent · ${Math.floor(G.time / 60)}:${String(Math.floor(G.time % 60)).padStart(2, '0')}`;
+  if (G.paused) $('pmMap').textContent = `${clanOf(G.teams[0]).name} vs ${clanOf(G.teams[1]).name} · ${G.map.name} · ${mapLayoutText()} · ${AI_LEVELS[G.difficulty].name} opponent · ${Math.floor(G.time / 60)}:${String(Math.floor(G.time % 60)).padStart(2, '0')}`;
 }
 
 function initPauseMenu() {
   $('pmResume').onclick = togglePause;
-  $('pmRestart').onclick = () => { $('pauseMenu').classList.add('hidden'); newGame(G.seed); startBattle(); };
+  $('pmRestart').onclick = () => { $('pauseMenu').classList.add('hidden'); newGame(G.seed, G.clans); startBattle(); };
   $('pmNew').onclick = () => { $('pauseMenu').classList.add('hidden'); newGame(randomSeed()); showTitle(); };
   $('pmHelp').onclick = toggleHelp;
 }
@@ -1040,43 +1104,62 @@ function toggleHelp() {
   $('help').classList.toggle('hidden');
 }
 
-const mapLayoutText = () => [G.map.lane.name, G.map.mineLayout.name, G.shrine ? 'Shrine' : null].filter(Boolean).join(' · ');
+const mapLayoutText = () => [G.map.lane.name, G.map.mineLayout.name, G.map.goldLevel.name, G.shrine ? 'Monolith' : null].filter(Boolean).join(' · ');
+const clanShort = key => (key === 'random' ? 'Random' : CLANS[key].name.replace(/ (Clan|Circle)$/, ''));
 
+// What a clan brings, for the setup screen.
+function clanInfoHTML(key) {
+  if (key === 'random') return '<p class="tag">A random clan, revealed when the battle begins. Both sides can end up with the same clan.</p>';
+  const c = CLANS[key], li = (cls, list) => (list || []).map(t => `<li class="${cls}">${t}</li>`).join('');
+  return `<p class="tag">${c.tagline}</p><ul>${li('plus', c.strengths)}${li('minus', c.weaknesses)}${li('soon', (c.coming || []).map(t => `Coming soon: ${t}`))}</ul>`;
+}
+
+// The skirmish setup: both clans (or random), opponent difficulty, map options and the seed.
+// The map in the background is a live preview of the chosen seed and options.
 function showTitle() {
   document.body.className = 'title';
   $('debug').classList.add('hidden');
   const th = G.map.theme;
+  const choice = (field, opts) => opts.map(([k, label, tip]) => `<button data-opt="${field}" data-val="${k}" class="${SETUP[field] === k ? 'on' : ''}"${tip ? ` data-tip="${tip}"` : ''}>${label}</button>`).join('');
+  const clanSide = (field, title) => `
+    <div class="side">
+      <h3>${title}</h3>
+      <div class="clanGrid">${['random', ...CLAN_ORDER].map(k => `<button data-clan="${field}" data-val="${k}" class="${SETUP[field] === k ? 'on' : ''}">${clanShort(k)}</button>`).join('')}</div>
+      <div class="clanInfo"><b>${SETUP[field] === 'random' ? 'Random clan' : CLANS[SETUP[field]].name}</b>${clanInfoHTML(SETUP[field])}</div>
+    </div>`;
   $('overlay').innerHTML = `
-    <div class="card">
+    <div class="card setup">
       <h1>STICKFRONT</h1>
-      <p class="sub">prototype battle test</p>
+      <p class="sub">skirmish</p>
+      <div class="clanPick">${clanSide('clan', 'Your clan')}${clanSide('enemy', 'Enemy clan')}</div>
+      <div class="opts">
+        <div class="opt"><span>Opponent</span>${Object.entries(AI_LEVELS).map(([k, l]) => `<button data-diff="${k}" class="${k === AI_DIFFICULTY ? 'on' : ''}" data-tip="${l.desc}">${l.name}</button>`).join('')}</div>
+        <div class="opt"><span>Monolith</span>${choice('monolith', [['off', 'Off'], ['on', 'On', `Hold the ground around it for +${SHRINE.gold} gold and +${SHRINE.mana} mana per second`], ['random', 'Random']])}</div>
+        <div class="opt"><span>Gold</span>${choice('gold', [['scarce', 'Scarce', 'Deposits hold 40% less gold'], ['normal', 'Normal'], ['rich', 'Rich', 'Deposits hold 60% more gold'], ['random', 'Random']])}</div>
+        <div class="opt"><span>Seed</span><input id="seedIn" type="text" inputmode="numeric" value="${G.seed}" data-tip="The same seed and options always make the same map"><button id="btnReroll" data-tip="Roll a new seed">New map</button></div>
+      </div>
       <div class="mapinfo">
         <div class="mapname">${G.map.name}</div>
-        <div class="maptheme">${th.name} · ${G.mines.length} gold deposits · seed ${G.seed}</div>
+        <div class="maptheme">${th.name} · ${G.mines.length} gold deposits</div>
         <div class="maplayout">${mapLayoutText()}</div>
-        ${G.shrine ? `<div class="maptheme">A Shrine stands in the middle: hold the ground around it for +${SHRINE.gold} gold and +${SHRINE.mana} mana per second.</div>` : ''}
       </div>
-      <div class="diff">
-        <span>Opponent</span>
-        ${Object.entries(AI_LEVELS).map(([k, l]) => `<button data-diff="${k}" class="${k === AI_DIFFICULTY ? 'on' : ''}" data-tip="${l.desc}">${l.name}</button>`).join('')}
-      </div>
-      <div class="row">
-        <button id="btnStart" class="big">Begin Battle</button>
-        <button id="btnReroll">New Map</button>
-      </div>
-      <p class="hint">Train miners for gold, soldiers to fight. Destroy the enemy statue — then kill the giant that bursts out of it — to win.<br>Click the buildings in your castle for upgrades. Press <kbd>H</kbd> in game for controls.</p>
+      <div class="row"><button id="btnStart" class="big">Begin Battle</button></div>
+      <p class="hint">Destroy the enemy statue, then kill the giant that bursts out of it, to win. Press <kbd>H</kbd> in game for controls.</p>
     </div>`;
   $('overlay').classList.remove('hidden');
-  $('btnStart').onclick = startBattle;
-  $('btnReroll').onclick = () => { newGame(randomSeed()); showTitle(); };
-  $('overlay').querySelectorAll('[data-diff]').forEach(b => {
-    b.onclick = () => {
-      setDifficulty(b.dataset.diff);
-      G.difficulty = AI_DIFFICULTY;
-      G.ai = AI_DIFFICULTY === 'easy' ? new PoorAI(1) : new SmartAI(1, AI_DIFFICULTY);
-      $('overlay').querySelectorAll('[data-diff]').forEach(o => o.classList.toggle('on', o === b));
-    };
-  });
+  const ov = $('overlay');
+  const refresh = (seed = G.seed) => { saveSetup(); newGame(seed); showTitle(); };
+  ov.querySelectorAll('[data-clan]').forEach(b => { b.onclick = () => { SETUP[b.dataset.clan] = b.dataset.val; refresh(); }; });
+  ov.querySelectorAll('[data-opt]').forEach(b => { b.onclick = () => { SETUP[b.dataset.opt] = b.dataset.val; refresh(); }; });
+  ov.querySelectorAll('[data-diff]').forEach(b => { b.onclick = () => { setDifficulty(b.dataset.diff); refresh(); }; });
+  $('btnReroll').onclick = () => refresh(randomSeed());
+  $('seedIn').onchange = e => {
+    const s = parseInt(e.target.value, 10);
+    if (Number.isFinite(s) && s > 0) refresh(s);
+    else e.target.value = G.seed;
+  };
+  // the battle uses fresh clans: random picks are decided now
+  $('btnStart').onclick = () => { newGame(G.seed); startBattle(); };
 }
 
 function startBattle() {
@@ -1092,7 +1175,8 @@ function startBattle() {
   UI.placing = null;
   UI.panel = null;
   UI.cardMode = '';
-  toast(`Battle of ${G.map.name}`);
+  buildTrainBar();
+  toast(`${clanOf(G.teams[0]).name} vs ${clanOf(G.teams[1]).name} · Battle of ${G.map.name}`);
 }
 
 function showEnd() {
@@ -1104,7 +1188,7 @@ function showEnd() {
   $('overlay').innerHTML = `
     <div class="card wide ${won ? 'win' : 'lose'}">
       <h1>${won ? 'VICTORY' : 'DEFEAT'}</h1>
-      <p class="sub">${won ? 'The enemy statue and the giant within it have fallen.' : 'Your statue lies in ruins and its giant is slain.'} · ${mins}:${secs} · ${G.map.name}</p>
+      <p class="sub">${won ? 'The enemy statue and the giant within it have fallen.' : 'Your statue lies in ruins and its giant is slain.'} · ${mins}:${secs} · ${clanOf(G.teams[0]).name} vs ${clanOf(G.teams[1]).name}</p>
       ${endScreenHTML(won)}
       <div class="row">
         <button id="btnAgain" class="big">Rematch</button>
@@ -1113,7 +1197,7 @@ function showEnd() {
     </div>`;
   $('overlay').classList.remove('hidden');
   wireEndCharts();
-  $('btnAgain').onclick = () => { newGame(G.seed); startBattle(); };
+  $('btnAgain').onclick = () => { newGame(G.seed, G.clans); startBattle(); };
   $('btnNew').onclick = () => { newGame(randomSeed()); showTitle(); };
 }
 
