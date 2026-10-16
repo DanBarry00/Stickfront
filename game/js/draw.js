@@ -660,22 +660,23 @@ function drawBallista(ctx, o) {
   const pull = s < 0 ? 1 : s < 0.8 ? Math.min(1, s / 0.6) : 0;   // how far the string is wound back
   const cranking = s >= 0 && s < 0.6;
 
-  // the crewman behind, hands on the windlass
-  const cx = -30 * f, col = o.flash > 0 ? '#6e1510' : st.body;
-  const crank = cranking ? Math.sin(t * 9) * 3 : 0;
+  // the crewman behind, hands on the windlass (he stays man-sized; the engine is scaled up below)
+  const k = BALLISTA.drawScale, cx = (-17 * k - 14) * f, col = o.flash > 0 ? '#6e1510' : st.body;
+  const crank = cranking ? Math.sin(t * 9) * 3 : 0, hy = Math.max(-34, -24 * k);   // hands at the (scaled) windlass
   ctx.strokeStyle = col;
   ctx.lineWidth = 3.1;
   ctx.beginPath();
   ctx.moveTo(cx, -26); ctx.lineTo(cx - 4 * f, -13); ctx.lineTo(cx - 6 * f, 0);   // back leg
   ctx.moveTo(cx - 4 * f, -13); ctx.lineTo(cx + 2 * f, -6); ctx.lineTo(cx + 4 * f, 0);   // front leg
   ctx.moveTo(cx - 4 * f, -13); ctx.lineTo(cx, -36);   // spine
-  ctx.moveTo(cx, -33); ctx.lineTo(cx + 7 * f, -28 + crank); ctx.lineTo(cx + 13 * f, -27 + crank);   // arms to the windlass
+  ctx.moveTo(cx, -33); ctx.lineTo(cx + 7 * f, hy + 1 + crank); ctx.lineTo(cx + 14 * f, hy + crank);   // arms to the windlass
   ctx.stroke();
   ctx.fillStyle = col;
   ctx.beginPath();
   ctx.arc(cx + 1 * f, -43, 6.5, 0, TAU);
   ctx.fill();
   drawGear(ctx, o.gear, cx + 1 * f, -43, f, st, t, o.team);
+  ctx.scale(k, k);
 
   // wheels, spokes turning as it rolls
   for (const wx of [-13, 11]) {

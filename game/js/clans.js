@@ -107,13 +107,13 @@ const CLANS = {
     tagline: 'Giants, and the keepers who tame them.',
     army: [{ type: 'miner', n: 2 }, { type: 'giant', n: 1 }, { type: 'beastmaster', n: 1 }],
     free: { giant: ['blinders'] },
-    cost: { giant: { gold: -150, mana: -45 }, beastmaster: { gold: -20 } },
+    cost: { giant: { gold: -200, mana: -10 }, beastmaster: { gold: -20 } },   // giants lean on mana, which the clan has plenty of
     giantPop: 3,
     hp: { giant: 1.2 },   // thick hides...
     thickHide: true,      // ...that archers get no bonus against
     lockUnits: ['archer', 'flyer'],
     ai: { giant: 0.12, spear: 0.08 },
-    strengths: ['Starts with a giant and a Beastmaster', 'Giants cost 300 gold + 75 mana, take 3 population and have 20% more health', 'Thick Hide: archers get no bonus damage against its giants', 'Beastmasters cost 120', 'Blinders already researched', 'Clan unit: Beastmaster, a slinger who hits flyers, does double damage to giants and keeps your giants in line'],
+    strengths: ['Starts with a giant and a Beastmaster', 'Giants cost 250 gold + 110 mana, take 3 population and have 20% more health', 'Thick Hide: archers get no bonus damage against its giants', 'Beastmasters cost 120', 'Blinders already researched', 'Clan unit: Beastmaster, a slinger who hits flyers, does double damage to giants and keeps your giants in line'],
     weaknesses: ['No Archers and no Kestrels: only Beastmasters, Warlocks and Javelins reach flyers'],
   },
 

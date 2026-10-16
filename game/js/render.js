@@ -674,8 +674,7 @@ function render(ctx) {
 
   for (const t of G.teams) {
     drawStatueBar(ctx, t.statue);
-    if (t.statue.dead) continue;
-    for (const a of t.archers) {
+    for (const a of t.archers) {   // still on the wall after the statue falls
       if (!inView(a.x)) continue;
       drawStickman(ctx, {
         x: a.x, y: a.y, facing: a.f, scale: 0.88, team: t.id, type: 'archer',

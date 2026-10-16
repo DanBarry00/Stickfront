@@ -45,6 +45,8 @@ function updateGiant(u, dt) {
       if (d < nd) { nd = d; near = e; }
     }
     if (near) return engage(u, near, dt);
+    // stung by the castle archers right under the wall: it lashes out at the statue
+    if (!es.dead && Math.abs(es.x - u.x) < u.range + es.halfW + 40) return engage(u, es, dt);
     if (u.swing < 0) moveTo(u, u.x + Math.sin(RT * 1.3 + u.seed) * 40, u.y, dt);
     return;
   }
@@ -64,6 +66,8 @@ function updateGiant(u, dt) {
   }
   // anything that wanders into arm's reach gets smashed
   if (t && Math.abs(t.x - u.x) < u.range + 60) return engage(u, t, dt);
+  // at the enemy's door it keeps pounding the statue (unless steered away with Blinders)
+  if (!es.dead && Math.abs(es.x - u.x) < u.aggro + es.halfW && !(u.perks.blinders && o.type === 'move')) return engage(u, es, dt);
   if (u.rogue === 'stay') return;
 
   // with blinders the player can steer it
@@ -92,6 +96,46 @@ function updateGiant(u, dt) {
   if (t && team.dir * (t.x - home) < 150) return engage(u, t, dt);
   const s = giantSlot(u);
   if (u.swing < 0 && moveTo(u, home - team.dir * s.back, s.y, dt)) u.facing = team.dir;
+}
+
+// Beastmasters drive their giants on: a giant in sling range that's sulking, confused or standing
+// idle with enemies about gets a stone in the back (BEASTMASTER.prodDmg), which sets it charging
+// at the enemy. Returns true when this beastmaster slung a prod.
+function beastmasterProd(u) {
+  if (u.swing >= 0 || u.atkCd > 0 || (u.prodCd || 0) > G.time) return false;
+  for (const g of G.units) {
+    if (g.team !== u.team || !isGiant(g) || g.dead || g.inside || g.isStatueGiant || g.rogue === 'charge') continue;
+    if (Math.abs(g.x - u.x) > u.range || Math.abs(g.y - u.y) > 140) continue;
+    // an idle giant only gets driven on while the army is attacking (not off a defend line)
+    const idle = g.swing < 0 && armyAttacking(g) && biggestFoe(g, g.aggro);
+    if (g.rogue !== 'stay' && !(g.confusedT > 0) && !idle) continue;
+    u.facing = g.x >= u.x ? 1 : -1;
+    u.atkCd = u.atk;
+    u.prodCd = G.time + BEASTMASTER.prodCd;
+    fireArrow(u.team, u.x + u.facing * 10, u.y - 60 * u.scale, g, BEASTMASTER.prodDmg, u, false, { kind: 'stone', prod: true });
+    return true;
+  }
+  return false;
+}
+
+// Is the army around this giant on the attack? The whole army on Attack, or troops nearby marching
+// in an attack or advance formation or on an Attack order of their own.
+function armyAttacking(g) {
+  const team = G.teams[g.team];
+  if (team.stance === 'attack') return true;
+  return G.units.some(f => f.team === g.team && !f.dead && !f.inside && Math.abs(f.x - g.x) < 500 &&
+    ((f.order.type === 'group' && f.order.g.mode !== 'retreat') || (f.order.type === 'stance' && f.ownStance === 'attack')));
+}
+
+// The prod lands: a sting, and the giant shakes off its mood and charges for a few seconds.
+function prodGiant(g, amt) {
+  if (g.dead) return;
+  g.hp = Math.max(1, g.hp - amt);
+  g.flash = 0.1;
+  g.confusedT = 0;
+  g.rogue = 'charge';
+  g.mindT = BEASTMASTER.prodTime;
+  if (g.team === 0) floatText(g.x, g.y - 90 * g.scale, 'Hup!', '#c9b27a');
 }
 
 // A giant is 3 formation rows wide, so two stand side by side across the lane (top and bottom

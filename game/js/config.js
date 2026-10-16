@@ -17,7 +17,7 @@ const STATUE_HP = 2500;
 const STATUE_X = 800;        // distance of each statue from its world edge
 const GATE_X = 560;          // castle front wall (gate) distance from world edge
 const BUILD_X = { sword: 95, spear: 215, archer: 335, miner: 455 };   // building centers inside the castle
-const ARCHER_XS = [520, 400, 280, 104];   // castle archer spots on the rampart (extra ones are castle upgrades; the 4th is for clans with 4 slots)
+const ARCHER_XS = [520, 498, 476, 454];   // castle archer spots on the rampart, shoulder to shoulder from the front (extra ones are castle upgrades; the 4th is for clans with 4 slots)
 // Castle archers cover the ground out to just past where an enemy archer with the same bow
 // upgrades has to stand to shoot the statue: statue + its half-width + archer range + this margin.
 const CASTLE_REACH_PAD = 60;
@@ -181,7 +181,7 @@ const CRIT = { chance: 0.1, upgraded: 0.2, mult: 2 };
 
 // Ballista (Defense Clan): can't shoot closer than minRange; each bolt also hits the next unit
 // behind its target for a share of the damage; structures (trenches, statues) take extra.
-const BALLISTA = { minRange: 120, pierce: 0.6, structureMul: 2 };
+const BALLISTA = { minRange: 120, pierce: 0.6, structureMul: 2, drawScale: 1.5 };   // drawScale: the engine is drawn bigger than its crewman
 
 // Spirit Golem (Arcane Circle): bigger than a man, stone armor, shrugs off Warlock magic;
 // Mana Core heals it slowly.
@@ -189,7 +189,7 @@ const GOLEM = { scale: 1.5, armor: 0.1, spellMul: 0.5, regen: 3 };
 
 // Beastmaster (Beast Clan): double damage to giants; within auraRange each one counts as this many
 // extra troops for a friendly giant's obedience (more with Beast Lore).
-const BEASTMASTER = { giantMul: 2, aura: 2, auraLore: 4, auraRange: 280 };
+const BEASTMASTER = { giantMul: 2, aura: 2, auraLore: 4, auraRange: 280, prodDmg: 2, prodCd: 5, prodTime: 4 };   // prod: a stone that drives a stalled giant into a charge for prodTime seconds
 
 // Saboteur (Shadow Clan): trench damage multiplier (Sappers) and Salt the Mine: seconds spent salting,
 // how long the salt lasts (Brine), and the share of dug gold enemy miners keep from a salted deposit.

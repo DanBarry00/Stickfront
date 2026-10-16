@@ -19,11 +19,11 @@ Each clan sets your starting gold, mana and army, which upgrades are already res
 | **Sword** | 2 miners, 2 Swordwrath | Population 35; Levy, Military Training, Adrenaline; clan-only Great Swords (damage 25, 10% slower swing) | No Kestrels or Throwing Stars (only archers and Javelins hit flyers); no Flaming Arrows; no trenches |
 | **Mercenary** | 4 miners, 1 plain Swordwrath | Bigger Bags, Steel Pickaxes, Iron Pans, Prospecting, Statue Offerings; every kill pays 20% of the victim's gold cost; clan-only Mule Packs (carry 100), Diamond Picks (17 per swing), Gilded Statue (4 gold/s) | Praying gives half the mana; weakest starting army |
 | **Arcane Circle** | 150 mana; 2 miners, a Cleric and a Warlock | Clan unit: the **Spirit Golem**; Healing Pool and Blight Pool; mages cost 35 mana; praying gives 50% more | Swordwrath and Spearton −10% health; 1 castle archer; no Giants |
-| **Beast** | 2 miners, a giant and a Beastmaster | Clan unit: the **Beastmaster**; giants cost 300 gold + 75 mana, take 3 population and have 20% more health; Thick Hide (archers get no bonus damage against its giants); Beastmasters cost 120; Blinders researched | No Archers or Kestrels (only Beastmasters, Warlocks and Javelins reach flyers) |
+| **Beast** | 2 miners, a giant and a Beastmaster | Clan unit: the **Beastmaster**; giants cost 250 gold + 110 mana, take 3 population and have 20% more health; Thick Hide (archers get no bonus damage against its giants); Beastmasters cost 120; Blinders researched | No Archers or Kestrels (only Beastmasters, Warlocks and Javelins reach flyers) |
 | **Shadow** | 2 miners, 3 ninjas | Clan unit: the **Saboteur**; all units +25% damage; ninjas cost 100, vanish again after 3s; Throwing Stars, Vital Points and Parry researched | All units −10% health; no Spearton; no trenches |
 | **Sky** | 2 miners, 3 Kestrels | Clan unit: the **Firebird**; Kestrels cost 140, deal 30% more damage, have 25% more health and crit 10% of the time; Long Sights and clan-only Hawk Eye (20% crit) researched; clan-only Spyglass (range 480), Barbed Bolts II (damage 26) | Swordwrath and Spearton −10% health; no Giants |
 
-Every clan beats the Base Clan when the Hard AI plays both sides (`runClanTest(clan, 'base', 2)`, 4 to 12 games each): Defense, Sword, Mercenary, Arcane and Sky 4–0; Archer 9–3; Shadow 8–4; Beast 6–2.
+Every clan beats the Base Clan when the Hard AI plays both sides (`runClanTest(clan, 'base', 2)`, 4 to 16 games each): Defense, Sword, Mercenary and Arcane 4–0; Archer 9–3; Sky 7–1; Shadow 6–2; Beast 12–4.
 
 Clan-only upgrades and units appear only for their clan. The setup screen lists these as "coming soon" for each clan.
 
@@ -49,6 +49,8 @@ Clan-only upgrades and units appear only for their clan. The setup screen lists 
 - **Targeting:** a giant always goes for the enemy with the most health, ignoring taunts. Each blow also splashes the 2 enemies beside its target, unless the target is another giant.
 - **No direct control:** giants follow the friendly troops around them. The more troops nearby, the more chains they wear and the better they obey. A poorly chained giant may charge off on its own, or stay put when you retreat.
 - **Size:** a giant is 3 formation rows wide, so two stand side by side across the lane and any more line up in columns behind them.
+- **The statue:** a giant that reaches the enemy statue keeps pounding it (it still smashes anything in arm's reach first). Only a Blinders move order pulls it away.
+- **No garrison:** giants are too big for the castle. The Garrison button doesn't show for them, and when the army garrisons they wait outside the gate.
 - **Archers** (including castle archers) deal 50% extra damage to giants and sometimes confuse them. A confused giant lashes out at whoever is closest.
 - **Upgrades (Giant Pit):**
   - **Blinders:** giants obey better, archers confuse them less often (40% of the usual chance) and for half as long, and you can select them for move and hold orders.
@@ -149,6 +151,7 @@ A slinger in a wolf-pelt hood, trained in the Ranged group (hotkey `'`). It come
 - **Sling:** range 260, 14 damage. Its stones **can hit flyers**, which makes it the Beast Clan's main answer to the sky.
 - **Giant-killer:** double damage to enemy giants.
 - **Giant-tamer:** each Beastmaster near a friendly giant counts as 3 troops (1 plus 2 extra) toward the giant's obedience, so it wears more chains and listens better.
+- **Giant-driver:** Beastmasters rank up behind your giants. When a giant in sling range sulks, is confused or stands idle with enemies about while the army is attacking, a Beastmaster slings a stone into its back (2 damage, at most every 5s) and the giant charges at the enemy for 4 seconds. Giants holding a defend line aren't prodded out of it.
 - **Upgrades (Beast Pen, from the ⚒ on its button):** Heavy Stones (damage 20) and Beast Lore (counts as 5 troops instead of 3).
 - The computer playing the Beast Clan saves its gold and mana for its giants.
 
@@ -172,8 +175,9 @@ A rider on a big flame-feathered glider, trained in the Ranged group (hotkey `/`
 
 ## Defences
 - **Trenches** (Earthworks, Miners' Lodge): miners dig a ditch across the lane and pile an earth rampart behind it, with sharpened stakes facing the enemy. Enemies on foot can't pass until they hack it down (Kestrels fly over). 100 gold each, up to 3. **Palisade** adds a row of pointed logs along the top: taller, +800 hp. Builders can **repair** a damaged trench for free: right-click it with them, or press **Y** to send them to the most damaged one. Stakes get knocked out and the earth slumps as a trench takes damage.
-- **Castle archers** reach out to just past where an enemy archer has to stand to shoot your statue (assuming the same bow upgrades as yours), so an archer attacking your statue is always under fire. Recurve Bows extend their reach by the same 120 as your archers'.
+- **Castle archers** reach out to just past where an enemy archer has to stand to shoot your statue (assuming the same bow upgrades as yours), so an archer attacking your statue is always under fire. Recurve Bows extend their reach by the same 120 as your archers'. They stay on the wall and keep firing after the statue falls, covering the giant that rises from it.
 - **Chasing:** melee troops lunge after a target that backs away during their swing, so they can cut down a slower unit (like a miner) running for the castle.
+- **Under fire:** a melee soldier being shot by an enemy it can reach (an archer standing beyond the defend line, say) charges the shooter instead of standing there, whether it's defending, holding or walking to the muster point. They give up the chase once the shooter is more than 400 past their defend line or hold spot, so a lone archer can't lure them into the enemy army. Spearton behind a raised shield wall hold their ground.
 
 ## Economy
 - **Mining** about 2.3 gold/s per miner. **Praying** at the statue about 2.3 mana/s (4 at a time).
@@ -183,16 +187,17 @@ A rider on a big flame-feathered glider, trained in the Ranged group (hotkey `/`
 
 ## Controls
 - **Training** is on the bottom-left, as small icon buttons staggered over two rows in five colour-coded groups: **Workers** (Miner), **Infantry** (Swordwrath, Spearton, Ninja), **Ranged** (Archer, Kestrel), **Mages** (Cleric, Warlock) and **Giants**. Each group trains **one unit at a time** from a shared queue, in the order you click: a Spearton queued behind a Swordwrath waits for it. Click to train, right-click to cancel one (refunded). The small ⚒ in each button's corner opens its building's upgrades, and the castle button at the end opens castle upgrades.
+- **Moving:** right-click the ground to move the selected units there. It's an attack-move: troops stop to fight any enemy in range on the way, then carry on. Ninjas and saboteurs move straight there instead, so they can slip past and pick their own targets (right-click an enemy to attack it directly).
 - **The command card** on the bottom-right shows upgrades when a building is open. Otherwise it shows orders for whatever units you have selected:
   - Attack together, Advance together, Retreat together: a formation march with Spearton in front, Swordwrath behind and archers and mages at the back, at the pace of the slowest unit (slower still behind a raised shield wall)
-  - Defend, Garrison
+  - Defend, Garrison (Garrison & pan when only miners are selected; giants can't garrison)
   - Hold
   - Defend Trench (needs Military Training from the Barracks or Rallying Cry from the Spear Hall): one row of melee troops stands on the rampart, and blows against them are split half to the trench
   - Shield Wall
   - Mine, Pray, Pan
   - Dig trench, Palisade, Repair, Replenish
   - Refit
-- **Top-right buttons** command the **whole army**: Garrison / Defend / Attack (Q / W / E), **Muster** (G: where newly trained soldiers gather and where the defend line forms), and **Miners** (Z: miners only retreat inside and pan).
+- **Top-right buttons** command the **whole army**: Garrison / Defend / Attack (Q / W / E), **Muster** (G: where newly trained soldiers gather and where the defend line forms; on the way there they stop to fight any enemy in range), **Miners** (Z: miners only retreat inside and pan), and **Siege** (Shift+Z: a toggle; while it's on, miners take shelter in the castle on their own whenever enemies they can't handle come near, and go back to work once it's clear. Pressing Z yourself turns it off).
 
 | Key | Action |
 |---|---|
@@ -202,7 +207,7 @@ A rider on a big flame-feathered glider, trained in the Ranged group (hotkey `/`
 | S / K / X / R | Hold / Defend trench / Shield wall / Refit |
 | I / O | Miners: mine / pray |
 | B / J / Y / N | Dig trench / Palisade / Repair trenches / Replenish deposit |
-| G / Z | Muster point / miners-only retreat |
+| G / Z / Shift+Z | Muster point / miners-only retreat / siege mode (miners shelter automatically) |
 | 1 – 6, −, =, [ | Train Miner / Swordwrath / Archer / Spearton / Cleric / Warlock / Giant / Ninja / Kestrel |
 | M | Ninjas with Throwing Stars: weapon Auto / Blade / Stars |
 | 7 8 9 0 / L | Cast mage spells / toggle auto-cast |

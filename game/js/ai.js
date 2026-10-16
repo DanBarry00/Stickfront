@@ -221,7 +221,7 @@ class SmartAI {
     else if (miners.length >= c.prayAt && praying < Math.max(c.praying, clanOf(team).aiPray || 0) && free.length) setOrder(free.shift(), { type: 'mana' });
     else if (!this.dry && miners.length >= c.panAt && panning < c.panning && free.length) setOrder(free.shift(), { type: 'pan' });
     this.outOfGold(team, miners, free, panning);
-    this.protectMiners(team, miners);
+    this.protectMiners(team);
   }
 
   // When the deposits on our half run dry, miners don't wander over to the enemy's: they pan the
@@ -250,16 +250,8 @@ class SmartAI {
 
   // Pull the miners into the castle (where they pan the stream) while an enemy force our troops
   // can't handle is near them, and send them back out once it has gone.
-  protectMiners(team, miners) {
-    const foe = 1 - this.id;
-    // where the miners are working, or (while hiding) the deposits on our half they'd go back to
-    const spots = team.minersIn
-      ? G.mines.filter(m => m.gold > 0 && team.dir * (WORLD_W / 2 - m.x) > 0).map(m => m.x)
-      : miners.filter(m => !m.inside).map(m => m.x);
-    const raiders = G.units.filter(e => e.team === foe && !e.dead && !e.inside && e.type !== 'miner' && spots.some(x => Math.abs(e.x - x) < 450));
-    const x = raiders.length ? raiders.reduce((s, e) => s + e.x, 0) / raiders.length : 0;
-    // go in when clearly outmatched there; come back out once it's roughly even again
-    const danger = raiders.length > 0 && armyPower(foe, x, 400) > armyPower(this.id, x, 400) * (team.minersIn ? 0.8 : 1.3) + 100;
+  protectMiners(team) {
+    const danger = minersInDanger(team);
     if (danger !== team.minersIn) setMinerGarrison(team, danger);
   }
 
@@ -356,7 +348,7 @@ class SmartAI {
 
     // also push out once the game has gone on a while and the armies are roughly even
     // attacking means walking into the enemy's castle archers, so they count as defenders
-    const fort = G.teams[foe].statue.dead ? 0 : G.teams[foe].archers.length * 300;   // long reach, faster when garrisoned
+    const fort = G.teams[foe].archers.length * 300;   // long reach, faster when garrisoned
     const late = G.time > 210 && army.length >= 6 && ours > (theirs + fort) * 0.9;
     // never march with just a giant and a handful of troops: a lone giant charges off on its own
     // a wave goes out on a timer as long as the armies are close, so there's never a long standoff

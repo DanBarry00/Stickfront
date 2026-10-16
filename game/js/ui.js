@@ -48,7 +48,8 @@ function unitAt(wx, wy, team) {
     if ((u.inside || u.stealth) && u.team !== 0) continue;   // vanished ninjas can't be clicked on
     if (team === 0 && !selectable(u)) continue;   // giants can't be picked without blinders
     const s = u.scale, uy = u.y - (u.onWall ? wallHeight(u.onWall) : 0) - u.alt;
-    if (Math.abs(wx - u.x) < 14 * s && wy < uy + 8 && wy > uy - 74 * s) {
+    const hw = u.type === 'ballista' ? 27 * BALLISTA.drawScale : 14;   // the ballista is a wide engine, crewman included
+    if (Math.abs(wx - u.x) < hw * s && wy < uy + 8 && wy > uy - 74 * s) {
       const d = Math.abs(wx - u.x) + Math.abs(wy - (uy - 35)) * 0.3;
       if (d < bd) { bd = d; best = u; }
     }
@@ -190,7 +191,7 @@ function issueCommand(wx, wy) {
       for (const u of sel) {
         if (u.type === 'saboteur') continue;   // already off to salt it
         if (u.type === 'miner') { setMine(u, mine); setOrder(u, { type: 'work' }); }
-        else setOrder(u, { type: 'move', x: mine.x - me.dir * 40, y: clamp(u.y, LANE_TOP, LANE_BOT) });
+        else setOrder(u, moveOrder(u, mine.x - me.dir * 40, clamp(u.y, LANE_TOP, LANE_BOT)));
       }
       marker(mine.x, mine.y, '#c99b2a');
       return;
@@ -199,25 +200,30 @@ function issueCommand(wx, wy) {
   if (st && st.team === 0) {
     for (const u of sel) {
       if (u.type === 'miner') setOrder(u, { type: 'mana' });
-      else setOrder(u, { type: 'move', x: st.x + me.dir * 90, y: clamp(u.y, LANE_TOP, LANE_BOT) });
+      else setOrder(u, moveOrder(u, st.x + me.dir * 90, clamp(u.y, LANE_TOP, LANE_BOT)));
     }
     marker(st.x, LANE_TOP - 30, TEAM_STYLE[0].crystal);
     return;
   }
   if (wx < GATE_X + 20 && wy > WALL_TOP - 20 && wy < LANE_BOT + 16) {
-    for (const u of sel) setOrder(u, u.type === 'miner' ? { type: 'pan' } : { type: 'garrison' });
+    for (const u of sel) if (!isGiant(u)) setOrder(u, u.type === 'miner' ? { type: 'pan' } : { type: 'garrison' });   // giants don't fit
     marker(GATE_X - 40, LANE_TOP + 14, '#8fb0c8');
     return;
   }
-  // plain move, spread into a small block
+  // move (attack-move for most units), spread into a small block
   const ty = clamp(wy, LANE_TOP, LANE_BOT);
   sel.forEach((u, i) => {
     const x = wx - me.dir * Math.floor(i / LANE_ROWS) * 24;
     const y = clamp(ty + ((i % LANE_ROWS) - (LANE_ROWS - 1) / 2) * 18, LANE_TOP, LANE_BOT);
-    setOrder(u, { type: 'move', x, y });
+    setOrder(u, moveOrder(u, x, y));
   });
   marker(wx, ty, '#96e078');
 }
+
+// Move orders are attack-moves: troops fight anything in range on the way and then carry on.
+// Ninjas and saboteurs move straight there, since they're meant to slip past and pick their targets.
+const PLAIN_MOVERS = ['ninja', 'saboteur'];
+const moveOrder = (u, x, y) => ({ type: 'move', x, y, attackMove: !PLAIN_MOVERS.includes(u.type) });
 
 function stopSelected() {
   for (const u of liveSel()) setOrder(u, { type: 'hold', x: u.x, y: u.y });
@@ -259,8 +265,17 @@ function refitSelected() {
 
 function toggleMinerRecall() {
   const me = G.teams[0];
+  me.siege = false;   // taking manual control ends siege mode
   setMinerGarrison(me, !me.minersIn);
   toast(me.minersIn ? 'Miners are retreating into the castle to pan the stream' : 'Miners are back to work');
+}
+
+// Siege mode: miners shelter in the castle on their own whenever enemies threaten them.
+function toggleSiegeMode() {
+  const me = G.teams[0];
+  me.siege = !me.siege;
+  me.siegeT = 0;
+  toast(me.siege ? 'Siege mode on: miners shelter in the castle whenever enemies threaten them' : 'Siege mode off');
 }
 
 const MINER_DEFAULTS = ['mine', 'pray', 'pan'];
@@ -345,7 +360,7 @@ const ICONS = {
 const COMMANDS = [
   { id: 'attack', label: 'Attack', key: '⇧E', show: s => s.mil, run: () => formGroup(G.teams[0], milSel(), 'attack'), on: () => inGroup('attack') },
   { id: 'defend', label: 'Defend', key: '⇧W', show: s => s.mil, run: () => milSel().forEach(u => setUnitStance(u, 'defend')), on: () => milSel().every(u => u.ownStance === 'defend' && u.order.type === 'stance') },
-  { id: 'garrison', label: s => (s.mil ? 'Garrison' : 'Garrison & pan'), key: '⇧Q', show: () => true, run: () => liveSel().forEach(u => setUnitStance(u, 'garrison')) },
+  { id: 'garrison', label: s => (s.minersOnly ? 'Garrison & pan' : 'Garrison'), key: '⇧Q', show: s => s.canGarrison, run: () => liveSel().forEach(u => setUnitStance(u, 'garrison')) },
   { id: 'advance', label: 'Advance', key: 'C', show: s => s.mil, run: () => formGroup(G.teams[0], milSel(), 'advance'), on: () => inGroup('advance') },
   { id: 'retreat', label: 'Retreat', key: '⇧C', show: s => s.mil, run: () => formGroup(G.teams[0], milSel(), 'retreat'), on: () => inGroup('retreat') },
   { id: 'hold', label: 'Hold', key: 'S', show: () => true, run: stopSelected },
@@ -392,6 +407,8 @@ function selectionCaps() {
     mage: mageSel().length > 0,
     stars: starSelection().length ? starSelection()[0].starMode : null,
     sab: liveSel().some(u => u.type === 'saboteur'),
+    canGarrison: liveSel().some(u => !isGiant(u)),   // giants are too big for the castle
+    minersOnly: liveSel().length > 0 && liveSel().every(u => u.type === 'miner'),
     spells: Object.keys(SPELLS).filter(k => mageSel().some(u => u.type === SPELLS[k].owner && u.perks[SPELLS[k].perk])),
   };
 }
@@ -508,6 +525,7 @@ function initInput() {
     const trainKey = UNIT_ORDER.find(t => trainCode(UNIT_TYPES[t]) === e.code);
     if (trainKey) { queueUnit(me, trainKey); return; }
     // Shift + Q/W/E give the order to the selected units only; plain Q/W/E command the whole army.
+    if (e.shiftKey && e.code === 'KeyZ') { toggleSiegeMode(); return; }
     if (e.shiftKey && ['KeyQ', 'KeyW', 'KeyE', 'KeyC'].includes(e.code)) {
       runCommand({ KeyQ: 'garrison', KeyW: 'defend', KeyE: 'attack', KeyC: 'retreat' }[e.code]);
       return;
@@ -621,7 +639,7 @@ function updateCamera(dt) {
 const CMD_TIPS = {
   attack: 'These units march on the enemy statue together: spearton in front, swordwrath behind, archers and mages at the back, at the pace of the slowest (slower still behind a shield wall). They break ranks to fight anything close. (The army-wide Attack button sends everyone at full speed instead.)',
   defend: 'These units hold the defend line at your muster point (or in front of your statue).',
-  garrison: 'These units go into the castle and heal. Miners pan the castle stream (up to 5): 1 gold + 1 mana per tick.',
+  garrison: s => (s.minersOnly ? 'These miners go into the castle and pan the stream (up to 5): 1 gold + 1 mana per tick.' : s.miner ? 'These units go into the castle: soldiers heal there, and miners pan the stream (up to 5) for 1 gold + 1 mana per tick.' : 'These units go into the castle and heal.'),
   advance: 'March forward together in formation, holding ranks and fighting only what is in reach. The line halts while it fights.',
   retreat: 'Fall back toward the castle together, facing the enemy and still fighting anything in reach.',
   hold: 'Stop and hold this spot, fighting anything that comes close.',
@@ -661,7 +679,8 @@ function tipHTML(el) {
   }
   if (el.dataset.cmd) {
     const c = COMMANDS.find(c => c.id === el.dataset.cmd);
-    return CMD_TIPS[c.id] ? `<b>${typeof c.label === 'function' ? c.label(selectionCaps()) : c.label}</b><p>${CMD_TIPS[c.id]}</p><em>Key: ${c.key}</em>` : '';
+    const caps = selectionCaps(), tip = typeof CMD_TIPS[c.id] === 'function' ? CMD_TIPS[c.id](caps) : CMD_TIPS[c.id];
+    return tip ? `<b>${typeof c.label === 'function' ? c.label(caps) : c.label}</b><p>${tip}</p><em>Key: ${c.key}</em>` : '';
   }
   return el.dataset.tip;
 }
@@ -742,6 +761,7 @@ function buildHUD() {
     toast('Muster point cleared: new troops follow the army stance');
   });
   $('btnMiners').addEventListener('click', toggleMinerRecall);
+  $('btnSiege').addEventListener('click', toggleSiegeMode);
   $('prio').addEventListener('click', cycleMinerDefault);
   $('card').addEventListener('click', e => {
     const c = e.target.closest('[data-cmd]');
@@ -941,6 +961,7 @@ function updateHUD(dt) {
   document.querySelectorAll('#stances button[data-stance]').forEach(b => b.classList.toggle('on', b.dataset.stance === me.stance));
   $('btnFlag').classList.toggle('on', UI.placing === 'flag' || me.musterX !== null);
   $('btnMiners').classList.toggle('on', me.minersIn);
+  $('btnSiege').classList.toggle('on', me.siege);
 
   // command card: rebuild only when what it should show changes
   const sel = liveSel();

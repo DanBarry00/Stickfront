@@ -429,7 +429,7 @@ function onSwingHit(u) {
       const lift = (u.onWall ? wallHeight(u.onWall) : 0) + (u.alt || 0);
       const c = rollCrit(u, u.dmg * dmgMult(u));
       const kind = u.type === 'ninja' ? 'star' : u.type === 'flyer' ? 'bolt' : u.type === 'ballista' ? 'ballista' : u.type === 'beastmaster' ? 'stone' : u.type === 'firebird' ? 'pot' : 'arrow';
-      const muzzle = u.type === 'ballista' ? 26 : u.type === 'beastmaster' ? 60 : 46;   // low stock; a sling whirled overhead
+      const muzzle = u.type === 'ballista' ? 44 : u.type === 'beastmaster' ? 60 : 46;   // low stock; a sling whirled overhead
       // a firebird lets its pot fall from under the glider; the pot's blast size rides along with it
       const pot = u.type === 'firebird' ? { radius: u.perks.pitch ? FIREBIRD.radiusPitch : FIREBIRD.radius, burn: u.perks.pitch ? FIREBIRD.burnPitch : FIREBIRD.burn } : {};
       const sx = u.type === 'firebird' ? u.x : u.x + Math.cos(aim) * 14 * u.scale, sy = u.type === 'firebird' ? u.y - lift - 30 : u.y - lift - muzzle * u.scale + Math.sin(aim) * 14;
@@ -565,6 +565,18 @@ function defendTarget(u, team, lineX) {
   return best;
 }
 
+// A melee unit under fire from a shooter it can reach charges it instead of standing there being
+// pelted (an archer beyond the defend line, say). A raised shield wall holds its ground. Units
+// posted somewhere (postX: the defend line or a hold spot) give up once the shooter is more than
+// CHARGE_LEASH past it, so one archer can't lure them into the enemy army.
+const CHARGE_LEASH = 400;
+function shooterToCharge(u, postX) {
+  const f = u.lastAttacker;
+  if (isRanged(u) || u.shieldWall || u.retaliateT <= 0 || !isValidTarget(f) || f.isStructure || !canTarget(u, f)) return null;
+  if (postX !== undefined && G.teams[u.team].dir * (f.x - postX) > CHARGE_LEASH) return null;
+  return Math.abs(f.x - u.x) < (f.range || 0) + 60 ? f : null;
+}
+
 // The muster point, when set, is also where the army forms its defensive line.
 const defendLine = team => (team.musterX !== null ? team.musterX : team.statue.x + team.dir * DEFEND_OFFSET);
 
@@ -615,11 +627,14 @@ function doRefit(u, dt) {
 const RANK_OFF = { spear: 22, sword: 0, ninja: -8, flyer: -60, archer: -85, warlock: -95, cleric: -110, ballista: -140, golem: 34, beastmaster: -70, firebird: -40 };   // the golem tanks in front
 
 // Where the idx-th unit of a type stands: up to six abreast, extra units form more columns.
-function rankSlot(type, idx, count, frontX, dir) {
+// Beastmasters stand behind the team's giants (which walk just behind the front line), so they
+// can sling at them from behind to drive them on.
+function rankSlot(type, idx, count, frontX, dir, team) {
   const row = idx % LANE_ROWS, col = Math.floor(idx / LANE_ROWS);
   const fullCols = Math.floor(count / LANE_ROWS);
   const rowsHere = col < fullCols ? LANE_ROWS : count % LANE_ROWS || LANE_ROWS;
-  return { x: frontX + dir * ((RANK_OFF[type] || 0) - col * 26), y: rowY(row, rowsHere) };
+  const behindGiants = type === 'beastmaster' && team && team.giantCols ? -(team.giantCols - 1) * GIANT_COL_GAP - 30 : 0;
+  return { x: frontX + dir * ((RANK_OFF[type] || 0) + behindGiants - col * 26), y: rowY(row, rowsHere) };
 }
 
 let NEXT_GROUP = 1;
@@ -651,7 +666,7 @@ function updateGroups(dt) {
     const team = G.teams[g.team], dir = team.dir;
     const byType = {};
     for (const u of g.members.slice().sort((a, b) => a.id - b.id)) (byType[u.type] = byType[u.type] || []).push(u);
-    for (const [type, list] of Object.entries(byType)) list.forEach((u, i) => { u.groupSlot = rankSlot(type, i, list.length, g.anchor, dir); });
+    for (const [type, list] of Object.entries(byType)) list.forEach((u, i) => { u.groupSlot = rankSlot(type, i, list.length, g.anchor, dir, team); });
     // the formation moves at its slowest member's pace; a raised shield wall slows everyone
     let sp = Math.min(...g.members.map(u => baseSpeed(u) * spellSpeed(u)));
     // friendly giants following the line (they can't join a formation) set the pace too, so the
@@ -794,17 +809,24 @@ function updateFighter(u, dt) {
   if (o.type === 'manwall') return doManWall(u, team, dt);
   if (o.type === 'salt') return doSalt(u, team, dt);
   if (handleBlocked(u, dt)) return;
+  if (u.type === 'beastmaster' && !u.inside && beastmasterProd(u)) return;
   if (o.type === 'attack') {
     if (isValidTarget(o.target) && (o.target.isStructure || canTarget(u, o.target))) return engage(u, o.target, dt);
     u.order = { type: 'hold', x: u.x, y: u.y };
     return;
   }
   if (o.type === 'move') {
+    // an attack-move (most player move orders) or the walk to the muster point: fight anything in
+    // range on the way instead of walking past it, then carry on
+    if (o.muster || o.attackMove) {
+      const t = nearestEnemy(u, isRanged(u) ? u.range : 180) || shooterToCharge(u);   // the same reach as when holding there
+      if (t) return engage(u, t, dt);
+    }
     if (moveTo(u, o.x, o.y, dt)) u.order = { type: 'hold', x: o.x, y: o.y };
     return;
   }
   if (o.type === 'hold') {
-    const t = nearestEnemy(u, isRanged(u) ? u.range : 170, isRanged(u) ? u.x : o.x);
+    const t = nearestEnemy(u, isRanged(u) ? u.range : 170, isRanged(u) ? u.x : o.x) || shooterToCharge(u, o.x);
     if (t) return engage(u, t, dt);
     const es = G.teams[1 - u.team].statue;
     if (!es.dead && Math.abs(es.x - u.x) < (isRanged(u) ? u.range : 170) + es.halfW) return engage(u, es, dt);
@@ -817,10 +839,10 @@ function updateFighter(u, dt) {
 
   if (stance === 'defend') {
     const lineX = defendLine(team);
-    const t = defendTarget(u, team, lineX);
+    const t = defendTarget(u, team, lineX) || shooterToCharge(u, lineX);
     if (t) return engage(u, t, dt);
     // spearton in front, swordwrath on the line, archers and mages behind
-    const s = rankSlot(u.type, u.slotIdx, team.slotCount[u.type] || 1, lineX, team.dir);
+    const s = rankSlot(u.type, u.slotIdx, team.slotCount[u.type] || 1, lineX, team.dir, team);
     if (u.swing < 0 && moveTo(u, s.x, s.y, dt)) u.facing = team.dir;
     return;
   }
@@ -1134,7 +1156,7 @@ function damage(t, amt, src, aoe) {
   if (src) debugDamage(src, Math.min(amt, amt + t.hp));
   spawnBurst(t.x, t.y - 38, 6, { color: '#5c0d0b', speed: 90, up: 40, g: 500, life: 0.6, size: 2.2 });
   if (chance(0.6)) addDecal(t.x + rnd(-12, 12), t.y + rnd(-3, 4), rnd(1.5, 4), 0.55);
-  if (t.type === 'miner' && src && !src.isStructure) {
+  if (src && !src.isStructure) {   // miners swing back at it; soldiers charge a shooter (shooterToCharge)
     t.lastAttacker = src;
     t.retaliateT = 4;
   }
@@ -1366,5 +1388,6 @@ function assignDefendSlots() {
       else if (u.type !== 'miner' && u.order.type === 'stance') u.slotIdx = idx[u.type] = (idx[u.type] ?? -1) + 1;
     }
     team.slotCount = Object.fromEntries(Object.entries(idx).map(([k, v]) => [k, v + 1]));
+    team.giantCols = Math.ceil(giants / 2);   // beastmasters rank up behind the last column
   }
 }

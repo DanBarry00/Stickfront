@@ -44,6 +44,7 @@ function makeTeam(id, map, clanKey) {
     upgrades: perType(() => ({}), RESEARCH_TYPES),
     research: perType(() => null, RESEARCH_TYPES),
     minersIn: false,          // miners-only garrison recall
+    siege: false,             // siege mode: miners shelter in the castle on their own while threatened
     levyT: 0,
     manaSlots: new Array(MANA_SLOTS).fill(null),
     gateX: edge(GATE_X),
@@ -132,7 +133,7 @@ function spawnUnit(team, type, x, y) {
     } else if (team.musterX !== null && type !== 'giant') {   // giants follow the army instead (with Blinders a muster order would park them there)
       // new soldiers gather at the muster point, ranked by type
       const off = type === 'spear' ? 22 : type === 'archer' ? -80 : 0;
-      u.order = { type: 'move', x: team.musterX + team.dir * off + rnd(-12, 12), y: u.slotY };
+      u.order = { type: 'move', x: team.musterX + team.dir * off + rnd(-12, 12), y: u.slotY, muster: true };
     }
   }
   G.units.push(u);
@@ -317,6 +318,7 @@ function setUnitStance(u, s) {
     setOrder(u, s === 'garrison' ? { type: 'pan' } : { type: 'stance' });
     return;
   }
+  if (isGiant(u) && s === 'garrison') return;   // giants are too big for the castle
   u.ownStance = s;
   setOrder(u, { type: 'stance' });
 }
@@ -328,6 +330,33 @@ function setMinerGarrison(team, on) {
     if (u.team !== team.id || u.dead || u.type !== 'miner') continue;
     if (['work', 'move', 'hold', 'garrison', 'attack'].includes(u.order.type)) setOrder(u, { type: 'stance' });
   }
+}
+
+// Are a team's miners in danger? True while an enemy force its troops there can't handle is near
+// where they work (or, while they shelter, near the deposits on its half they'd go back to). They
+// go in when clearly outmatched there and come back out once it's roughly even again.
+function minersInDanger(team) {
+  const foe = 1 - team.id;
+  const spots = team.minersIn
+    ? G.mines.filter(m => m.gold > 0 && team.dir * (WORLD_W / 2 - m.x) > 0).map(m => m.x)
+    : G.units.filter(u => u.team === team.id && !u.dead && !u.inside && u.type === 'miner').map(u => u.x);
+  const raiders = G.units.filter(e => e.team === foe && !e.dead && !e.inside && e.type !== 'miner' && spots.some(x => Math.abs(e.x - x) < 450));
+  if (!raiders.length) return false;
+  const x = raiders.reduce((s, e) => s + e.x, 0) / raiders.length;
+  return armyPower(foe, x, 400) > armyPower(team.id, x, 400) * (team.minersIn ? 0.8 : 1.3) + 100;
+}
+
+// Siege mode (the player's toggle, V): the miners shelter in the castle whenever they're in danger
+// and go back to work once it's clear, without being told.
+function updateSiegeMode(team, dt) {
+  if (!team.siege || G.over) return;
+  team.siegeT = (team.siegeT || 0) - dt;
+  if (team.siegeT > 0) return;
+  team.siegeT = 0.5;
+  const danger = minersInDanger(team);
+  if (danger === team.minersIn) return;
+  setMinerGarrison(team, danger);
+  if (team.id === 0) toast(danger ? 'Siege! Your miners are taking shelter in the castle' : 'The siege has lifted: miners are back to work', danger ? 'warn' : '');
 }
 
 // Passive statue income and the Levy's free Swordwrath.
@@ -450,7 +479,7 @@ function updateCastleArcher(team, a, dt, garrisoned) {
 }
 
 function updateArchers(team, dt) {
-  if (team.statue.dead) return;
+  if (G.over) return;   // they hold the wall even after the statue falls, covering its giant
   const garrisoned = G.units.some(u => u.team === team.id && u.inside && !u.dead);
   for (const a of team.archers) updateCastleArcher(team, a, dt, garrisoned);
 }
@@ -486,7 +515,7 @@ function ballistaPierce(p, t, src) {
   if (next) damage(next, p.dmg * BALLISTA.pierce, src, true);
 }
 
-// opts.kind: 'arrow' | 'star' (ninja) | 'bolt' (kestrel crossbow) | 'javelin' | 'ballista'; opts.crit marks a critical hit
+// opts.kind: 'arrow' | 'star' (ninja) | 'bolt' (kestrel crossbow) | 'javelin' | 'ballista' | 'stone' | 'pot'; opts.crit marks a critical hit, opts.prod a beastmaster's prod at its own giant
 function fireArrow(team, x, y, target, dmg, src, fire, opts = {}) {
   // lead a moving target by the arrow's actual flight time
   const v = !target.isStructure && target.moving ? target.facing * unitSpeed(target) : 0;
@@ -494,7 +523,7 @@ function fireArrow(team, x, y, target, dmg, src, fire, opts = {}) {
   T = 0.6 + Math.abs(target.x + v * T - x) / 900;
   const tx = target.x + v * T, ty = targetAimY(target);
   const g = 500;
-  G.projectiles.push({ x, y, vx: (tx - x) / T, vy: (ty - y - 0.5 * g * T * T) / T, g, t: 0, T, target, team, dmg, src, fire: !!fire, kind: opts.kind || 'arrow', crit: !!opts.crit, radius: opts.radius, burn: opts.burn });
+  G.projectiles.push({ x, y, vx: (tx - x) / T, vy: (ty - y - 0.5 * g * T * T) / T, g, t: 0, T, target, team, dmg, src, fire: !!fire, kind: opts.kind || 'arrow', crit: !!opts.crit, radius: opts.radius, burn: opts.burn, prod: !!opts.prod });
 }
 
 function updateProjectiles(dt) {
@@ -511,7 +540,8 @@ function updateProjectiles(dt) {
         hit = t.isStructure ? Math.abs(t.x - p.x) < t.halfW + 24 : Math.abs(t.x - p.x) < 24 && Math.abs(targetAimY(t) - p.y) < 40;
       }
       const src = p.src && !p.src.dead ? p.src : null;
-      if (hit) {
+      if (hit && p.prod) prodGiant(t, p.dmg);   // a beastmaster's stone driving its own giant on
+      else if (hit) {
         damage(t, p.dmg * rnd(0.85, 1.15), src);
         if (p.crit) showCrit(t);
         if (p.fire && !t.isStructure && !t.dead) { t.burnT = BURN_TIME; t.burnSrc = src; }
@@ -608,6 +638,7 @@ function update(dt) {
     updateQueues(team, dt);
     updateResearch(team, dt);
     updateCastle(team, dt);
+    updateSiegeMode(team, dt);
   }
   if (!G.over) {
     G.ai.update(dt);
