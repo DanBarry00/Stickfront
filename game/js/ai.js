@@ -62,14 +62,17 @@ class PoorAI {
   }
 }
 
-// A competent opponent for Normal and Hard. Normal: steady economy, sensible army mix, tier-1
+// A competent opponent for Normal, Hard and Very Hard. Normal: steady economy, sensible army mix, tier-1
 // research, attacks when it has the edge and falls back when losing. Hard: researches everything,
 // gathers mana, fields mages and giants, refits veterans, and attacks and retreats in formations.
+// Very Hard: Hard, but quicker to decide, quicker to strike and better paid.
 const SMART = {
-  normal: { think: [2, 3.5], miners: 7, praying: 1, panning: 0, research: 'basic', mages: true, giants: false, formations: false, perThink: 1, attackPower: 900, edge: 1.1, saveAt: 7, bigArmy: 10, reserve: 250, saveBias: 0.7, armyPerUpgrade: 0.8, researchGap: 90, prayAt: 4, panAt: 99, manaCap: 300, ninjas: 0.1, flyers: 0.06,
-    wave: [150, 190], waveEdge: 1.0, raid: [90, 130], raidSize: 2, shrineArmy: 4, shrineEdge: 0.85, stipend: 0, stipendMana: 0 },
+  normal: { think: [2, 3.5], miners: 7, praying: 1, panning: 0, research: 'basic', mages: true, giants: false, formations: false, perThink: 1, attackPower: 800, edge: 1.05, saveAt: 7, bigArmy: 9, reserve: 250, saveBias: 0.7, armyPerUpgrade: 0.8, researchGap: 90, prayAt: 4, panAt: 99, manaCap: 300, ninjas: 0.1, flyers: 0.06,
+    wave: [140, 180], waveEdge: 0.95, raid: [90, 130], raidSize: 2, shrineArmy: 5, shrineEdge: 0.9, stipend: 0, stipendMana: 0 },
   hard: { think: [1, 1.8], miners: 8, praying: 1, panning: 1, research: 'all', mages: true, giants: true, formations: true, perThink: 2, attackPower: 1000, edge: 1.0, saveAt: 7, bigArmy: 9, reserve: 250, saveBias: 0.6, armyPerUpgrade: 0.35, researchGap: 70, prayAt: 5, panAt: 8, manaCap: 700, ninjas: 0.14, flyers: 0.1,
     wave: [80, 110], waveEdge: 0.85, raid: [45, 70], raidSize: 3, shrineArmy: 3, shrineEdge: 0.6, stipend: 1.5, stipendMana: 0.4 },
+  veryhard: { think: [0.6, 1.2], miners: 9, praying: 1, panning: 1, research: 'all', mages: true, giants: true, formations: true, perThink: 3, attackPower: 950, edge: 0.95, saveAt: 7, bigArmy: 8, reserve: 200, saveBias: 0.5, armyPerUpgrade: 0.3, researchGap: 60, prayAt: 5, panAt: 8, manaCap: 800, ninjas: 0.14, flyers: 0.1,
+    wave: [65, 90], waveEdge: 0.8, raid: [35, 55], raidSize: 4, shrineArmy: 3, shrineEdge: 0.55, stipend: 3, stipendMana: 0.8 },
 };
 // Keeping the player busy: besides its big attacks, the AI sends a wave on a timer (wave, in seconds
 // after the last push ends) once its army is at least waveEdge of the enemy's (plus half its castle
@@ -134,7 +137,19 @@ class SmartAI {
     const count = t => army.filter(u => u.type === t).length + queuedCount(team, t);
     const can = t => canTrain(team, t);
     const extra = clanOf(team).ai || {};   // the clan's favourite units get a bigger share
-    const share = (t, base) => base + (extra[t] || 0);
+    // counter what the enemy fields: spears against blades (and, with shields, against arrows),
+    // shooters against spears and giants, ninjas against archers and mages
+    const foes = G.units.filter(u => u.team !== this.id && !u.dead && u.type !== 'miner');
+    const fc = (...ts) => foes.filter(u => ts.includes(u.type)).length;
+    const k4 = n => Math.min(1, n / 4);
+    const counter = {
+      spear: 0.12 * k4(fc('sword', 'ninja')) + (team.upgrades.spear.shield ? 0.1 * k4(fc('archer')) : 0),
+      archer: 0.12 * k4(fc('spear') + 2 * fc('giant')),
+      flyer: 0.06 * k4(fc('spear') + 2 * fc('giant')),
+      beastmaster: 0.12 * k4(fc('spear') + 2 * fc('giant')),
+      ninja: 0.08 * k4(fc('archer', 'warlock', 'cleric')),
+    };
+    const share = (t, base) => base + (extra[t] || 0) + (counter[t] || 0);
     // aim for a mixed army: a spear wall, plenty of swords, archers behind, some magic and a giant
     const n = army.length + 1;
     const giantCost = unitCost(team, 'giant');
@@ -258,7 +273,7 @@ class SmartAI {
   // Where to hold the line (via the muster point): in front of the miners' furthest deposit,
   // at the shrine when strong enough to claim it, or back by the statue when outmatched.
   guardLine(team, army, ours, theirs) {
-    const hard = this.level === 'hard', dir = team.dir;
+    const hard = this.level !== 'normal', dir = team.dir;   // Hard and Very Hard
     let spot = null;
     // cover the miners: stand just beyond the furthest deposit being worked
     const worked = G.mines.filter(m => m.gold > 0 && m.workers.some(w => w.team === this.id)).map(m => m.x);
@@ -345,6 +360,18 @@ class SmartAI {
     const ours = armyPower(this.id), theirs = armyPower(foe);
     const threat = armyPower(foe, team.statue.x, 900);
     const near = armyPower(this.id, team.statue.x, 900);
+    // at home our castle archers fight for us
+    const homeFort = team.archers.length * 300;
+    const statueHit = this.lastStatueHp !== undefined && team.statue.hp < this.lastStatueHp - 1;
+    this.lastStatueHp = team.statue.hp;
+
+    // the enemy statue is down and its giant is loose: lure it out from under the castle archers
+    const sg = G.teams[foe].statueGiant;
+    if (sg && !sg.dead) {
+      this.lureGiant(team, foe, army, sg);
+      this.unitTactics(team, mine, army, foe);
+      return;
+    }
 
     // also push out once the game has gone on a while and the armies are roughly even
     // attacking means walking into the enemy's castle archers, so they count as defenders
@@ -358,7 +385,7 @@ class SmartAI {
       this.mode = 'attack';
       this.raid = [];   // raiders join the push
       team.musterX = null;   // new troops follow the attack instead of waiting at the old muster point
-      if (c.formations) formGroup(team, army, 'attack');
+      if (c.formations) formGroup(team, army.filter(u => !u.aiHealing), 'attack');   // the wounded stay in to heal
       else setStance(team, 'attack');
     } else if (this.mode === 'attack' && ours < theirs * 0.65) {
       // losing the push: fall back together and regroup, and try again after a while
@@ -366,9 +393,18 @@ class SmartAI {
       this.nextWave = G.time + rnd(c.wave[0], c.wave[1]);
       if (c.formations) formGroup(team, army, 'retreat');
       else setStance(team, 'defend');
-    } else if (this.mode !== 'attack' && threat > near * 1.6 && threat > 600) {
-      setStance(team, 'defend');
+    } else if (this.mode !== 'attack' && this.mode !== 'turtle' && G.time > (this.turtleCd || 0) && threat > 400 && threat > (near + homeFort) * 1.25) {
+      // outmatched at home: hold the castle (troops heal inside, the castle archers shoot faster)
+      this.mode = 'turtle';
+      this.raid = [];
+      team.musterX = null;
+      setStance(team, 'garrison');
+    } else if (this.mode === 'turtle' && (statueHit || threat < (near + homeFort) * 0.9 || threat < 200)) {
+      // they've come for the statue (or the odds have turned): everyone out to meet them, and no
+      // ducking back in for a while (running in and out wastes the army)
       this.mode = 'build';
+      this.turtleCd = G.time + 25;
+      setStance(team, 'defend');
     } else if (this.mode === 'fallback' && army.every(u => u.order.type !== 'group')) {
       setStance(team, 'defend');
       this.mode = 'build';
@@ -381,11 +417,50 @@ class SmartAI {
       for (const u of army) if (u.order.type === 'hold' || u.order.type === 'move') setOrder(u, { type: 'stance' });
     }
 
-    if (this.mode !== 'attack') {
+    if (this.mode === 'build' || this.mode === 'fallback') {
       this.guardLine(team, army, ours, theirs);
       this.raidMiners(team, army);
     }
+    if (this.mode !== 'attack') this.healWounded(team, army, foe);
+    this.unitTactics(team, mine, army, foe);
+  }
 
+  // The enemy statue has fallen and its giant is loose. Fighting it under the castle archers throws
+  // the army away, so hold a line just out of their reach until it comes out, then fall on it.
+  lureGiant(team, foe, army, sg) {
+    const enemy = G.teams[foe];
+    const line = enemy.edge(castleArcherStats(enemy).reach + 90);
+    const out = team.dir * (sg.x - line) < 0 || !enemy.archers.length;   // it's in the open
+    if (this.mode !== 'lure') { this.mode = 'lure'; this.raid = []; }
+    if (out) { if (team.stance !== 'attack') setStance(team, 'attack'); return; }
+    const spot = musterClamp(team, line - team.dir * 30);
+    if (team.stance !== 'defend' || team.musterX === null || Math.abs(team.musterX - spot) > 20) {
+      setStance(team, 'defend');
+      team.musterX = spot;
+    }
+  }
+
+  // Badly hurt soldiers slip back into the castle to heal between fights, and rejoin when mended.
+  healWounded(team, army, foe) {
+    for (const u of army) {
+      if (u.aiHealing) {
+        if (u.hp >= u.maxHp * 0.9 || u.order.type !== 'garrison') {
+          u.aiHealing = false;
+          if (u.order.type === 'garrison') setOrder(u, { type: 'stance' });
+        }
+        continue;
+      }
+      if (u.hp > u.maxHp * 0.35 || u.order.type === 'group' || u.order.type === 'refit' || u.order.type === 'attack') continue;
+      if (Math.abs(u.x - team.statue.x) > 1400) continue;   // too far from home to make it back
+      if (G.units.some(e => e.team === foe && !e.dead && !e.inside && Math.abs(e.x - u.x) < 160)) continue;   // still fighting
+      setOrder(u, { type: 'garrison' });
+      u.aiHealing = true;
+    }
+  }
+
+  // Per-unit tricks: saboteurs, golems and shield walls.
+  unitTactics(team, mine, army, foe) {
+    const c = this.cfg;
     // saboteurs: salt a deposit enemy miners are working (one saboteur per deposit), or undermine an enemy trench
     for (const u of mine) {
       if (u.type !== 'saboteur' || u.order.type === 'salt' || u.order.type === 'refit') continue;

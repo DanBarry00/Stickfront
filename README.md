@@ -1,6 +1,6 @@
 # Stickfront (prototype)
 
-A Stick War 2–style side-scrolling battle game. It's a test build with randomly generated maps (each with its own lane depth, gold layout and sometimes a Monolith to fight over), nine clans to choose from, a castle you can garrison, statues with health and mana, gold mines, miners, seven soldier types plus giants (including vanishing ninjas and flying Kestrels), tiered upgrades, and a computer opponent with three difficulty levels.
+A Stick War 2–style side-scrolling battle game. It's a test build with randomly generated maps (each with its own lane depth, gold layout and sometimes a Monolith to fight over), nine clans to choose from, a castle you can garrison, statues with health and mana, gold mines, miners, seven soldier types plus giants (including vanishing ninjas and flying Kestrels), tiered upgrades, and a computer opponent with four difficulty levels.
 
 ## Run it
 Double-click **`Play Stickfront.bat`**. It opens the game in its own Microsoft Edge app window. If Edge isn't installed, it opens in your default browser. Nothing else needs to be installed.
@@ -46,7 +46,7 @@ Clan-only upgrades and units appear only for their clan. The setup screen lists 
 | Firebird | 200 + 50 mana | Aerie (Sky Clan only) | Flying bomber: drops fire pots on ground units below; only ranged attacks reach it (2 population) |
 
 ## Giants
-- **Targeting:** a giant always goes for the enemy with the most health, ignoring taunts. Each blow also splashes the 2 enemies beside its target, unless the target is another giant.
+- **Targeting:** a giant goes for the closest enemy it can reach, ignoring taunts. Each blow also splashes the 2 enemies beside its target, unless the target is another giant.
 - **No direct control:** giants follow the friendly troops around them. The more troops nearby, the more chains they wear and the better they obey. A poorly chained giant may charge off on its own, or stay put when you retreat.
 - **Size:** a giant is 3 formation rows wide, so two stand side by side across the lane and any more line up in columns behind them.
 - **The statue:** a giant that reaches the enemy statue keeps pounding it (it still smashes anything in arm's reach first). Only a Blinders move order pulls it away.
@@ -61,7 +61,7 @@ Clan-only upgrades and units appear only for their clan. The setup screen lists 
 ## Ninjas
 75 hp, very fast, 15 damage per quick cut. Trained at the **Dojo** on the rampart; they drop straight down into the castle.
 - **Ambush:** the first blow of a fight (after 2.5s without striking), or any blow struck while vanished, deals **triple damage**.
-- **Vanish:** while running, a ninja can't be targeted by anything: arrows already in the air miss, and spells can't be aimed at it. Area damage (fireballs, giant splash) still hits. Striking or stopping reveals it, and it can't vanish again for **5 seconds**.
+- **Vanish:** while running, a ninja can't be targeted by anything: arrows already in the air miss, and spells can't be aimed at it. Area damage (fireballs, giant splash) still hits. An enemy it brushes past (within 40) can still spot and strike it, which shakes it out of hiding. Striking or stopping reveals it, and it can't vanish again for **5 seconds**.
 - **Targeting:** it goes for the enemy with the least health nearby, and archers before anyone else. Shield walls still draw it in, unless it has Focus.
 - **Native pierce:** its blade ignores 30% of the target's armor.
 - **Crits:** 10% chance of a double-damage critical hit.
@@ -96,10 +96,19 @@ Choose it on the setup screen. The pause menu shows the current setting. The com
 - **Easy:** the old distractible opponent. Meant for learning the game.
 - **Normal:** a steady economy, a mixed army and tier-1 research. It holds its line in front of its mines, pulls its miners inside when raided, attacks when it has the edge (castle archers count as defenders), sends a wave every 2½–3 minutes when the armies are even, raids exposed miners with a pair of quick troops, and falls back when it is losing. Meant to need some strategy and formations to beat.
 - **Hard:** researches everything it uses (all but Earthworks and Palisade), uses mana, mages and giants, refits veterans, braces shield walls against archers, attacks and retreats in formation, sends a wave every 1½–2 minutes once its army is close to yours, and keeps raiding exposed miners with up to three quick troops (Kestrels, ninjas, Swordwrath). It cheats a little: +1.5 gold and +0.4 mana per second on top of its mining. Meant to challenge a good player who still wins most of the time.
+- **Very Hard:** Hard, sharper: it decides faster, trains more at once, attacks every minute or so, raids with up to four troops, takes the Monolith at 55% of your strength, and earns +3 gold and +0.8 mana per second on top of its mining. A real challenge.
 
-Normal and Hard never attack with fewer than 5 soldiers. They weigh armies by what the units cost (hurt units count for less, giants for 60%) and count each enemy castle archer as 300 more defence. Their giants march with the army instead of waiting at the muster point, and formations wait for giants that fall behind.
+Normal, Hard and Very Hard never attack with fewer than 5 soldiers. They weigh armies by what the units cost (hurt units count for less, giants for 60%) and count each enemy castle archer as 300 more defence. Their giants march with the army instead of waiting at the muster point, and formations wait for giants that fall behind.
 
-Both Normal and Hard make the Monolith their first priority: they stand on it (or go to take it back) as soon as their army can contest it (Hard with 3 soldiers at 60% of your army's strength, Normal with 4 at 85%). When the gold on their half of the map runs low, they pan the castle stream with every free miner, research Prospecting and restore their exhausted deposits instead of sending miners across the map, so games never stall with both sides broke. They also save up for research when they've gone too long without any (unless they're behind). A harder level above Hard is planned.
+All three make the Monolith their first priority: they stand on it (or go to take it back) as soon as their army can contest it (Very Hard with 3 soldiers at 55% of your army's strength, Hard with 3 at 60%, Normal with 5 at 90%). When the gold on their half of the map runs low, they pan the castle stream with every free miner, research Prospecting and restore their exhausted deposits instead of sending miners across the map, so games never stall with both sides broke. They also save up for research when they've gone too long without any (unless they're behind).
+
+They also fight smarter:
+- **Home defence:** when clearly outmatched at home they pull everyone into the castle, where troops heal and the castle archers shoot faster, and sally out as soon as you hit the statue or the odds even up (then stay out for a while rather than running in and out).
+- **The statue giant:** once your statue falls, they don't fight its giant under your castle archers; they hold a line just out of the archers' reach until the giant charges out, then fall on it in the open.
+- **The wounded** slip back into the castle to heal between fights and rejoin when mended.
+- **Counter-picks:** they field more Spearton against blades (and, with Shields, against arrows), more shooters against Spearton and giants, and more ninjas against archers and mages.
+
+With the Base Clan on both sides, each level beats the one below: Normal beats Easy 8–0, Hard beats Normal 10–2, Very Hard beats Hard 6–2.
 
 ## Maps
 Every map comes from a seed (shown on the setup screen; you can type one in). Besides its looks, each map has these layout features:
@@ -113,8 +122,8 @@ The victory/defeat screen compares both sides (units trained, gold, mana, kills,
 
 ## Balance / debug tools
 - **F3** toggles the debug overlay. For each side it shows gold/s and mana/s (30s average), bank, population, army value, kills, stance and AI mode, research in progress, and a table of damage per second by unit type (10s average, per unit and in total, castle archers included).
-- **F4** (with the overlay on) hands your side to an AI: Easy, Normal, Hard, then back to you. With **T** going up to 8× while the overlay is on, you can watch AI-vs-AI matches.
-- **Headless tests:** open the browser console (F12). `runBalanceTest('hard', 'normal', 6)` plays 6 random maps twice each, with each AI on both sides (both on the Base Clan), as fast as your computer can, then prints a table and the win counts. `runClanTest('sword', 'archer', 6)` does the same for two clans, both played by the Hard AI (pass `'normal'` or `'easy'` as a 4th argument to change that). Run them after changing numbers in `config.js` or `clans.js`.
+- **F4** (with the overlay on) hands your side to an AI: Easy, Normal, Hard, Very Hard, then back to you. With **T** going up to 8× while the overlay is on, you can watch AI-vs-AI matches.
+- **Headless tests:** open the browser console (F12). `runBalanceTest('hard', 'normal', 6)` plays 6 random maps twice each, with each AI on both sides (both on the Base Clan), as fast as your computer can, then prints a table and the win counts. `runClanTest('sword', 'archer', 6)` does the same for two clans, both played by the Hard AI (pass `'normal'` or `'easy'` as a 4th argument to change that). `runUnitDuel('sword', 'archer', 4, 4)` sets two squads loose on open ground (no AI, no upgrades) and reports the winner, survivors, the first blow and how long units stood idle with an enemy in reach; `runUnitMatrix(['sword', 'spear', 'archer'])` runs every pair. Run them after changing numbers in `config.js` or `clans.js`.
 
 ## Mages and spells
 The Cleric and Warlock are exact opposites. They have the same cost, health, range and heal/damage, and each research pair costs the same. Each spell is unlocked by research:

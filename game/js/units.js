@@ -255,9 +255,11 @@ function isValidTarget(t) {
 // (ballistas and firebirds only ever hit the ground)
 const canHitAir = u => !u || u.castle || (isRanged(u) && u.type !== 'ballista' && u.type !== 'firebird') || (u.type === 'ninja' && u.perks.stars && u.starMode === 'auto');
 
-// Can attacker u pick e as a target at all? (Vanished ninjas and, for melee, flyers are out of reach.)
+// Can attacker u pick e as a target at all? (Vanished ninjas are out of reach unless they brush past
+// within STEALTH_REVEAL; flyers are out of reach for melee.)
+const STEALTH_REVEAL = 40;
 function canTarget(u, e) {
-  return !e.dead && !e.inside && !e.stealth && (!isFlying(e) || canHitAir(u));
+  return !e.dead && !e.inside && (!e.stealth || Math.abs(e.x - u.x) + Math.abs(e.y - u.y) * 0.5 < STEALTH_REVEAL) && (!isFlying(e) || canHitAir(u));
 }
 
 // Lower is better. Taunts (shield walls) pull everyone except focused ninjas; ninjas hunt the
@@ -388,6 +390,8 @@ function startSwing(u, kind, target) {
 function onSwingHit(u) {
   const t = u.swingTarget;
   if (u.swingKind === 'attack') {
+    // a vanished ninja caught at close quarters is struck (and shaken out of hiding) all the same
+    if (t && t.stealth && !t.dead && !t.inside && inReach(u, t, 12)) t.stealth = false;
     if (isValidTarget(t) && inReach(u, t, 12)) {
       let amt = u.dmg * rnd(0.8, 1.2) * dmgMult(u);
       if (u.leapSwing) {

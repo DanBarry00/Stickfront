@@ -215,6 +215,7 @@ const AI_LEVELS = {
   easy: { name: 'Easy', desc: 'Clumsy and distractible.' },
   normal: { name: 'Normal', desc: 'Steady economy, sensible army, basic upgrades. Attacks when it has the edge.' },
   hard: { name: 'Hard', desc: 'Researches everything, fields mages and giants, and marches in formations.' },
+  veryhard: { name: 'Very Hard', desc: 'Hard, sharper: faster decisions, constant pressure, and a bigger hidden income.' },
 };
 
 // Spells. Each Cleric spell has a Warlock twin with identical cost, cooldown, radius and strength.
