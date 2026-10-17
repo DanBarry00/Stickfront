@@ -18,9 +18,8 @@ class Unit {
     applyPerks(this);
     this.hp = this.maxHp;
     this.facing = team === 0 ? 1 : -1;
-    this.scale = type === 'giant' ? this.giantScale * rnd(0.97, 1.03) : type === 'golem' ? GOLEM.scale * rnd(0.97, 1.03) : rnd(0.93, 1.07) * (type === 'spear' ? 1.06 : 1);
+    this.scale = type === 'giant' ? this.giantScale : type === 'golem' ? GOLEM.scale : type === 'spear' ? 1.06 : 1;   // looks come from type and upgrades, never chance
     this.speedMul = rnd(0.92, 1.08);
-    this.gear = pick(GEAR[type][team]);
     this.seed = rnd(0, 100);
     this.walk = rnd(0, TAU);
     this.moving = false;
@@ -133,8 +132,6 @@ function applyPerks(u) {
     if (P.greatsword) u.atk = d.atkTime * 1.1;   // Great Swords swing slower
     u.armor = P.helm ? 0.25 : 0;
   } else if (u.type === 'miner') {
-    u.maxHp += P.defense ? 50 : 0;
-    u.dmg = P.defense ? 11 : d.dmg;
     u.carryCap = P.mule ? 100 : P.bag2 ? 80 : P.bag ? 56 : 35;
     u.goldPerSwing = P.diamond ? 17 : P.pick2 ? 14 : P.pick ? 11 : 7;
     u.mineTime = P.diamond ? 0.52 : P.pick2 ? 0.6 : P.pick ? 0.72 : MINE_SWING_TIME;
@@ -258,9 +255,11 @@ function isValidTarget(t) {
 // (ballistas and firebirds only ever hit the ground)
 const canHitAir = u => !u || u.castle || (isRanged(u) && u.type !== 'ballista' && u.type !== 'firebird') || (u.type === 'ninja' && u.perks.stars && u.starMode === 'auto');
 
-// Can attacker u pick e as a target at all? (Vanished ninjas and, for melee, flyers are out of reach.)
+// Can attacker u pick e as a target at all? (Vanished ninjas are out of reach unless they brush past
+// within STEALTH_REVEAL; flyers are out of reach for melee.)
+const STEALTH_REVEAL = 40;
 function canTarget(u, e) {
-  return !e.dead && !e.inside && !e.stealth && (!isFlying(e) || canHitAir(u));
+  return !e.dead && !e.inside && (!e.stealth || Math.abs(e.x - u.x) + Math.abs(e.y - u.y) * 0.5 < STEALTH_REVEAL) && (!isFlying(e) || canHitAir(u));
 }
 
 // Lower is better. Taunts (shield walls) pull everyone except focused ninjas; ninjas hunt the
@@ -391,6 +390,8 @@ function startSwing(u, kind, target) {
 function onSwingHit(u) {
   const t = u.swingTarget;
   if (u.swingKind === 'attack') {
+    // a vanished ninja caught at close quarters is struck (and shaken out of hiding) all the same
+    if (t && t.stealth && !t.dead && !t.inside && inReach(u, t, 12)) t.stealth = false;
     if (isValidTarget(t) && inReach(u, t, 12)) {
       let amt = u.dmg * rnd(0.8, 1.2) * dmgMult(u);
       if (u.leapSwing) {
@@ -932,7 +933,7 @@ function doPan(u, team, dt) {
   }
   u.panUsed = true;
   if (u.swing >= 0) return;
-  if (!moveTo(u, team.gateX - team.dir * PAN_XS[u.panSlot], LANE_BOT - 1, dt)) return;
+  if (!moveTo(u, team.gateX - team.dir * PAN_XS[u.panSlot], LANE_BOT + 13, dt)) return;   // the edge of the quay
   if (u.carry > 0) {
     // gold carried in is stored at the castle
     team.gold += u.carry;
@@ -1329,7 +1330,7 @@ function updateUnit(u, dt) {
     u.stillT += dt;
     if (u.stillT > 0.25) u.runDist = 0;
   }
-  u.y = clamp(u.y, LANE_TOP, LANE_BOT);
+  u.y = clamp(u.y, LANE_TOP, LANE_BOT + (u.panSlot >= 0 ? 14 : 0));   // panners kneel on the quay by the stream
   u.x = u.team === 0 ? clamp(u.x, 20, WORLD_W - GATE_X - 22) : clamp(u.x, GATE_X + 22, WORLD_W - 20);
   u.inside = team.dir * (u.x - team.gateX) < -4;
   if (u.inside && u.hp < u.maxHp && u.lastStand <= 0) {

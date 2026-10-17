@@ -5,7 +5,7 @@ let G = null;   // current game
 
 // Chosen on the title screen and remembered between sessions.
 let AI_DIFFICULTY = (() => {
-  try { return localStorage.getItem('stickfront.difficulty') || 'normal'; } catch (e) { return 'normal'; }
+  try { const d = localStorage.getItem('stickfront.difficulty'); return AI_LEVELS[d] ? d : 'normal'; } catch (e) { return 'normal'; }
 })();
 function setDifficulty(d) {
   AI_DIFFICULTY = d;

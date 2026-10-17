@@ -16,13 +16,14 @@ function giantObedience(u) {
 }
 const giantChains = u => (u.isStatueGiant ? 0 : Math.round(u.obey * 5));
 
-// Giants ignore taunts and go for whoever has the most health.
-function biggestFoe(u, range) {
-  let best = null, bh = -1;
+// Giants go for the closest enemy they can reach (they ignore taunts).
+function nearestFoe(u, range) {
+  let best = null, bd = 1e9;
   for (const e of G.units) {
     if (e.team === u.team || !canTarget(u, e)) continue;
     if (Math.abs(e.x - u.x) > range || Math.abs(e.y - u.y) > 140) continue;
-    if (e.hp > bh) { bh = e.hp; best = e; }
+    const d = Math.abs(e.x - u.x) + Math.abs(e.y - u.y) * 0.5;
+    if (d < bd) { bd = d; best = e; }
   }
   return best;
 }
@@ -57,7 +58,7 @@ function updateGiant(u, dt) {
     u.mindT = rnd(3, 5);
     u.rogue = u.isStatueGiant ? 'charge' : chance(1 - u.obey) ? (chance(0.55) ? 'charge' : 'stay') : null;
   }
-  const t = biggestFoe(u, u.aggro);
+  const t = nearestFoe(u, u.aggro);
   if (u.rogue === 'charge') {
     if (t) return engage(u, t, dt);
     if (!es.dead) return engage(u, es, dt);
@@ -107,7 +108,7 @@ function beastmasterProd(u) {
     if (g.team !== u.team || !isGiant(g) || g.dead || g.inside || g.isStatueGiant || g.rogue === 'charge') continue;
     if (Math.abs(g.x - u.x) > u.range || Math.abs(g.y - u.y) > 140) continue;
     // an idle giant only gets driven on while the army is attacking (not off a defend line)
-    const idle = g.swing < 0 && armyAttacking(g) && biggestFoe(g, g.aggro);
+    const idle = g.swing < 0 && armyAttacking(g) && nearestFoe(g, g.aggro);
     if (g.rogue !== 'stay' && !(g.confusedT > 0) && !idle) continue;
     u.facing = g.x >= u.x ? 1 : -1;
     u.atkCd = u.atk;

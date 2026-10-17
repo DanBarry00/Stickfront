@@ -216,7 +216,7 @@ function drawUnitInAir(ctx, u, dying, fall, alpha, lift) {
   drawStickman(ctx, {
     x: u.x, y: u.y, facing: u.facing, scale: u.scale, team: u.team, type: u.type,
     walk: u.walk, moving: u.moving && !dying, swing: dying ? -1 : u.swing, carry: u.carry, carryCap: u.carryCap,
-    gear: u.gear, flash: u.flash, seed: u.seed, fall, alpha, perks: u.perks, lift,
+    flash: u.flash, seed: u.seed, fall, alpha, perks: u.perks, lift,
     pray: u.praying && !dying ? u.pray % 1 : -1, rage: dying ? 0 : rageOf(u), panning: u.panning && !dying,
     flash: u.lastStand > 0 ? (Math.sin(RT * 30) > 0 ? 1 : 0) : u.flash,
     wall: u.shieldWall, arch: u.type === 'archer' ? archPose(u, dying) : null, cast: u.swingKind === 'cast',
@@ -643,6 +643,7 @@ function render(ctx) {
   drawHills(ctx, map.layers[1], vw);
   drawHaze(ctx, map, vw, HORIZON_Y - 120, 0.25);
   drawHills(ctx, map.layers[2], vw);
+  drawSunShafts(ctx, map, vw);
 
   ctx.save();
   ctx.translate(-camX, 0);
@@ -678,7 +679,7 @@ function render(ctx) {
       if (!inView(a.x)) continue;
       drawStickman(ctx, {
         x: a.x, y: a.y, facing: a.f, scale: 0.88, team: t.id, type: 'archer',
-        walk: 0, moving: false, swing: -1, gear: t.id ? 'horns' : 'wrap', flash: 0, seed: a.seed, arch: a, perks: t.upgrades.archer,
+        walk: 0, moving: false, swing: -1, flash: 0, seed: a.seed, arch: a, perks: t.upgrades.archer,
       });
     }
   }
@@ -720,6 +721,7 @@ function render(ctx) {
   }
   ctx.restore();
 
+  drawLighting(ctx, vw);
   drawWeather(ctx);
 
   // color grade, film grain and a heavy vignette for a grittier image

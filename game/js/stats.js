@@ -6,7 +6,7 @@ const HISTORY_STEP = 5;     // seconds of game time between timeline samples
 const DPS_WINDOW = 10;      // seconds the overlay's damage-per-second figures average over
 const INCOME_WINDOW = 30;   // seconds the overlay's gold/mana-per-second figures average over
 const DEBUG_SPEEDS = [1, 2, 4, 8];
-const AUTOPILOTS = [null, 'easy', 'normal', 'hard'];
+const AUTOPILOTS = [null, 'easy', 'normal', 'hard', 'veryhard'];
 
 function initStats() {
   G.history = [];
@@ -80,7 +80,7 @@ function toggleDebug() {
   refreshDebug();
 }
 
-// F4 cycles who plays your side: you, then the Easy, Normal and Hard AI.
+// F4 cycles who plays your side: you, then the Easy, Normal, Hard and Very Hard AI.
 function cycleAutopilot() {
   const d = G.dbg, i = AUTOPILOTS.indexOf(d.autopilotLevel);
   d.autopilotLevel = AUTOPILOTS[(i + 1) % AUTOPILOTS.length];
@@ -201,6 +201,58 @@ function runClanTest(clanA, clanB, maps = 6, level = 'hard', maxTime = 1500) {
   endTest(keep);
   console.table(games);
   return wins;
+}
+
+// ---------------------------------------------------------------- unit duels
+// Small squads of two unit types fight on open ground in mid-field (no AI, no upgrades), to check
+// each unit's own fighting behaviour. idle: seconds per unit spent standing still, not swinging,
+// with an enemy in its reach (a sign it's stuck or confused). From the console:
+// runUnitDuel('sword', 'archer', 4, 4) or runUnitMatrix(['sword', 'spear', 'archer']).
+function runUnitDuel(a, b, na = 4, nb = 4, maxTime = 90) {
+  const keep = AI_DIFFICULTY;
+  newGame(randomSeed(), ['base', 'base']);
+  G.state = 'sim';
+  G.ai = { update() {} };
+  G.autopilot = null;
+  G.units = [];
+  const mid = WORLD_W / 2, sides = [[a, na, 0, mid - 160], [b, nb, 1, mid + 160]], stats = [{ idle: 0, n: na }, { idle: 0, n: nb }];
+  for (const [type, n, id, x] of sides) {
+    const team = G.teams[id];
+    for (let i = 0; i < n; i++) {
+      const u = spawnUnit(team, type, x - team.dir * Math.floor(i / 3) * 30, rowY((i % 3) * 2 + 0.5));
+      if (isGiant(u)) u.obey = 0.9;
+      u.order = { type: 'stance' };
+    }
+    team.stance = 'attack';
+    team.musterX = null;
+  }
+  let firstHit = null;
+  const hp0 = G.units.reduce((s, u) => s + u.hp, 0);
+  while (G.time < maxTime) {
+    update(1 / 30);
+    if (firstHit === null && G.units.reduce((s, u) => s + (u.dead ? 0 : u.hp), 0) < hp0 - 1) firstHit = G.time;
+    const alive = [0, 1].map(id => G.units.filter(u => u.team === id && !u.dead));
+    if (!alive[0].length || !alive[1].length) break;
+    for (const id of [0, 1]) {
+      for (const u of alive[id]) {
+        if (u.swing >= 0 || u.moving || u.type === 'cleric') continue;
+        const reach = isRanged(u) ? (u.range || 0) + 10 : 70;
+        if (alive[1 - id].some(e => canTarget(u, e) && Math.abs(e.x - u.x) + Math.abs(e.y - u.y) * 0.5 < reach)) stats[id].idle += 1 / 30;
+      }
+    }
+  }
+  const surv = [0, 1].map(id => G.units.filter(u => u.team === id && !u.dead).length);
+  const res = { a, b, winner: surv[0] && !surv[1] ? a : surv[1] && !surv[0] ? b : 'none', time: Math.round(G.time), survA: surv[0], survB: surv[1], firstHit: firstHit === null ? null : +firstHit.toFixed(1), idleA: +(stats[0].idle / na).toFixed(1), idleB: +(stats[1].idle / nb).toFixed(1) };
+  setDifficulty(keep);
+  return res;
+}
+
+// Every pair of the given types (each side of each pair), squads of n.
+function runUnitMatrix(types, n = 4) {
+  const rows = [];
+  for (let i = 0; i < types.length; i++) for (let j = i + 1; j < types.length; j++) rows.push(runUnitDuel(types[i], types[j], n, n));
+  console.table(rows);
+  return rows;
 }
 
 // ---------------------------------------------------------------- end-screen charts
