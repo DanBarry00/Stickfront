@@ -353,11 +353,14 @@ class SmartAI {
     const k4 = n => Math.min(1, n / 4);
     const counter = {
       spear: 0.12 * k4(fc('sword', 'ninja')) + (team.upgrades.spear.shield ? 0.1 * k4(fc('archer')) : 0),
-      archer: 0.12 * k4(fc('spear') + 2 * fc('giant')),
+      archer: 0.12 * k4(fc('spear') + 2 * fc('giant')) + 0.08 * k4(foes.filter(u => u.type === 'gladiator').reduce((n, g) => n + (g.kills || 0), 0) / 3),
       flyer: 0.06 * k4(fc('spear') + 2 * fc('giant')),
       beastmaster: 0.12 * k4(fc('spear') + 2 * fc('giant')),
       ninja: 0.08 * k4(fc('archer', 'warlock', 'cleric')),
       gladiator: 0.08 * k4(fc('flyer', 'firebird')),
+      // the snowballers: Clerics burn zombie packs, archers focus down a glorious Gladiator
+      cleric: 0.14 * k4(fc('zombie') / 2),
+      warlock: 0.05 * k4(fc('zombie') / 2),
     };
     const share = (t, base) => base + (extra[t] || 0) + (counter[t] || 0) + (c.mix[t] || 0);   // (mix: the play style's leanings)
     // aim for a mixed army: a spear wall, plenty of swords, archers behind, some magic and a giant
@@ -396,7 +399,9 @@ class SmartAI {
 
   // The next upgrade this AI wants (null when nothing is left or its building is busy).
   nextResearch(team) {
-    const order = [...(this.cfg.researchFirst || []), ...AI_RESEARCH];   // the play style's priorities first
+    // a zombie horde on the field: Healing Pool (it burns them) jumps the queue; then the style's priorities
+    const undead = G.units.filter(u => u.team !== this.id && !u.dead && u.type === 'zombie').length >= 3;
+    const order = [...(undead ? [['cleric', 'pool']] : []), ...(this.cfg.researchFirst || []), ...AI_RESEARCH];
     for (const [type, key] of order) {
       if (team.upgrades[type][key] || upgradeLocked(team, type, key)) continue;
       const d = upgradeDef(type, key);
@@ -600,7 +605,7 @@ class SmartAI {
 
     // what a push is up against: the castle archers and archers posted in towers (long reach, and
     // faster with the castle garrisoned)
-    const fort = G.teams[foe].archers.length * 300 + G.towers.filter(tw => !tw.dead && tw.archer && !tw.archer.dead && tw.archer.team === foe).length * 300;
+    const fort = G.teams[foe].archers.length * 300 + G.towers.reduce((n, tw) => n + (tw.dead ? 0 : towerCrew(tw).filter(a => a.team === foe).length), 0) * 300;
     // the play style moves on to its next phase when the moment comes
     // how big the army is for deciding when to attack: a giant counts as two soldiers
     const size = army.length + 2 * mine.filter(u => isGiant(u) && !u.isStatueGiant).length;
@@ -823,7 +828,7 @@ class SmartAI {
   // Empty towers get an archer: our own, and the Monolith's neutral one when our army holds the ground.
   postArchers(team, army, foe) {
     for (const tw of G.towers) {
-      if (tw.dead || tw.progress < 1 || (tw.archer && !tw.archer.dead)) continue;
+      if (tw.dead || tw.progress < 1 || towerCrew(tw).length >= towerSlots(tw) || towerCrew(tw).some(a => a.team !== this.id)) continue;
       if (tw.team !== this.id && !(tw.team === -1 && armyPower(this.id, tw.x, 400) > armyPower(foe, tw.x, 400) + 100)) continue;
       const a = army.filter(u => u.type === 'archer' && (u.order.type === 'stance' || u.order.type === 'hold') && Math.abs(u.x - tw.x) < 1400)
         .sort((p, q) => Math.abs(p.x - tw.x) - Math.abs(q.x - tw.x))[0];

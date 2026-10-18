@@ -1,17 +1,32 @@
 'use strict';
-// Necromancers raise zombies from the ground beside them (a little mana each, up to the horde size)
+// Necromancers raise zombies from the ground beside them (a little mana each, up to the pack size)
 // and lead them: the pack stays around its master and falls on whatever comes near. A zombie's
-// victim rises as another zombie. If the Necromancer dies, its zombies just attack.
+// victim rises as another zombie, if there's room in the pack (it counts like any other). Every kill
+// the pack makes feeds its master a soul: more souls mean a bigger pack, stronger zombies and faster
+// raising, so a Necromancer left alone snowballs. If it dies, its zombies just attack.
 
-const hordeSize = team => NECRO.max + (team.upgrades.necromancer.horde ? 2 : 0) + (team.upgrades.necromancer.horde2 ? 2 : 0);
+const hordeSize = (team, m) => NECRO.max + (team.upgrades.necromancer.horde ? 2 : 0) + (team.upgrades.necromancer.horde2 ? 2 : 0) +
+  (m ? Math.min(NECRO.maxExtra, Math.floor((m.souls || 0) / NECRO.soulsPerSlot)) : 0);
 const zombiesOf = u => G.units.filter(z => z.type === 'zombie' && !z.dead && z.necro === u);
+
+// One of the pack made a kill: a soul for its master, and the victim rises if there's room.
+function zombieKill(m, victim) {
+  const before = m.souls || 0;
+  m.souls = Math.min(NECRO.souls, before + 1);
+  if (m.team !== 0 && m.souls >= 8 && Math.floor(before / 8) < Math.floor(m.souls / 8)) toast(`An enemy Necromancer's horde is growing (${m.souls} souls): burn it with a Healing Pool, or kill the Necromancer!`, 'warn');
+  if (isGiant(victim) || victim.type === 'zombie' || victim.inside || isFlying(victim)) return;
+  if (zombiesOf(m).length < hordeSize(G.teams[m.team], m)) raiseZombie(m.team, victim.x, victim.y, m);
+}
 
 function raiseZombie(teamId, x, y, necro) {
   const team = G.teams[teamId];
   const z = spawnUnit(team, 'zombie', x, clamp(y, LANE_TOP + 6, LANE_BOT - 6));
   z.necro = necro || null;
   z.zi = necro ? zombiesOf(necro).length : 0;   // its place in the pack
-  if (team.upgrades.necromancer.grave) { z.maxHp *= NECRO.graveHp; z.hp = z.maxHp; }
+  const power = 1 + NECRO.soulPower * (necro ? necro.souls || 0 : 0);   // the master's souls make it stronger
+  z.maxHp *= (team.upgrades.necromancer.grave ? NECRO.graveHp : 1) * power;
+  z.hp = z.maxHp;
+  z.dmg *= power;
   z.riseT = 0.8;   // clawing its way up out of the ground
   spawnBurst(z.x, z.y - 2, 10, { color: shade(G.map.theme.ground[0], 0.05), speed: 70, up: 60, g: 400, life: 0.7, size: 2.4 });
   return z;
@@ -21,8 +36,8 @@ function updateNecromancer(u, dt) {
   const team = G.teams[u.team], o = u.order;
   // raise the dead while there's room in the pack and mana to spare
   u.summonT = (u.summonT || 0) - dt;
-  if (u.summonT <= 0 && !u.inside && zombiesOf(u).length < hordeSize(team) && team.mana >= NECRO.mana && u.swing < 0) {
-    u.summonT = team.upgrades.necromancer.rites ? NECRO.rites : NECRO.summonCd;
+  if (u.summonT <= 0 && !u.inside && zombiesOf(u).length < hordeSize(team, u) && team.mana >= NECRO.mana && u.swing < 0) {
+    u.summonT = (team.upgrades.necromancer.rites ? NECRO.rites : NECRO.summonCd) * Math.max(0.5, 1 - NECRO.soulHaste * (u.souls || 0));
     team.mana -= NECRO.mana;
     startSwing(u, 'summon', null);   // (raised staff: drawn like a cast)
     raiseZombie(u.team, u.x + team.dir * rnd(25, 60), u.y + rnd(-25, 25), u);

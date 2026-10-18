@@ -91,9 +91,12 @@ function planSpell(u, k, S, allies, foes) {
   const near = (m, list) => list.some(f => Math.abs(f.x - m.x) < 75 && Math.abs(f.y - m.y) < 32);
   const enemyPools = kind => G.pools.filter(p => p.team !== u.team && p.kind === kind).map(p => ({ x: p.x, y: p.y, bonus: 1 }));
   switch (k) {
-    case 'healpool':
-      return bestSpot(u, S, [...allies, ...enemyPools('blight')], allies,
-        m => (m.hp / m.maxHp < 0.7 ? 1 : 0) + (G.pools.some(p => p.kind === 'blight' && p.team !== u.team && inArea(m, p.x, p.y, p.r)) ? 0.8 : 0));
+    case 'healpool': {
+      // also a weapon: dropped on a pack of enemy zombies, it burns them away
+      const zombies = foes.filter(f => f.type === 'zombie');
+      return bestSpot(u, S, [...allies, ...zombies, ...enemyPools('blight')], [...allies, ...zombies],
+        m => (m.team !== u.team ? 1.5 : (m.hp / m.maxHp < 0.7 ? 1 : 0) + (G.pools.some(p => p.kind === 'blight' && p.team !== u.team && inArea(m, p.x, p.y, p.r)) ? 0.8 : 0)));
+    }
     case 'blight':
       return bestSpot(u, S, [...foes, ...enemyPools('healpool')], foes,
         m => 0.7 + (G.pools.some(p => p.kind === 'healpool' && p.team !== u.team && inArea(m, p.x, p.y, p.r)) ? 0.8 : 0));
@@ -128,6 +131,13 @@ function autoCast(u) {
 
 // ---------------------------------------------------------------- spell objects in the world
 
+
+// A Cleric's heal turned on an enemy zombie: a searing beam of light.
+function smiteUndead(u, t) {
+  G.spellFx.push({ kind: 'beam', x1: u.x + u.facing * 10, y1: u.y - 76, x2: t.x, y2: t.y - 40, color: '#fff4c0', t: 0, max: 0.35 });
+  spawnBurst(t.x, t.y - 40, 8, { color: '#fff0b8', speed: 90, up: 60, g: 100, life: 0.5, size: 2 });
+  damage(t, u.dmg * UNDEAD.smiteMul * rnd(0.9, 1.1), u);
+}
 function healUnit(t, amt, src) {
   if (t.dead || t.hp >= t.maxHp) return;
   // a Cleric's touch: quickened and blessed for as long as the Cleric takes to heal again
@@ -172,6 +182,7 @@ function updateSpellWorld(dt) {
     for (const o of G.units.slice()) {
       if (o.dead || o.inside || isFlying(o) || !inArea(o, p.x, p.y, p.r)) continue;   // pools lie on the ground
       if (p.kind === 'healpool' && o.team === p.team) healUnit(o, amt, null);
+      else if (p.kind === 'healpool' && o.type === 'zombie') damage(o, amt * UNDEAD.poolMul, src, true);   // holy light burns the undead
       else if (p.kind === 'blight' && o.team !== p.team) damage(o, amt, src, true);
     }
   }
@@ -224,13 +235,25 @@ function mostWounded(u) {
   return best;
 }
 
+// The nearest enemy zombie within a Cleric's reach (holy light burns them).
+function nearestZombie(u) {
+  let best = null, bd = u.range;
+  for (const o of G.units) {
+    if (o.type !== 'zombie' || o.team === u.team || o.dead || o.riseT > 0) continue;
+    const d = Math.abs(o.x - u.x);
+    if (d < bd && Math.abs(o.y - u.y) < 90) { bd = d; best = o; }
+  }
+  return best;
+}
+
 // Clerics never strike: they heal whoever is hurt nearby and keep a step behind the fighting.
 function updateCleric(u, dt) {
   const team = G.teams[u.team], o = u.order;
   if (o.type === 'refit') return doRefit(u, dt);
   if (o.type === 'manwall' || o.type === 'attack') u.order = { type: 'hold', x: u.x, y: u.y };
   if (u.swing < 0 && u.atkCd <= 0) {
-    const p = mostWounded(u);
+    // heal the most wounded friend; with nobody to heal, smite an enemy zombie with holy light
+    const p = mostWounded(u) || nearestZombie(u);
     if (p) {
       u.facing = p.x >= u.x ? 1 : -1;
       startSwing(u, 'heal', p);

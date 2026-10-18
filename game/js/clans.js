@@ -179,7 +179,7 @@ function unitCost(team, type) {
 const popCap = team => clanOf(team).pop || POP_CAP;
 const unitPop = (team, type) => (type === 'giant' && clanOf(team).giantPop) || UNIT_TYPES[type].pop;
 // (team.aiEdge: the computer's own edge on Very Hard, for its soldiers only)
-const clanMul = (team, field, type) => { const m = clanOf(team)[field] || {}; const ai = team.aiEdge && !isWorker({ type }) ? team.aiEdge[field] || 1 : 1; return (m.all || 1) * (type !== 'miner' ? m.troops || 1 : 1) * (m[type] || 1) * ai; };
+const clanMul = (team, field, type) => { if (!team) return 1; const m = clanOf(team)[field] || {}; const ai = team.aiEdge && !isWorker({ type }) ? team.aiEdge[field] || 1 : 1; return (m.all || 1) * (type !== 'miner' ? m.troops || 1 : 1) * (m[type] || 1) * ai; };
 
 // A skirmish's clans: 'random' picks any clan (the same clan may face itself).
 const resolveClan = key => (key === 'random' ? pick(CLAN_ORDER) : key);

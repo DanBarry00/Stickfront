@@ -23,7 +23,7 @@ Each clan sets your starting gold, mana and army, which upgrades are already res
 | **Shadow** | 2 miners, 3 ninjas | Clan unit: the **Saboteur**; all units +25% damage; ninjas cost 100, vanish again after 3s; Throwing Stars, Vital Points and Parry researched | All units −10% health; no Spearton; no trenches |
 | **Sky** | 2 miners, 3 Kestrels | Clan unit: the **Firebird**; Kestrels cost 140, deal 30% more damage, have 25% more health and crit 10% of the time; Long Sights and clan-only Hawk Eye (20% crit) researched; clan-only Spyglass (range 480), Barbed Bolts II (damage 26) | Swordwrath and Spearton −10% health; no Giants |
 
-The Base Clan now starts with an archer, an Architect, a Quartermaster and 250 extra gold, which puts it on about the level of the other clans: it's still the plain game, the one to learn on. With the Hard AI playing both sides and random play styles (`runClanTest(clan, 'base', 2)`), the other clans won 11 of 24 games against it.
+The Base Clan now starts with an archer, an Architect, a Quartermaster and 250 extra gold, which puts it on about the level of the other clans: it's still the plain game, the one to learn on. With the Hard AI playing both sides and random play styles (`runClanTest(clan, 'base', 2)`), the other clans won 8 of 16 games against it.
 
 Clan-only upgrades and units appear only for their clan. The setup screen lists these as "coming soon" for each clan.
 
@@ -80,7 +80,7 @@ Every unit trains in its class's building, which also holds all of that class's 
   - **Vital Points:** crit chance 10% → 20%.
 
 ## Kestrels (flyers)
-70 hp, 15 damage crossbow bolts at range 300 (an archer does 24 at 380). Trained at the **Archery Range**; they launch off the rampart and glide down to cruising height.
+70 hp, 15 damage crossbow bolts at range 300 (an archer does 24 at 380). Trained at the **Archery Range**; they launch off the timber perch on the rampart and glide down to cruising height.
 - **Only ranged attacks can hit them:** archers, warlocks, castle archers, ninja stars and other Kestrels. Spells reach them too, but blight and healing pools on the ground don't. Melee units and giants can't touch them.
 - Ranged units treat them like any other target (no special priority). The AI trains extra archers when you field them.
 - They fly over trenches.
@@ -131,7 +131,7 @@ They also fight smarter:
 - **The wounded** slip back into the castle to heal between fights and rejoin when mended.
 - **Counter-picks:** they field more Spearton against blades (and, with Shields, against arrows), more shooters against Spearton and giants, and more ninjas against archers and mages.
 
-With the Base Clan on both sides and random play styles, each level beats the one below: Normal beats Easy 8–2, Hard beats Normal 4–0, Very Hard beats Hard 3–1.
+With the Base Clan on both sides and random play styles, each level beats the one below: Normal beats Easy 4–0, Hard beats Normal 4–0, Very Hard beats Hard 4–0.
 
 ## Maps
 Every map comes from a seed (shown on the setup screen; you can type one in). Besides its looks, each map has these layout features:
@@ -209,7 +209,7 @@ A rider under big flame-membraned da Vinci wings, trained in the Ranged group (h
 200 gold, hotkey `,`, as fast as a Swordwrath; you can have two. It never fights and backs away from any enemy that comes close.
 - **With the troops:** patches up wounded soldiers (14 hp a bandage, 22 with Healing Salves), refits veterans on the spot for free (no walk back to the castle, no fee) and hands Gladiators a new net and javelin. It leaves soldiers in the thick of a fight alone.
 - **With the workers:** cheers on a group of miners every 22 seconds (they move 40% faster for 10 seconds), brings an Architect materials for a free trap every 75 seconds (45 with Supply Wagon; the Architect lays a random trap ahead of the line on its own), and restores worked-out gold deposits on your half (it's the only prospector now: right-click a deposit with it, or press N, to send it to one).
-- **Two Quartermasters:** the first stays with the troops, the second with the workers. A lone one works with the miners until the troops need it, then stays with them until there's nothing left to do.
+- **Two Quartermasters:** the first stays with the troops, the second with the workers. A lone one works with the miners until the troops need it, then stays with them until there's nothing left to do. A sign over his head shows what he's doing (a bandage, tools with a ring that fills as he refits, a net, a horn, a crate or a pick).
 - **Upgrades:** Healing Salves, Supply Wagon.
 
 ## Gladiator (Barracks, every clan)
@@ -217,23 +217,27 @@ A rider under big flame-membraned da Vinci wings, trained in the Ranged group (h
 - **Javelin:** thrown once at a flyer in reach (it's how clans without good ranged units answer the sky), or at an enemy closing in (30 damage).
 - **Net:** thrown once at the nearest enemy fighter about to reach him (not giants or flyers): it's pinned for 3 seconds (5 with Weighted Nets), unable to move or fight.
 - Both are restocked when he garrisons or a Quartermaster brings new ones.
-- **Glory:** every kill gives him 12 more health (healed by as much) and 5% more damage, up to 10 kills (Crowd Favorite: each kill counts twice).
+- **Glory (a snowball):** every kill gives him 15 more health (healed by as much) and 4% more damage, up to 25 kills (Crowd Favorite: each kill counts twice). A star badge over his head and a growing golden glow show his glory, the computer's units go after a glorious Gladiator first, and you get a warning when an enemy one is on a rampage.
 - **Alone:** he hits 8% harder for every friend fewer than 5 within reach of him.
 - **No formations:** told to attack or advance with others, he charges on ahead; told to retreat, he runs home.
 - **Upgrades:** Manica (20% less damage), Weighted Nets, Crowd Favorite.
 
 ## Necromancer (Mage Tower, every clan)
 175 gold + 75 mana, hotkey `0`. It never attacks; it raises the dead.
-- **Raising:** every 6 seconds (4 with Quick Rites), for 5 mana, a zombie claws its way up beside it, up to 6 at a time (8 with Bigger Horde, 10 with Endless Horde). Zombies don't count toward your population.
-- **Zombies:** 60 hp, slow (Spearton pace), weak claws. Arrows, bolts and other shots do half damage to them. An enemy a zombie kills gets up as another zombie (giants and flyers don't).
+- **Raising:** every 6 seconds (4 with Quick Rites), for 5 mana, a zombie claws its way up beside it, up to 6 at a time (8 with Bigger Horde, 10 with Endless Horde). Zombies don't count toward your population. A skull badge over it shows the pack and its souls.
+- **Zombies:** 60 hp, slow (Spearton pace), weak claws. Arrows, bolts and other shots do half damage to them, but holy light burns them: an enemy Healing Pool does five times its healing to them as damage (enough to wipe out a pack), and a Cleric with nobody to heal smites the nearest zombie for three times its heal. An enemy a zombie kills gets up as another zombie while there's room in the pack (giants and flyers don't).
 - **Leading:** zombies can't be selected; they stay around their Necromancer and fall on anything that comes near the pack, or on whatever you order the Necromancer to attack. If the Necromancer dies, its zombies just lurch off to attack the enemy.
+- **Souls (a snowball):** every kill the pack makes gives the Necromancer a soul (up to 25): one more zombie in the pack for every 4 souls (up to 5 more), and its zombies rise 3% stronger and 2% faster per soul. You get a warning when an enemy horde grows; the computer answers with Clerics, Healing Pools and Fireballs, and goes for the Necromancer.
 - **Upgrades:** Bigger Horde, Endless Horde, Grave Dirt (zombies +50% health), Quick Rites.
 
 ## Defences
 - **Trenches** (Earthworks, Workers' Lodge): Architects dig a ditch across the lane and pile an earth rampart behind it, with sharpened stakes facing the enemy. Enemies on foot can't pass until they hack it down (Kestrels fly over). 100 gold each, up to 3. **Palisade** adds a row of pointed logs along the top: taller, +800 hp. Architects can **repair** a damaged trench or tower for free: right-click it with them, or press **Y** to send them to the most damaged one. Stakes get knocked out and the earth slumps as a trench takes damage.
 - **Ruins:** a destroyed trench or tower leaves a ruin that still counts toward the limit. Right-click it with Architects to rebuild it for 30% of the price.
 - **Archer towers** (Architects, Shift+Y, 150 gold, up to 3, not past the middle): towers always stand at the back of the lane so they never block the view. Right-click one with an archer to post it there. A posted archer reaches 120 further, takes 75% less damage from arrows, bolts and stones, can't be stunned or knocked back, and enemies pick other targets before it, but if melee troops tear the tower down, the archer dies with it. Workers' Lodge upgrades: **Reinforced Towers** (+60% health, towers already standing included) and **Watchtowers** (another 60 range).
-- **The Monolith tower:** every map with a Monolith has a stone tower built around it, the obelisk rising through its middle, that belongs to no one. It's stronger than anything you can build (1400 health, +240 range, 85% less damage from arrows, bolts and stones), so an archer posted in it helps hold the middle. Either side can rebuild its ruin for 120.
+- **The Monolith tower:** every map with a Monolith has a stone tower built around it, the obelisk rising through its middle, that belongs to no one. It's stronger than anything you can build (1400 health, +240 range, 85% less damage from arrows, bolts and stones) and holds **two** archers. It starts manned by **two neutral archers** who shoot at both sides (16 damage, 500 reach). Shoot them down or tear the tower down with melee troops (they fall with it), then post up to two archers of your own there. Either side can rebuild its ruin for 120.
+- **Home ground:** troops take up to 20% less damage the closer they fight to their own castle (the full 20% within the castle archers' reach, fading to nothing at the middle of the map). Attacking takes a stronger army than defending.
+- **The statue mends:** a statue with no enemy soldier within 900 for 15 seconds regains 6 health a second.
+- **Rally:** when your army falls below 55% of the enemy's (once theirs is worth 700 or more), your side rallies until it's back to 80%: units train 35% faster, the castle archers shoot 25% faster and the castle pays 1.5 gold a second. A lost fight isn't a lost game.
 - **Traps** (Architects): a **tar pit** (Shift+B, 40 gold) is a hole hidden under a thatched cover; whoever steps onto the thatch drops it into a wide pool of tar that halves the speed of anyone in it for 25 seconds. A **mine** (Shift+N, 60 gold) is a pressure plate over a bundle of dynamite that blasts everyone nearby for 50 and knocks them back. Each kind has its own cooldown. Traps are hidden from the enemy, and ninjas, saboteurs and flyers never set them off. They can't go past the middle of the map or in the middle stretch, can't sit too close together, and no more than 3 can stand in a line across the lane. The Arcane Circle's traps are magic: the tar burns and the mine hits 50% harder. **Trapmaker** makes traps a third cheaper and halves their cooldown. Saboteurs spot enemy traps up close and dig them up. Each map also has a few neutral traps on both halves that spring on anyone.
 - **Taunts hold:** while a Spearton behind a raised shield wall or a hunkered Spirit Golem is guarding a target, your other troops can't be ordered to attack past it. Ninjas with Focus are the exception.
 - **Architect research:** an idle Architect (faster when garrisoned) works out a 10% discount on an upgrade every 30 seconds, up to 40% off. Click the book in the top corner of an upgrade's button to have them study that one (click it again to stop); otherwise they pick at random. Discounted prices show in the upgrade panels.

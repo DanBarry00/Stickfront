@@ -50,4 +50,6 @@ function gladiatorKill(u) {
   applyPerks(u);
   u.hp = Math.min(u.maxHp, u.hp + GLADIATOR.killHp * gained);
   if (u.team === 0) floatText(u.x, u.y - 84, `Glory ×${u.kills}`, '#e0bf5a');
+  // a warning when the enemy's Gladiator gets out of hand: deal with it before it snowballs
+  else if (u.kills >= 6 && Math.floor(before / 6) < Math.floor(u.kills / 6)) toast(`An enemy Gladiator is on a rampage (glory ×${u.kills}): focus it down!`, 'warn');
 }
