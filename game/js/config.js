@@ -17,12 +17,23 @@ const STATUE_HP = 2500;
 const STATUE_X = 800;        // distance of each statue from its world edge
 const GATE_X = 560;          // castle front wall (gate) distance from world edge
 const BUILD_X = { sword: 95, spear: 215, archer: 335, miner: 455 };   // building centers inside the castle
+const RAMPART_LINE_XS = [430, 408, 386, 364, 342, 320];   // garrisoned archers line up along the walkway here, one row only
 const ARCHER_XS = [520, 498, 476, 454];   // castle archer spots on the rampart, shoulder to shoulder from the front (extra ones are castle upgrades; the 4th is for clans with 4 slots)
 // Castle archers cover the ground out to just past where an enemy archer with the same bow
 // upgrades has to stand to shoot the statue: statue + its half-width + archer range + this margin.
 const CASTLE_REACH_PAD = 60;
 const TITHE_GOLD = [0, 1, 2.5, 4];   // statue income per second: none / Offerings / Golden Idol / Gilded Statue (Mercenary)
-const JAVELIN = { range: 250, dmg: 30 };   // Spearton javelins (one each, refilled by garrisoning), thrown only at flyers
+const JAVELIN = { range: 300, dmg: 30 };   // a Gladiator's javelin (one, refilled by garrisoning or a Quartermaster)
+// Quartermasters: heal (hp per bandage, every healTime, within healReach) and refit troops (refitTime
+// per veteran, free); cheer miners within cheerR to hurry (speed cheerMul) for cheerTime, every
+// cheerCd; bring an architect materials for a free trap every materialsCd; keep safe from enemies.
+const QM = { heal: 14, healSalves: 22, healTime: 1.2, healReach: 60, refitTime: 2, cheerR: 140, cheerTime: 10, cheerMul: 1.4, cheerCd: 22, materialsCd: 75, materialsWagon: 45, safe: 170 };
+// Gladiators: the net pins its target for netTime (it reaches netRange); every kill (up to maxKills)
+// adds killHp and killDmg; with fewer than aloneN friends within aloneR, alonePer more damage each.
+const GLADIATOR = { netRange: 150, netTime: 3, netTimeWeighted: 5, killHp: 12, killDmg: 0.05, maxKills: 10, aloneR: 160, aloneN: 5, alonePer: 0.08, manica: 0.2 };
+// Necromancers: up to max zombies (+2 per Horde upgrade), one raised every summonCd seconds (rites:
+// Quick Rites) for mana; zombies stay within leash of it, and take rangedMul of projectile damage.
+const NECRO = { max: 6, summonCd: 6, rites: 4, mana: 5, leash: 170, rangedMul: 0.5, graveHp: 1.5 };
 const LEVY_INTERVAL = 60;    // seconds between free Swordwrath with the Levy castle upgrade
 const DEFEND_OFFSET = 250;   // defend line distance in front of statue
 const GARRISON_HEAL = 9;     // hp per second inside the castle
@@ -39,6 +50,7 @@ const QUEUE_MAX = 5;
 const PAN_SLOTS = 5;
 const PAN_TICK = (PRAY_TIME / MANA_PER_PRAYER) * 2;
 const PAN_XS = [70, 150, 230, 310, 390];    // distance inside the gate for each panning spot
+const SIFTER_GOLD = 1.6;   // gold per panning tick with the Sifter (castle upgrade) set in the stream
 
 const WALL_COST = 100;
 const WALL_HP = 800;
@@ -51,6 +63,31 @@ const WALL_GUARDS = WALL_SEGS; // one row of melee defenders can stand on a wall
 const WALL_H = [24, 38];     // height of a trench's earth rampart / with a palisade (where defenders stand)
 const WALL_REPAIR = 0.035;   // share of a trench's max hp restored by each spade-load when repairing
 
+// Architects' works. Traps are hidden from the enemy, cost gold and have a cooldown per kind; they
+// can't go past the middle of the map; and two traps must be spacing apart unless they share a
+// line across the lane (within lineDx), up to lineMax to a line, lineDy apart. Ninjas, saboteurs
+// and flyers don't set them off; saboteurs find (within sabSight) and smash enemy traps. Arcane
+// Circle traps are magic: the mine hits harder and the tar burns.
+const TRAP = {
+  tar: { name: 'Tar Pit', cost: 40, cd: 12, poolR: 80, poolTime: 25, slow: 0.5, magicDps: 8, coverR: 30 },   // coverR: the thatched cover, stepped on anywhere
+  mine: { name: 'Mine', cost: 60, cd: 18, blastR: 60, dmg: 50, magicMul: 1.5, knock: 45 },
+  trigger: 18, spacing: 70, lineDx: 12, lineMax: 3, lineDy: 22, layTime: 1.5, sabSight: 140, trapmaker: { cost: 0.67, cd: 0.5 },
+  midClear: 300,   // no traps this close to the middle of the map
+};
+// Archer towers: an architect raises one (cost, buildHits blows of the hammer); an archer posted in
+// it reaches range further and takes projMul of projectile damage. Melee troops that bring it down
+// bury the archer in the rubble. Reinforced Towers: hp2 times the health; Watchtowers: range3 more.
+const TOWER = { cost: 150, hp: 500, h: 92, range: 120, projMul: 0.25, buildHits: 14, max: 3, hp2: 1.6, range3: 60,
+  mid: { h: 102, hp: 1400, range: 240, projMul: 0.15, rebuild: 120 } };   // mid: the neutral stone tower at the Monolith, stronger than any a side can build
+const towerH = tw => (tw.mid ? TOWER.mid.h : TOWER.h);   // how high a posted archer stands
+const towerY = () => LANE_TOP + 3;                        // towers stand at the back of the lane, out of the way
+// Wrecked trenches and towers leave a ruin in place (it doesn't block or count as a target) that
+// architects can rebuild for rebuild of the usual price.
+const REBUILD = 0.3;
+// Idle architects (or ones in the castle, at garrisonMul the pace) study: every time seconds of
+// study knocks step off the price of a random upgrade, down to at most max off.
+const ARCH_RESEARCH = { time: 30, step: 0.1, max: 0.4, garrisonMul: 1.5 };
+
 const BURN_DPS = 4;          // Flaming Arrows damage over time
 const BURN_TIME = 3;
 const LAST_STAND = 2;        // seconds a Last Stand swordwrath keeps fighting at zero hp
@@ -60,108 +97,145 @@ const REFIT_TIME = 2.5;      // seconds per upgrade
 
 const UNIT_TYPES = {
   miner: {
-    key: 'miner', name: 'Miner', building: 'Miners\' Lodge', cost: 150, time: 4.5, hp: 90, speed: 50, pop: 1,
+    key: 'miner', name: 'Miner', cost: 150, time: 4.5, hp: 90, speed: 50, pop: 1,
     dmg: 4, range: 26, atkTime: 1.1, aggro: 0, hotkey: '1',
     desc: 'Mines gold, prays at the statue for mana, or pans the castle stream for both. Fights back weakly if attacked.',
   },
+  architect: {
+    key: 'architect', name: 'Architect', cost: 175, time: 5, hp: 80, speed: 70, pop: 1,
+    dmg: 6, range: 26, atkTime: 1, aggro: 0, hotkey: '`', code: 'Backquote',
+    desc: 'Builds and repairs: digs trenches (with Earthworks), lays hidden traps, raises archer towers, and mends any of your structures. Left idle (or in the castle) it studies, making random upgrades cheaper.',
+  },
   sword: {
-    key: 'sword', name: 'Swordwrath', building: 'Barracks', cost: 125, time: 3.5, hp: 140, speed: 100, pop: 1,
+    key: 'sword', name: 'Swordwrath', cost: 125, time: 3.5, hp: 140, speed: 100, pop: 1,
     dmg: 12, range: 30, atkTime: 0.85, aggro: 280, hotkey: '2',
     desc: 'Fast melee infantry. Starts with a club until Forged Blades is researched.',
   },
   archer: {
-    key: 'archer', name: 'Archer', building: 'Archery Range', cost: 160, time: 4.5, hp: 95, speed: 80, pop: 1,
+    key: 'archer', name: 'Archer', cost: 160, time: 4.5, hp: 95, speed: 80, pop: 1,
     dmg: 24, range: 380, atkTime: 1.3, aggro: 420, hotkey: '3',
     desc: 'Shoots from range, even over trenches. Fragile up close; keep them behind your line.',
   },
   spear: {
-    key: 'spear', name: 'Spearton', building: 'Spear Hall', cost: 225, time: 6, hp: 320, speed: 70, pop: 2,
+    key: 'spear', name: 'Spearton', cost: 225, time: 6, hp: 320, speed: 70, pop: 2,
     dmg: 18, range: 44, atkTime: 1.2, aggro: 260, hotkey: '4',
     desc: 'Heavy infantry with long reach and light armor. Each thrust also strikes a second enemy lined up behind the first.',
   },
   // The two mages are exact opposites: same price, same numbers, mirrored effects.
   cleric: {
-    key: 'cleric', name: 'Cleric', building: 'Chapel', cost: 175, mana: 60, time: 6, hp: 90, speed: 70, pop: 1,
+    key: 'cleric', name: 'Cleric', cost: 175, mana: 60, time: 6, hp: 90, speed: 70, pop: 1,
     dmg: 20, range: 260, atkTime: 1.4, aggro: 320, hotkey: '5', mage: true,
-    desc: 'Heals the most wounded ally in reach for 20. Researched spells: Healing Pool, Sanctuary, Haste, War Blessing.',
+    desc: 'Heals the most wounded ally in reach for 20, and each heal briefly quickens and blesses it (faster and harder-hitting). Researched spells: Healing Pool, Sanctuary. Upgrades: Hope, two staffs.',
   },
   warlock: {
-    key: 'warlock', name: 'Warlock', building: 'Sanctum', cost: 175, mana: 60, time: 6, hp: 90, speed: 70, pop: 1,
+    key: 'warlock', name: 'Warlock', cost: 175, mana: 60, time: 6, hp: 90, speed: 70, pop: 1,
     dmg: 20, range: 260, atkTime: 1.4, aggro: 320, hotkey: '6', mage: true,
-    desc: 'Hurls a bolt at an enemy for 20. Researched spells: Blight Pool, Fireball, Hex of Slowness, Enfeeble.',
+    desc: 'Hurls a bolt at an enemy for 20 that briefly slows and weakens it. Researched spells: Blight Pool, Fireball. Upgrades: Fear, two staffs.',
   },
   // Giants can't be ordered around: they follow nearby troops (more troops, more chains, more obedience).
   giant: {
-    key: 'giant', name: 'Giant', building: 'Giant Pit', cost: 450, mana: 120, time: 14, hp: 900, speed: 40, pop: 4,
+    key: 'giant', name: 'Giant', cost: 450, mana: 120, time: 14, hp: 900, speed: 40, pop: 4,
     dmg: 55, range: 54, atkTime: 2.3, aggro: 300, hotkey: '-', code: 'Minus',
     desc: 'Huge, slow and brutal. Goes for whoever has the most health, ignoring taunts, and each blow splashes the 2 enemies beside its target. Cannot be commanded directly: it follows the troops around it, and may wander off on its own. Archers hurt and confuse giants.',
   },
   // Ninjas strike first and hardest: an ambush blow, then quick cuts. They vanish while running.
   ninja: {
-    key: 'ninja', name: 'Ninja', building: 'Dojo', cost: 150, time: 5, hp: 75, speed: 125, pop: 1,
+    key: 'ninja', name: 'Ninja', cost: 150, time: 5, hp: 75, speed: 125, pop: 1,
     dmg: 15, range: 28, atkTime: 0.75, aggro: 340, hotkey: '=', code: 'Equal',
     desc: 'Fast, fragile assassin. Its first blow of a fight deals triple damage, its blade cuts through some armor, and it cannot be targeted while running (5s cooldown after it stops or strikes). Hunts the weakest enemy in reach and goes for archers first.',
   },
   // Flyers glide above the battle: only ranged attacks can reach them.
   flyer: {
-    key: 'flyer', name: 'Kestrel', building: 'Aerie', cost: 175, time: 6, hp: 70, speed: 95, pop: 1,
+    key: 'flyer', name: 'Kestrel', cost: 175, time: 6, hp: 70, speed: 95, pop: 1,
     dmg: 15, range: 300, atkTime: 1.15, aggro: 340, hotkey: '[', code: 'BracketLeft',
     desc: 'Glides above the battle with a small crossbow, over trenches and out of reach of melee: only archers, warlocks, castle archers, thrown stars and other Kestrels can hit it. Weaker shots than an archer.',
   },
   // Defense Clan siege engine: out-ranges everything, wrecks trenches and statues, helpless up close.
   ballista: {
-    key: 'ballista', name: 'Ballista', building: 'Siege Workshop', cost: 250, mana: 50, time: 10, hp: 160, speed: 40, pop: 2,
-    dmg: 45, range: 550, atkTime: 4, aggro: 590, hotkey: ']', code: 'BracketRight', clans: ['defense'],
+    key: 'ballista', name: 'Ballista', cost: 250, mana: 50, time: 10, hp: 160, speed: 40, pop: 2,
+    dmg: 45, range: 550, atkTime: 4, aggro: 590, hotkey: ']', code: 'BracketRight', clans: ['defense'], needs: 'architect',
     desc: 'A crewed bolt-thrower. Range 550, one heavy bolt every 4s that punches through into a second unit, double damage to trenches and statues. It cannot hit flyers or anything closer than 120, so it backs away from attackers. Slow.',
   },
   // Arcane Circle construct: a commandable tank. Hunker Down to soak damage and draw attacks.
   golem: {
-    key: 'golem', name: 'Spirit Golem', building: 'Golem Forge', cost: 150, mana: 250, time: 12, hp: 700, speed: 45, pop: 3,
+    key: 'golem', name: 'Spirit Golem', cost: 150, mana: 250, time: 12, hp: 700, speed: 45, pop: 3,
     dmg: 30, range: 40, atkTime: 1.6, aggro: 280, hotkey: '\\', code: 'Backslash', clans: ['arcane'],
     desc: 'A rune-carved stone construct that takes your orders, unlike a giant. 700 hp, hits one target at a time, and takes half damage from Warlock magic. Hunker Down (X): half speed, 60% less damage, enemies prefer to hit it, and it stops attacking.',
   },
   // Beast Clan slinger: the giant-killer (and giant-tamer). Its stones reach flyers too.
   beastmaster: {
-    key: 'beastmaster', name: 'Beastmaster', building: 'Beast Pen', cost: 140, time: 5, hp: 90, speed: 80, pop: 1,
+    key: 'beastmaster', name: 'Beastmaster', cost: 140, time: 5, hp: 90, speed: 80, pop: 1,
     dmg: 14, range: 260, atkTime: 1.2, aggro: 300, hotkey: "'", code: 'Quote', clans: ['beast'],
     desc: 'A slinger in a beast-hide cloak. Its stones reach flyers and do double damage to enemy giants, and nearby friendly giants obey it as if more troops were around.',
   },
   // Shadow Clan infiltrator: slips past the line unseen to wreck trenches and salt enemy gold.
   saboteur: {
-    key: 'saboteur', name: 'Saboteur', building: 'Hideout', cost: 150, mana: 25, time: 6, hp: 60, speed: 135, pop: 1,
+    key: 'saboteur', name: 'Saboteur', cost: 150, mana: 25, time: 6, hp: 60, speed: 135, pop: 1,
     dmg: 6, range: 26, atkTime: 0.9, aggro: 200, hotkey: ';', code: 'Semicolon', clans: ['shadow'],
     desc: 'A cloaked infiltrator, very fast, that vanishes while running like a ninja. Weak in a fight, but does triple damage to trenches, and can Salt a gold deposit (right-click it): for 30s enemy miners get only half the gold they dig there.',
   },
   // Sky Clan bomber: glides over the enemy and drops fire pots on the ground below.
   firebird: {
-    key: 'firebird', name: 'Firebird', building: 'Aerie', cost: 200, mana: 50, time: 9, hp: 90, speed: 85, pop: 2,
+    key: 'firebird', name: 'Firebird', cost: 200, mana: 50, time: 9, hp: 90, speed: 85, pop: 2,
     dmg: 20, range: 40, atkTime: 3, aggro: 320, hotkey: '/', code: 'Slash', clans: ['sky'],
     desc: 'A rider on a flame-feathered glider. Every 3s it drops a fire pot on the ground units below it: 20 damage to everyone in a small area, and they burn. It cannot hit other flyers. Like a Kestrel, only ranged attacks can reach it.',
   },
 };
-const UNIT_ORDER = ['miner', 'sword', 'archer', 'spear', 'cleric', 'warlock', 'giant', 'ninja', 'flyer', 'ballista', 'golem', 'beastmaster', 'saboteur', 'firebird'];
+// Supply and support: heals and refits troops in the field for free, hands Gladiators new nets and
+// javelins, cheers miners on, restores spent gold deposits and brings the architects materials.
+UNIT_TYPES.quartermaster = {
+  key: 'quartermaster', name: 'Quartermaster', cost: 200, time: 6, hp: 100, speed: 100, pop: 1,
+  dmg: 5, range: 26, atkTime: 1, aggro: 0, hotkey: ',', code: 'Comma', max: 2,
+  desc: 'Keeps your side supplied and stays clear of fights. With the troops: patches up the wounded, refits veterans for free and hands Gladiators a new net and javelin. With the workers: cheers miners on (they hurry for a while), restores spent gold deposits, and now and then brings an Architect materials for a free trap. Two at most: then one stays with the troops and the other with the workers.',
+};
+// A showman who fights alone: a javelin and a net to throw (once each until resupplied), a short
+// sword, and he grows stronger with every kill. He never marches in formation.
+UNIT_TYPES.gladiator = {
+  key: 'gladiator', name: 'Gladiator', cost: 200, time: 5.5, hp: 170, speed: 105, pop: 1,
+  dmg: 16, range: 30, atkTime: 0.8, aggro: 320, hotkey: '9', code: 'Digit9',
+  desc: 'Throws his javelin (it reaches flyers) and his net (it pins the target down) once each, until he garrisons or a Quartermaster brings new ones. Every kill makes him tougher and hit harder, and he hits harder the fewer friends are around him. He won\'t march in formation: he runs ahead.',
+};
+// Raises the dead: keeps a pack of zombies at its side, and anyone the zombies kill gets up as one.
+UNIT_TYPES.necromancer = {
+  key: 'necromancer', name: 'Necromancer', cost: 175, mana: 75, time: 7, hp: 85, speed: 70, pop: 1,
+  dmg: 0, range: 240, atkTime: 1.4, aggro: 300, hotkey: '0', code: 'Digit0',
+  desc: 'Raises zombies (up to 6, more with upgrades; they don\'t count toward your population) and leads them. Zombies are slow, weak fodder that take half damage from arrows and other shots, and an enemy a zombie kills rises as another. If the Necromancer falls, its zombies just attack.',
+};
+UNIT_TYPES.zombie = {
+  key: 'zombie', name: 'Zombie', cost: 0, time: 0, hp: 60, speed: 70, pop: 0,
+  dmg: 8, range: 28, atkTime: 1.1, aggro: 240, summoned: true,
+  desc: 'Raised by a Necromancer. Weak and slow, but it takes half damage from arrows and other shots, and whoever it kills rises as another zombie.',
+};
+const UNIT_ORDER = ['miner', 'architect', 'quartermaster', 'sword', 'archer', 'spear', 'gladiator', 'cleric', 'warlock', 'necromancer', 'giant', 'ninja', 'flyer', 'ballista', 'golem', 'beastmaster', 'saboteur', 'firebird'];
 // Training groups: each group trains one unit at a time from a shared queue (so a Swordwrath
-// waits for the Spearton ahead of it). Colors tint the training bar.
+// waits for the Spearton ahead of it), in one building that also holds all its units' upgrades.
+// Colors tint the training bar.
 const TRAIN_GROUPS = [
-  { key: 'workers', name: 'Workers', color: '#c9a23a', types: ['miner'] },
-  { key: 'infantry', name: 'Infantry', color: '#c0503a', types: ['sword', 'spear', 'ninja', 'saboteur'] },
-  { key: 'ranged', name: 'Ranged', color: '#7aa84a', types: ['archer', 'flyer', 'firebird', 'ballista', 'beastmaster'] },
-  { key: 'mages', name: 'Mages', color: '#9a62d8', types: ['cleric', 'warlock'] },
-  { key: 'giants', name: 'Giants', color: '#8f8a80', types: ['giant', 'golem'] },
+  { key: 'workers', name: 'Workers', building: 'Workers\' Lodge', color: '#c9a23a', types: ['miner', 'architect', 'quartermaster'] },
+  { key: 'infantry', name: 'Infantry', building: 'Barracks', color: '#c0503a', types: ['sword', 'spear', 'gladiator', 'ninja', 'saboteur'] },
+  { key: 'ranged', name: 'Ranged', building: 'Archery Range', color: '#7aa84a', types: ['archer', 'flyer', 'firebird', 'ballista', 'beastmaster'] },
+  { key: 'mages', name: 'Mages', building: 'Mage Tower', color: '#9a62d8', types: ['cleric', 'warlock', 'necromancer'] },
+  { key: 'giants', name: 'Giants', building: 'Giant Pit', color: '#8f8a80', types: ['giant', 'golem'] },
 ];
 const groupOf = type => TRAIN_GROUPS.find(g => g.types.includes(type));
+for (const g of TRAIN_GROUPS) for (const t of g.types) UNIT_TYPES[t].building = g.building;   // one building per class
 const isMage = u => u.type === 'cleric' || u.type === 'warlock';
 const isGiant = u => u.type === 'giant';
 // Kestrels are airborne until Feather Fall drops them to the ground (then they fight with a knife).
 const isFlying = u => (u.type === 'flyer' && !u.grounded) || u.type === 'firebird';
 // Ninjas count as ranged while throwing stars (u.starRanged is decided each frame).
+// Workers (miners and architects) don't fight: they're left out of armies, formations and army strength.
+const isWorker = u => u.type === 'miner' || u.type === 'architect' || u.type === 'quartermaster';
 const isRanged = u => u.type === 'archer' || u.type === 'warlock' || u.type === 'ballista' || u.type === 'beastmaster' || isFlying(u) || (u.type === 'ninja' && !!u.starRanged);
 const trainCode = def => def.code || 'Digit' + def.hotkey;
-// Mages come down the castle ladder; the Dojo and Aerie troops leave straight off the rampart, where
-// all four halls stand. The giant pit is outside the gate.
+// One building per class inside the castle (the Giant Pit stands outside the gate). Units walk out
+// of their class's building; Kestrels and Firebirds launch off the rampart above the Range.
 const GIANT_PIT_X = 655;
-const RAMPART_HALL_X = { cleric: 150, warlock: 222, ninja: 340, flyer: 462 };
-const DOOR_X = { ...BUILD_X, cleric: 52, warlock: 52, giant: GIANT_PIT_X, ninja: RAMPART_HALL_X.ninja, flyer: RAMPART_HALL_X.flyer, ballista: 500, golem: GIANT_PIT_X, beastmaster: GIANT_PIT_X, saboteur: RAMPART_HALL_X.ninja, firebird: RAMPART_HALL_X.flyer };   // beastmasters come out of the pit with the giants   // ballistas roll out by the gate
+const CLASS_X = { infantry: BUILD_X.sword, mages: BUILD_X.spear, ranged: BUILD_X.archer, workers: BUILD_X.miner, giants: GIANT_PIT_X };
+const KESTREL_PERCH_X = 462;   // where flyers launch from the rampart
+const DOOR_X = {};
+for (const g of TRAIN_GROUPS) for (const t of g.types) DOOR_X[t] = CLASS_X[g.key];
+Object.assign(DOOR_X, { flyer: KESTREL_PERCH_X, firebird: KESTREL_PERCH_X, ballista: 500, zombie: CLASS_X.mages });   // ballistas roll out by the gate
 
 // Ninjas
 const NINJA_AMBUSH = 3;           // damage multiplier of the first blow of a fight (or out of stealth)
@@ -185,7 +259,7 @@ const BALLISTA = { minRange: 120, pierce: 0.6, structureMul: 2, drawScale: 1.5 }
 
 // Spirit Golem (Arcane Circle): bigger than a man, stone armor, shrugs off Warlock magic;
 // Mana Core heals it slowly.
-const GOLEM = { scale: 1.5, armor: 0.1, spellMul: 0.5, regen: 3 };
+const GOLEM = { scale: 1.5, armor: 0.1, spellMul: 0.5, regen: 3, hunkerMana: 1 };   // hunkerMana: mana per second while hunkered down
 
 // Beastmaster (Beast Clan): double damage to giants; within auraRange each one counts as this many
 // extra troops for a friendly giant's obedience (more with Beast Lore).
@@ -202,20 +276,32 @@ const SABOTEUR = { trenchMul: 3, trenchMulSappers: 5, saltTime: 2.5, saltDur: 30
 const GIANT_SCALE = 2.1;          // base size; each Protein Diet tier adds 13%
 const GIANT_TIER_STEP = { hp: 0.25, dmg: 0.2, size: 0.13 };
 const GIANT_SPLASH = 0.5;         // splash damage to the 2 units beside the target
-const ARCHER_VS_GIANT = 1.5;      // archers hit giants harder...
+const ARCHER_VS_GIANT = 1.1;      // archers hit giants a little harder...
+// ...and a giant pelted hard by projectiles raises an arm across its face for a while: projectiles
+// do less damage (dmgMul) but it attacks slower (atkMul). trigger: share of its max hp taken from
+// projectiles in quick succession (the tally drains at decay of max hp per second).
+const GIANT_GUARD = { trigger: 0.06, decay: 0.02, time: 4, dmgMul: 0.7, atkMul: 1.35 };
+// Mages' auras: allies within r of a Cleric take ward less damage; within r of a Warlock they deal
+// fury more. Neither stacks (one mage nearby is as good as three).
+const MAGE_AURA = { r: 130, ward: 0.15, fury: 0.15 };
 const GIANT_CONFUSE = { chance: 0.12, time: 3, cooldown: 8 };   // ...and can confuse them
 const BLINDERS_CONFUSE = { chance: 0.4, time: 0.5 };             // Blinders: confused less often, and not for as long
 const GIANT_COL_GAP = 70;         // giants are 3 rows wide, so they stand 2 per column; columns are this far apart
 const STUN_TIME = 2;              // Stun Club
 const STATUE_GIANT_TIER = 4;      // the giant inside a statue is one size past the last diet tier
+const GIANT_AIR_TIER = 3;         // giants this big (Protein Diet III, and statue giants) can hit flyers
 const STATUE_GIANT_HP_MUL = 1.3;
+const STATUE_GIANT_IMMUNE = 3;    // seconds the statue's giant can't be hurt after it bursts out
+// its opening blow: a sweep reaching r all round (its reach is longer until it lands), hurling
+// everyone knock back and stunning them for stun seconds
+const STATUE_SWEEP = { r: 240, reach: 60, knock: 180, stun: 3 };
 
 // Computer opponent difficulty
 const AI_LEVELS = {
   easy: { name: 'Easy', desc: 'Clumsy and distractible.' },
-  normal: { name: 'Normal', desc: 'Steady economy, sensible army, basic upgrades. Attacks when it has the edge.' },
-  hard: { name: 'Hard', desc: 'Researches everything, fields mages and giants, and marches in formations.' },
-  veryhard: { name: 'Very Hard', desc: 'Hard, sharper: faster decisions, constant pressure, and a bigger hidden income.' },
+  normal: { name: 'Normal', desc: 'Steady economy, sensible army, basic upgrades. Plays a different strategy each game.' },
+  hard: { name: 'Hard', desc: 'Researches everything, fields mages and giants, marches in formations, varies its strategy, and starts with a random boost.' },
+  veryhard: { name: 'Very Hard', desc: 'Hard, sharper: tougher troops, a bigger hidden income, three random boosts and a head start.' },
 };
 
 // Spells. Each Cleric spell has a Warlock twin with identical cost, cooldown, radius and strength.
@@ -226,14 +312,21 @@ const SPELLS = {
   blight: { name: 'Blight Pool', owner: 'warlock', perk: 'pool', slot: 0, mana: 40, cd: 12, range: 320, r: 75, dur: 5, power: 10, opp: 'healpool', desc: 'A pool of rot that hurts enemies standing in it for 10 damage/s over 5s.' },
   sanctuary: { name: 'Sanctuary', owner: 'cleric', perk: 'big', slot: 1, mana: 80, cd: 22, range: 320, r: 95, dur: 8, power: 60, opp: 'fireball', desc: 'Every ally in the area gets a shield that absorbs 60 damage for 8s.' },
   fireball: { name: 'Fireball', owner: 'warlock', perk: 'big', slot: 1, mana: 80, cd: 22, range: 320, r: 95, dur: 0, power: 60, opp: 'sanctuary', desc: 'A blazing ball that bursts for 60 damage on every enemy in the area (half to structures).' },
-  haste: { name: 'Haste', owner: 'cleric', perk: 'speed', slot: 2, mana: 30, cd: 15, range: 320, r: 95, dur: 8, power: 0.3, opp: 'slow', desc: 'Allies in the area move and attack 30% faster for 8s.' },
-  slow: { name: 'Hex of Slowness', owner: 'warlock', perk: 'speed', slot: 2, mana: 30, cd: 15, range: 320, r: 95, dur: 8, power: 0.3, opp: 'haste', desc: 'Enemies in the area move and attack 30% slower for 8s.' },
-  empower: { name: 'War Blessing', owner: 'cleric', perk: 'might', slot: 3, mana: 35, cd: 15, range: 320, r: 95, dur: 8, power: 0.3, opp: 'enfeeble', desc: 'Allies in the area deal 30% more damage for 8s.' },
-  enfeeble: { name: 'Enfeeble', owner: 'warlock', perk: 'might', slot: 3, mana: 35, cd: 15, range: 320, r: 95, dur: 8, power: 0.3, opp: 'empower', desc: 'Enemies in the area deal 30% less damage for 8s.' },
 };
+// A Cleric's heal also quickens and blesses whoever it heals (faster and harder-hitting), and a
+// Warlock's bolt slows and weakens whoever it hits, each for the mage's own attack time.
+const MAGE_TOUCH = { speed: 0.25, dmg: 0.25 };
+// Hope (Cleric upgrade): allies within a Cleric's range attack faster and take less damage. Fear
+// (Warlock upgrade): enemies within a Warlock's range attack slower and take more damage.
+const HOPE = { atk: 0.15, dmg: 0.1 };
 const spellsOf = type => Object.keys(SPELLS).filter(k => SPELLS[k].owner === type).sort((a, b) => SPELLS[a].slot - SPELLS[b].slot);
 const RESEARCH_TYPES = [...UNIT_ORDER, 'castle'];
-const buildingName = type => (type === 'castle' ? 'Castle' : UNIT_TYPES[type].building);
+// The building a class (group key) or unit type trains and researches in; the Arcane Circle's pit is a Golem Forge.
+const buildingName = (key, team) => {
+  if (key === 'castle') return 'Castle';
+  const g = TRAIN_GROUPS.find(x => x.key === key) || groupOf(key);
+  return g.key === 'giants' && team && !canTrain(team, 'giant') && canTrain(team, 'golem') ? 'Golem Forge' : g.building;
+};
 
 // Upgrades only apply to units trained after the research finishes (veterans can be refitted).
 // `team: true` upgrades affect the whole side immediately. `requires` marks a second tier.
@@ -258,9 +351,13 @@ const UPGRADES = {
     { key: 'devout2', name: 'Zealous Faith', cost: 175, mana: 50, time: 25, requires: 'devout', desc: 'Prayers yield double mana.' },
     { key: 'pan1', name: 'Iron Pans', cost: 150, mana: 0, time: 20, desc: 'Pan the castle stream 35% faster.' },
     { key: 'pan2', name: 'Sluice Boxes', cost: 225, mana: 50, time: 25, requires: 'pan1', desc: 'Pan the castle stream 75% faster than plain pans.' },
-    { key: 'walls', name: 'Earthworks', cost: 175, mana: 50, time: 25, desc: `Miners can dig defensive trenches behind an earth rampart (B), and repair damaged ones (Y or right-click). ${WALL_COST} gold each, up to ${WALL_MAX}.` },
-    { key: 'walls2', name: 'Palisade', cost: 200, mana: 50, time: 25, requires: 'walls', desc: `Miners can raise a sharpened log palisade on a finished trench (J or right-click it) for ${WALL_COST} gold: taller, +${WALL_HP2} hp.` },
-    { key: 'prospect', name: 'Prospecting', cost: 150, mana: 50, time: 25, desc: 'Miners can replenish gold deposits (N), even exhausted ones, twice as fast as they could mine them.' },
+  ],
+  architect: [
+    { key: 'walls', name: 'Earthworks', cost: 175, mana: 50, time: 25, team: true, desc: `Architects can dig defensive trenches behind an earth rampart (B). ${WALL_COST} gold each, up to ${WALL_MAX}.` },
+    { key: 'walls2', name: 'Palisade', cost: 200, mana: 50, time: 25, team: true, requires: 'walls', desc: `Architects can raise a sharpened log palisade on a finished trench (J or right-click it) for ${WALL_COST} gold: taller, +${WALL_HP2} hp.` },
+    { key: 'tower2', name: 'Reinforced Towers', cost: 175, mana: 25, time: 25, team: true, desc: 'Archer towers (built after this, and every one standing) get iron bracing: 60% more health.' },
+    { key: 'tower3', name: 'Watchtowers', cost: 225, mana: 50, time: 30, team: true, requires: 'tower2', desc: 'Taller towers: an archer posted in one reaches 60 further still.' },
+    { key: 'traps2', name: 'Trapmaker', cost: 150, mana: 25, time: 25, team: true, desc: 'Traps cost a third less and are ready again in half the time.' },
   ],
   archer: [
     { key: 'bow', name: 'Recurve Bows', cost: 175, mana: 0, time: 20, desc: 'Range 380 → 500. Castle archers reach just as much further.' },
@@ -315,24 +412,39 @@ const UPGRADES = {
     { key: 'helm', name: 'Crested Helmets', cost: 150, mana: 0, time: 20, desc: '+15% armor.' },
     { key: 'inspire', name: 'Rallying Cry', cost: 200, mana: 100, time: 30, desc: 'Inspires up to 8 nearby allies: +10% damage and 8% faster attacks per stack, up to 3 stacks. Every ally nearby gets one stack before anyone gets a second. Also unlocks Defend Trench.' },
     { key: 'halberd', name: 'Halberds', cost: 200, mana: 50, time: 25, desc: 'Armor piercing: ignores enemy armor and halves shield wall protection. Damage 18 → 28.' },
-    { key: 'javelin', name: 'Javelins', cost: 150, mana: 25, time: 20, desc: `Each Spearton carries one javelin and hurls it at the nearest flyer within ${JAVELIN.range} (${JAVELIN.dmg} damage). It gets a new one each time it garrisons.` },
   ],
   // Castle upgrades are bought from the castle itself (click the rampart/tower or the castle button).
   // Mirrored mage research: each pair costs exactly the same.
   cleric: [
     { key: 'focus', name: 'Blessed Staff', cost: 150, mana: 50, time: 20, desc: 'Staff heals 20 → 28.' },
+    { key: 'focus2', name: 'Saint\'s Staff', cost: 225, mana: 75, time: 30, requires: 'focus', desc: 'Staff heals 28 → 36 and reaches 40 further.' },
     { key: 'pool', name: 'Healing Pool', cost: 175, mana: 75, time: 25, desc: 'Unlocks the Healing Pool spell (40 mana). ' + SPELLS.healpool.desc },
     { key: 'big', name: 'Sanctuary', cost: 250, mana: 125, time: 35, desc: 'Unlocks the Sanctuary spell (80 mana). ' + SPELLS.sanctuary.desc },
-    { key: 'speed', name: 'Haste', cost: 150, mana: 50, time: 20, desc: 'Unlocks the Haste spell (30 mana). ' + SPELLS.haste.desc },
-    { key: 'might', name: 'War Blessing', cost: 175, mana: 75, time: 25, desc: 'Unlocks the War Blessing spell (35 mana). ' + SPELLS.empower.desc },
+    { key: 'hope', name: 'Hope', cost: 200, mana: 75, time: 25, desc: `Allies within a Cleric's range attack ${HOPE.atk * 100}% faster and take ${HOPE.dmg * 100}% less damage (one stack).` },
   ],
   warlock: [
     { key: 'focus', name: 'Cursed Staff', cost: 150, mana: 50, time: 20, desc: 'Bolt damage 20 → 28.' },
+    { key: 'focus2', name: 'Bone Staff', cost: 225, mana: 75, time: 30, requires: 'focus', desc: 'Bolt damage 28 → 36, and it reaches 40 further.' },
     { key: 'pool', name: 'Blight Pool', cost: 175, mana: 75, time: 25, desc: 'Unlocks the Blight Pool spell (40 mana). ' + SPELLS.blight.desc },
     { key: 'big', name: 'Fireball', cost: 250, mana: 125, time: 35, desc: 'Unlocks the Fireball spell (80 mana). ' + SPELLS.fireball.desc },
-    { key: 'speed', name: 'Hex of Slowness', cost: 150, mana: 50, time: 20, desc: 'Unlocks the Hex of Slowness spell (30 mana). ' + SPELLS.slow.desc },
-    { key: 'might', name: 'Enfeeble', cost: 175, mana: 75, time: 25, desc: 'Unlocks the Enfeeble spell (35 mana). ' + SPELLS.enfeeble.desc },
+    { key: 'fear', name: 'Fear', cost: 200, mana: 75, time: 25, desc: `Enemies within a Warlock's range attack ${HOPE.atk * 100}% slower and take ${HOPE.dmg * 100}% more damage (one stack).` },
   ],
+  quartermaster: [
+    { key: 'salves', name: 'Healing Salves', cost: 150, mana: 25, time: 20, desc: `Quartermasters' bandages heal ${QM.heal} → ${QM.healSalves}.` },
+    { key: 'wagon', name: 'Supply Wagon', cost: 175, mana: 25, time: 25, desc: `Materials for a free trap every ${QM.materialsWagon}s instead of every ${QM.materialsCd}s.` },
+  ],
+  gladiator: [
+    { key: 'manica', name: 'Manica', cost: 150, mana: 25, time: 20, desc: `An armored sleeve and greave: Gladiators take ${GLADIATOR.manica * 100}% less damage.` },
+    { key: 'nets', name: 'Weighted Nets', cost: 150, mana: 50, time: 20, desc: `Nets pin their target for ${GLADIATOR.netTimeWeighted}s instead of ${GLADIATOR.netTime}s.` },
+    { key: 'fame', name: 'Crowd Favorite', cost: 200, mana: 75, time: 25, desc: 'Each kill counts twice toward a Gladiator\'s growing strength.' },
+  ],
+  necromancer: [
+    { key: 'horde', name: 'Bigger Horde', cost: 200, mana: 75, time: 25, desc: `Each Necromancer keeps up to ${NECRO.max + 2} zombies.` },
+    { key: 'horde2', name: 'Endless Horde', cost: 300, mana: 125, time: 35, requires: 'horde', desc: `Each Necromancer keeps up to ${NECRO.max + 4} zombies.` },
+    { key: 'grave', name: 'Grave Dirt', cost: 175, mana: 75, time: 25, desc: `Zombies rise with ${Math.round((NECRO.graveHp - 1) * 100)}% more health.` },
+    { key: 'rites', name: 'Quick Rites', cost: 175, mana: 75, time: 25, desc: `A zombie rises every ${NECRO.rites}s instead of every ${NECRO.summonCd}s.` },
+  ],
+  zombie: [],
   giant: [
     { key: 'blinders', name: 'Blinders', cost: 200, mana: 50, time: 25, desc: 'Leather blinders: giants obey much better, are confused by archers far less often and for less time, and you can select them to give move and hold orders.' },
     { key: 'stun', name: 'Stun Club', cost: 250, mana: 75, time: 30, desc: `When a giant strikes a non-giant, the target is knocked back and stunned for ${STUN_TIME}s.` },
@@ -347,8 +459,9 @@ const UPGRADES = {
     { key: 'archer2', name: 'Second Castle Archer', cost: 200, mana: 50, time: 25, team: true, desc: 'Posts another archer on the rampart. Castle archers always use your researched archer upgrades.' },
     { key: 'archer3', name: 'Third Castle Archer', cost: 300, mana: 100, time: 30, team: true, requires: 'archer2', desc: 'Posts a third archer on the rampart.' },
     { key: 'archer4', name: 'Fourth Castle Archer', cost: 400, mana: 150, time: 35, team: true, requires: 'archer3', desc: 'Posts a fourth archer on the rampart (clans with 4 castle archer slots only).' },
+    { key: 'sifter', name: 'Sifter', cost: 200, mana: 25, time: 25, team: true, desc: `A wooden sluice set in the castle stream: panning miners get ${SIFTER_GOLD} gold a tick instead of 1 (their mana is unchanged).` },
     { key: 'levy', name: 'Levy', cost: 300, mana: 100, time: 35, team: true, desc: `A free Swordwrath marches out of the Barracks every ${LEVY_INTERVAL} seconds (if you have room in your population).` },
-    { key: 'levy2', name: 'Levy II', cost: 450, mana: 150, time: 40, team: true, requires: 'levy', clans: ['defense'], desc: `A free Spearton also marches out of the Spear Hall every ${LEVY_INTERVAL} seconds (if you have room in your population).` },
+    { key: 'levy2', name: 'Levy II', cost: 450, mana: 150, time: 40, team: true, requires: 'levy', clans: ['defense'], desc: `A free Spearton also marches out of the Barracks every ${LEVY_INTERVAL} seconds (if you have room in your population).` },
   ],
 };
 

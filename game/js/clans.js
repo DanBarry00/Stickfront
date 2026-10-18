@@ -8,6 +8,8 @@
 //   gold, mana             starting bank (defaults START_GOLD / 0)
 //   army                   starting units beside the statue: [{ type, n, perks: [keys] | 'all', at: 'trench' }]
 //   trench                 starts with a finished trench in front of the statue
+//   tower, traps           starts with an archer tower behind the trench (army 'at: tower' posts
+//                          in it) and these traps laid in front of it
 //   free                   upgrades already researched: { unitType: [keys] }
 //   lockUnits              unit types it can't train
 //   lockUpgrades           upgrades it can't research: { unitType: [keys] } (later tiers vanish with their first)
@@ -30,10 +32,11 @@ const ALL_UPGRADES = type => UPGRADES[type].map(d => d.key);
 const CLANS = {
   base: {
     name: 'Base Clan',
-    tagline: 'The standard army. Every unit, every upgrade.',
-    army: [{ type: 'miner', n: 2 }, { type: 'sword', n: 1, perks: 'all' }],
-    strengths: ['Every unit and upgrade is available', 'Starts with a veteran Swordwrath carrying every sword upgrade'],
-    weaknesses: ['No head start and no special perks'],
+    tagline: 'The standard army. Every unit, every upgrade: the way to learn the game.',
+    gold: START_GOLD + 250,
+    army: [{ type: 'miner', n: 2 }, { type: 'sword', n: 1, perks: 'all' }, { type: 'archer', n: 1 }, { type: 'architect', n: 1 }, { type: 'quartermaster', n: 1 }],
+    strengths: ['Every unit and upgrade is available', 'Starts with a veteran Swordwrath carrying every sword upgrade, an archer, an Architect and a Quartermaster', '250 extra gold to start'],
+    weaknesses: ['No special perks'],
   },
 
   archer: {
@@ -52,13 +55,15 @@ const CLANS = {
   defense: {
     name: 'Defense Clan',
     tagline: 'Dig in behind a trench, then grind the enemy down.',
-    army: [{ type: 'miner', n: 2 }, { type: 'spear', n: 1, at: 'trench' }, { type: 'archer', n: 1, at: 'trench' }],
+    army: [{ type: 'miner', n: 2 }, { type: 'architect', n: 1 }, { type: 'spear', n: 1, at: 'trench' }, { type: 'archer', n: 1, at: 'tower' }],
+    tower: true,                 // an archer tower behind the trench...
+    traps: ['tar', 'mine'],      // ...and a tar pit and a mine in front of it
     trench: true,
-    free: { miner: ['walls'], spear: ['shield', 'inspire'], sword: ['drill'], archer: ['bow'], castle: ['archer2'] },
+    free: { architect: ['walls'], spear: ['shield', 'inspire'], sword: ['drill'], archer: ['bow'], castle: ['archer2'] },
     castleArchers: 4,
     lockUnits: ['warlock', 'giant'],
     ai: { spear: 0.12, archer: 0.05, ballista: 0.12 },
-    strengths: ['Starts with a trench, held by a Spearton and an archer', 'Earthworks, Shields, Military Training, Rallying Cry, Recurve Bows and a second castle archer', 'Clan unit: Ballista, a siege engine with range 550 that wrecks trenches and statues', 'Clan-only: Levy II, a free Spearton every minute', '4 castle archer slots'],
+    strengths: ['Starts with a trench held by a Spearton, an archer tower behind it with an archer posted, a tar pit and a mine in front of it, and an Architect', 'Earthworks, Shields, Military Training, Rallying Cry, Recurve Bows and a second castle archer', 'Clan unit: Ballista, a siege engine with range 550 that wrecks trenches and statues', 'Clan-only: Levy II, a free Spearton every minute', '4 castle archer slots'],
     weaknesses: ['No Warlocks and no Giants'],
   },
 
@@ -69,21 +74,21 @@ const CLANS = {
     free: { castle: ['levy'], sword: ['drill', 'rage'] },
     pop: 35,
     lockUnits: ['flyer'],
-    lockUpgrades: { ninja: ['stars'], archer: ['fire'], miner: ['walls'] },
+    lockUpgrades: { ninja: ['stars'], archer: ['fire'], architect: ['walls'] },
     ai: { sword: 0.15 },
     strengths: ['Population cap 35', 'Starts with 2 Swordwrath, the Levy, Military Training and Adrenaline', 'Clan-only: Great Swords (damage 25)'],
-    weaknesses: ['No Kestrels and no Throwing Stars: only archers and Spearton Javelins hit flyers', 'Archers can\'t get Flaming Arrows', 'Can\'t dig trenches'],
+    weaknesses: ['No Kestrels and no Throwing Stars: only archers and Gladiator javelins hit flyers', 'Archers can\'t get Flaming Arrows', 'Can\'t dig trenches'],
   },
 
   mercenary: {
     name: 'Mercenary Clan',
     tagline: 'Rich, greedy and paid for every kill.',
-    army: [{ type: 'miner', n: 4 }, { type: 'sword', n: 1 }],
-    free: { miner: ['bag', 'pick', 'pan1', 'prospect'], castle: ['tithe'] },
+    army: [{ type: 'miner', n: 4 }, { type: 'sword', n: 1 }, { type: 'quartermaster', n: 1 }],
+    free: { miner: ['bag', 'pick', 'pan1'], castle: ['tithe'] },
     bounty: 0.2,
     prayer: 0.5,
     hp: { troops: 0.9 },
-    strengths: ['Starts with 4 miners, Bigger Bags, Steel Pickaxes, Iron Pans, Prospecting and Statue Offerings', 'Every kill pays 20% of the victim\'s gold cost', 'Clan-only: Mule Packs, Diamond Picks, Gilded Statue (4 gold/s)'],
+    strengths: ['Starts with 4 miners, a Quartermaster, Bigger Bags, Steel Pickaxes, Iron Pans and Statue Offerings', 'Every kill pays 20% of the victim\'s gold cost', 'Clan-only: Mule Packs, Diamond Picks, Gilded Statue (4 gold/s)'],
     weaknesses: ['Praying gives half the mana', "Troops have 10% less health (miners don't)", 'Weakest starting army: one plain Swordwrath'],
   },
 
@@ -108,14 +113,14 @@ const CLANS = {
     tagline: 'Giants, and the keepers who tame them.',
     army: [{ type: 'miner', n: 2 }, { type: 'giant', n: 1 }, { type: 'beastmaster', n: 1 }],
     free: { giant: ['blinders'] },
-    cost: { giant: { gold: -200, mana: -10 }, beastmaster: { gold: -20 } },   // giants lean on mana, which the clan has plenty of
+    cost: { giant: { gold: -230, mana: 30 }, beastmaster: { gold: -20 } },   // giants lean on mana, which the clan has plenty of
     giantPop: 3,
-    hp: { giant: 1.2 },   // thick hides...
+    hp: { giant: 1.3 },   // thick hides...
     thickHide: true,      // ...that archers get no bonus against
     lockUnits: ['archer', 'flyer'],
     ai: { giant: 0.12, spear: 0.08 },
-    strengths: ['Starts with a giant and a Beastmaster', 'Giants cost 250 gold + 110 mana, take 3 population and have 20% more health', 'Thick Hide: archers get no bonus damage against its giants', 'Beastmasters cost 120', 'Blinders already researched', 'Clan unit: Beastmaster, a slinger who hits flyers, does double damage to giants and keeps your giants in line'],
-    weaknesses: ['No Archers and no Kestrels: only Beastmasters, Warlocks and Javelins reach flyers'],
+    strengths: ['Starts with a giant and a Beastmaster', 'Giants cost 220 gold + 150 mana, take 3 population and have 30% more health', 'Thick Hide: archers get no bonus damage against its giants', 'Beastmasters cost 120', 'Blinders already researched', 'Clan unit: Beastmaster, a slinger who hits flyers, does double damage to giants and keeps your giants in line'],
+    weaknesses: ['No Archers and no Kestrels: only Beastmasters, Warlocks and Gladiator javelins reach flyers'],
   },
 
   shadow: {
@@ -128,7 +133,7 @@ const CLANS = {
     hp: { all: 0.9 },
     dmg: { all: 1.25 },
     lockUnits: ['spear'],
-    lockUpgrades: { miner: ['walls'] },
+    lockUpgrades: { architect: ['walls'] },
     ai: { ninja: 0.2, saboteur: 0.06 },
     strengths: ['Every unit deals 25% more damage', 'Starts with 3 ninjas, Throwing Stars, Vital Points and Parry', 'Ninjas cost 100 and vanish again after 3s', 'Clan unit: Saboteur, an unseen infiltrator that wrecks trenches and salts enemy gold mines'],
     weaknesses: ['Every unit has 10% less health', 'No Spearton', 'Can\'t dig trenches'],
@@ -155,7 +160,7 @@ const CLAN_ORDER = ['base', 'archer', 'defense', 'sword', 'mercenary', 'arcane',
 
 const clanOf = team => CLANS[team.clanKey] || CLANS.base;
 // Clan units (like the Defense Clan's Ballista) list their clans in UNIT_TYPES.
-const canTrain = (team, type) => !(clanOf(team).lockUnits || []).includes(type) && (!UNIT_TYPES[type].clans || UNIT_TYPES[type].clans.includes(team.clanKey));
+const canTrain = (team, type) => !UNIT_TYPES[type].summoned && !(clanOf(team).lockUnits || []).includes(type) && (!UNIT_TYPES[type].clans || UNIT_TYPES[type].clans.includes(team.clanKey));   // (zombies are raised, not trained)
 function upgradeLocked(team, type, key) {
   const locked = (clanOf(team).lockUpgrades || {})[type] || [];
   // a later tier is locked along with the tier it builds on; clan-only tiers belong to their clans
@@ -173,7 +178,8 @@ function unitCost(team, type) {
 }
 const popCap = team => clanOf(team).pop || POP_CAP;
 const unitPop = (team, type) => (type === 'giant' && clanOf(team).giantPop) || UNIT_TYPES[type].pop;
-const clanMul = (team, field, type) => { const m = clanOf(team)[field] || {}; return (m.all || 1) * (type !== 'miner' ? m.troops || 1 : 1) * (m[type] || 1); };
+// (team.aiEdge: the computer's own edge on Very Hard, for its soldiers only)
+const clanMul = (team, field, type) => { const m = clanOf(team)[field] || {}; const ai = team.aiEdge && !isWorker({ type }) ? team.aiEdge[field] || 1 : 1; return (m.all || 1) * (type !== 'miner' ? m.troops || 1 : 1) * (m[type] || 1) * ai; };
 
 // A skirmish's clans: 'random' picks any clan (the same clan may face itself).
 const resolveClan = key => (key === 'random' ? pick(CLAN_ORDER) : key);

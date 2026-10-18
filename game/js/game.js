@@ -40,9 +40,10 @@ function makeTeam(id, map, clanKey) {
     musterX: null,            // where newly trained soldiers gather; null = follow the stance
     minerDefault: 'mine',     // what newly trained miners go do: 'mine' | 'pray' | 'pan'
     panSlots: new Array(PAN_SLOTS).fill(null),
+    rampart: new Array(RAMPART_LINE_XS.length).fill(null),   // garrisoned archers manning the walkway
     queues: Object.fromEntries(TRAIN_GROUPS.map(g => [g.key, []])),   // per training group: [{ type, t }]
-    upgrades: perType(() => ({}), RESEARCH_TYPES),
-    research: perType(() => null, RESEARCH_TYPES),
+    upgrades: perType(() => ({}), [...RESEARCH_TYPES, 'zombie']),   // (zombies have no upgrades of their own)
+    research: perType(() => null, [...RESEARCH_TYPES, 'zombie']),
     minersIn: false,          // miners-only garrison recall
     siege: false,             // siege mode: miners shelter in the castle on their own while threatened
     levyT: 0,
@@ -70,6 +71,8 @@ function spawnClanArmy(t) {
   const clan = clanOf(t);
   const trench = clan.trench ? placeWall(t, t.edge(1000), [], true) : null;
   if (trench) { trench.progress = 1; trench.hp = trench.max; }
+  const tower = clan.tower ? orderTower(t, t.edge(930), rowY(1), [], true) : null;
+  (clan.traps || []).forEach((kind, i) => freeTrap(t.id, kind, t.edge(1090 + i * 70), rowY(1 + i * 3)));
   let k = 0;
   for (const g of clan.army || []) {
     for (let n = 0; n < g.n; n++) {
@@ -80,7 +83,11 @@ function spawnClanArmy(t) {
       applyPerks(u);
       u.hp = u.maxHp;
       if (isFlying(u)) u.alt = FLY_ALT;
-      if (g.at === 'trench' && trench) {
+      if (g.at === 'tower' && tower) {
+        u.x = tower.x;
+        u.y = tower.y + 2;
+        postArcher(u, tower);
+      } else if (g.at === 'trench' && trench) {
         if (u.type === 'sword' || u.type === 'spear') manWall(t, [u], trench);
         else setOrder(u, { type: 'hold', x: trench.x - t.dir * 60, y: rowY(2 + n) });
       }
@@ -96,7 +103,7 @@ function newGame(seed, clans) {
     map, seed,
     state: 'title', paused: false, speed: 1, time: 0,
     over: null, overT: 0, alertCd: 0,
-    units: [], projectiles: [], particles: [], markers: [], selection: [], walls: [], decals: [],
+    units: [], projectiles: [], particles: [], markers: [], selection: [], walls: [], decals: [], traps: [], towers: [], tarPools: [],
     pools: [], spellShots: [], spellFx: [], groups: [], buffT: 0,
     mines: map.mines,
     shrine: map.shrine,
@@ -107,6 +114,8 @@ function newGame(seed, clans) {
   G.clans = clans;
   G.teams = [0, 1].map(id => makeTeam(id, map, clans[id]));
   for (const t of G.teams) spawnClanArmy(t);
+  spawnNeutralWorks(map);
+  if (AI_DIFFICULTY === 'veryhard') veryHardHeadStart(G.teams[1]);
   G.difficulty = AI_DIFFICULTY;
   G.ai = AI_DIFFICULTY === 'easy' ? new PoorAI(1) : new SmartAI(1, AI_DIFFICULTY);
   initWeather();
@@ -123,8 +132,7 @@ function spawnUnit(team, type, x, y) {
   const u = new Unit(type, team.id, x, y === undefined ? rnd(LANE_TOP + 10, LANE_BOT - 10) : y, fromDoor ? team.upgrades[type] : null);
   if (fromDoor) {
     u.slotY = rnd(LANE_TOP + 10, LANE_BOT - 10);
-    // ninjas drop off the rampart by the Dojo; Kestrels launch from the Aerie and glide down
-    if (type === 'ninja') u.dropT = 0.5;
+    // Kestrels and Firebirds launch off the rampart and glide down
     if (type === 'flyer' || type === 'firebird') u.alt = LANE_TOP - WALL_TOP + 20;
     if (type === 'miner') {
       // the small mine / pray / pan toggle decides where fresh miners head
@@ -155,6 +163,8 @@ function queueUnit(team, type) {
   const say = msg => { if (team.id === 0) toast(msg); return false; };
   if (G.over) return false;
   if (!canTrain(team, type)) return say(`The ${clanOf(team).name} can't train ${def.name}s`);
+  if (def.needs && !G.units.some(u => u.team === team.id && !u.dead && u.type === def.needs)) return say(`${def.name}s need an ${UNIT_TYPES[def.needs].name} to build them`);
+  if (def.max && G.units.filter(u => u.team === team.id && !u.dead && u.type === type).length + queuedCount(team, type) >= def.max) return say(`You can have at most ${def.max} ${def.name}s`);
   if (team.gold < cost.gold) return say('Not enough gold');
   if (team.mana < cost.mana) return say('Not enough mana');
   if (popUsed(team) + unitPop(team, type) > popCap(team)) return say('Population limit reached');
@@ -202,11 +212,12 @@ function startResearch(team, type, key) {
   if (upgradeLocked(team, type, key)) return say(`The ${clanOf(team).name} can't research ${def.name}`);
   if (def.requires && !team.upgrades[type][def.requires]) return say(`Requires ${upgradeDef(type, def.requires).name}`);
   if (team.research[type]) return say(`The ${buildingName(type)} is already researching`);
-  if (team.gold < def.cost) return say('Not enough gold');
-  if (team.mana < (def.mana || 0)) return say('Not enough mana');
-  team.gold -= def.cost;
-  team.mana -= def.mana || 0;
-  team.research[type] = { key, t: 0 };
+  const price = upgradePrice(team, type, def);   // after the architects' savings
+  if (team.gold < price.gold) return say('Not enough gold');
+  if (team.mana < price.mana) return say('Not enough mana');
+  team.gold -= price.gold;
+  team.mana -= price.mana;
+  team.research[type] = { key, t: 0, paid: price };
   return true;
 }
 
@@ -214,8 +225,9 @@ function cancelResearch(team, type) {
   const r = team.research[type];
   if (!r) return;
   const def = upgradeDef(type, r.key);
-  team.gold += def.cost;
-  team.mana = Math.min(MAX_MANA, team.mana + (def.mana || 0));
+  const paid = r.paid || { gold: def.cost, mana: def.mana || 0 };
+  team.gold += paid.gold;
+  team.mana = Math.min(MAX_MANA, team.mana + paid.mana);
   team.research[type] = null;
 }
 
@@ -228,6 +240,8 @@ function updateResearch(team, dt) {
     if (r.t < def.time) continue;
     team.upgrades[type][r.key] = true;
     team.research[type] = null;
+    // Reinforced Towers braces the towers already standing too
+    if (type === 'architect' && r.key === 'tower2') for (const t of G.towers) if (t.team === team.id && !t.dead) { t.max = Math.round(t.max * TOWER.hp2); t.hp = Math.round(t.hp * TOWER.hp2); }
     if (/^archer\d$/.test(def.key) && team.archers.length < ARCHER_XS.length) team.archers.push(makeCastleArcher(team, team.archers.length));
     if (team.id === 0) {
       toast(def.team ? `${def.name} is ready` : `${def.name} researched — new ${UNIT_TYPES[type].name}s get it; refit veterans (R)`);
@@ -240,15 +254,15 @@ function updateResearch(team, dt) {
 function wallSpotOk(team, x) {
   const lo = team.statue.x + team.dir * 130, hi = WORLD_W / 2 - team.dir * 100;
   if (x < Math.min(lo, hi) || x > Math.max(lo, hi)) return false;
-  if (G.walls.filter(w => w.team === team.id && !w.dead).length >= WALL_MAX) return false;
-  return !G.walls.some(w => !w.dead && Math.abs(w.x - x) < 70);
+  if (G.walls.filter(w => w.team === team.id && (!w.dead || w.ruin)).length >= WALL_MAX) return false;   // ruins count: rebuild them instead
+  return !G.walls.some(w => (!w.dead || w.ruin) && Math.abs(w.x - x) < 70);
 }
 
 // free: a clan's starting trench (no checks, no cost)
 function placeWall(team, x, builders, free) {
   const say = msg => { if (team.id === 0) toast(msg); return null; };
   if (!free) {
-    if (G.walls.filter(w => w.team === team.id && !w.dead).length >= WALL_MAX) return say(`Trench limit reached (${WALL_MAX})`);
+    if (G.walls.filter(w => w.team === team.id && (!w.dead || w.ruin)).length >= WALL_MAX) return say(`Trench limit reached (${WALL_MAX}): rebuild a ruined one instead`);
     if (!wallSpotOk(team, x)) return say('Cannot dig a trench there');
     if (team.gold < WALL_COST) return say('Not enough gold');
     team.gold -= WALL_COST;
@@ -282,7 +296,7 @@ function reinforceWall(team, w, builders) {
 const canManWalls = team => !!(team.upgrades.sword.drill || team.upgrades.spear.inspire);
 function manWall(team, units, wall) {
   const say = msg => { if (team.id === 0) toast(msg); return 0; };
-  if (!canManWalls(team)) return say('Research Military Training (Barracks) or Rallying Cry (Spear Hall) to defend trenches');
+  if (!canManWalls(team)) return say('Research Military Training or Rallying Cry (Barracks) to defend trenches');
   const walls = G.walls.filter(w => w.team === team.id && !w.dead && w.progress >= 1);
   if (!walls.length) return say('You need a finished trench');
   let n = 0;
@@ -307,6 +321,8 @@ function setStance(team, s) {
     if (u.team !== team.id || u.dead) continue;
     u.ownStance = null;
     if (u.type === 'miner' && ['mana', 'stance', 'build', 'replenish', 'pan'].includes(u.order.type)) continue;
+    if (u.type === 'architect' && ['stance', 'build', 'trap'].includes(u.order.type)) continue;   // architects keep at their work
+    if (u.order.type === 'tower') continue;   // archers posted in towers stay put
     if (u.order.type === 'refit') continue;
     setOrder(u, { type: 'stance' });
   }
@@ -340,7 +356,7 @@ function minersInDanger(team) {
   const spots = team.minersIn
     ? G.mines.filter(m => m.gold > 0 && team.dir * (WORLD_W / 2 - m.x) > 0).map(m => m.x)
     : G.units.filter(u => u.team === team.id && !u.dead && !u.inside && u.type === 'miner').map(u => u.x);
-  const raiders = G.units.filter(e => e.team === foe && !e.dead && !e.inside && e.type !== 'miner' && spots.some(x => Math.abs(e.x - x) < 450));
+  const raiders = G.units.filter(e => e.team === foe && !e.dead && !e.inside && !isWorker(e) && spots.some(x => Math.abs(e.x - x) < 450));
   if (!raiders.length) return false;
   const x = raiders.reduce((s, e) => s + e.x, 0) / raiders.length;
   return armyPower(foe, x, 400) > armyPower(team.id, x, 400) * (team.minersIn ? 0.8 : 1.3) + 100;
@@ -382,7 +398,7 @@ function updateCastle(team, dt) {
 
 // The Shrine: soldiers near it (miners don't count) pull its allegiance their way while no enemy
 // soldier contests it. A captured shrine first has to be neutralised before it can change hands.
-const shrineHolders = (s, team) => G.units.filter(u => u.team === team && !u.dead && !u.inside && u.type !== 'miner' && Math.abs(u.x - s.x) < SHRINE.radius).length;
+const shrineHolders = (s, team) => G.units.filter(u => u.team === team && !u.dead && !u.inside && !isWorker(u) && Math.abs(u.x - s.x) < SHRINE.radius).length;
 function updateShrine(dt) {
   const s = G.shrine;
   if (!s || G.over) return;
@@ -523,7 +539,7 @@ function fireArrow(team, x, y, target, dmg, src, fire, opts = {}) {
   T = 0.6 + Math.abs(target.x + v * T - x) / 900;
   const tx = target.x + v * T, ty = targetAimY(target);
   const g = 500;
-  G.projectiles.push({ x, y, vx: (tx - x) / T, vy: (ty - y - 0.5 * g * T * T) / T, g, t: 0, T, target, team, dmg, src, fire: !!fire, kind: opts.kind || 'arrow', crit: !!opts.crit, radius: opts.radius, burn: opts.burn, prod: !!opts.prod });
+  G.projectiles.push({ x, y, vx: (tx - x) / T, vy: (ty - y - 0.5 * g * T * T) / T, g, t: 0, T, target, team, dmg, src, fire: !!fire, kind: opts.kind || 'arrow', crit: !!opts.crit, radius: opts.radius, burn: opts.burn, prod: !!opts.prod, net: opts.net || 0 });
 }
 
 function updateProjectiles(dt) {
@@ -537,18 +553,25 @@ function updateProjectiles(dt) {
       const t = p.target;
       let hit = false;
       if (isValidTarget(t)) {
-        hit = t.isStructure ? Math.abs(t.x - p.x) < t.halfW + 24 : Math.abs(t.x - p.x) < 24 && Math.abs(targetAimY(t) - p.y) < 40;
+        hit = t.isStructure ? Math.abs(t.x - p.x) < t.halfW + 24 : Math.abs(t.x - p.x) < (p.net ? 42 : 24) && Math.abs(targetAimY(t) - p.y) < 40;   // (a net spreads as it flies)
       }
       const src = p.src && !p.src.dead ? p.src : null;
       if (hit && p.prod) prodGiant(t, p.dmg);   // a beastmaster's stone driving its own giant on
+      else if (hit && p.net) { t.netT = Math.max(t.netT || 0, p.net); t.swing = -1; }   // a Gladiator's net pins its target down
       else if (hit) {
-        damage(t, p.dmg * rnd(0.85, 1.15), src);
+        let amt = p.dmg * rnd(0.85, 1.15);
+        if (isGiant(t)) {
+          // a guarding giant's raised arm takes some of the sting; the tally decides when it raises it
+          if (t.guardT > 0) amt *= GIANT_GUARD.dmgMul;
+          t.arrowHurt = (t.arrowHurt || 0) + amt;
+        }
+        damage(t, amt, src);
         if (p.crit) showCrit(t);
         if (p.fire && !t.isStructure && !t.dead) { t.burnT = BURN_TIME; t.burnSrc = src; }
         if (p.kind === 'star' && isGiant(t) && !t.dead) confuseGiant(t, STAR.confuse);   // stars disorient giants
         if (p.kind === 'ballista' && !t.isStructure) ballistaPierce(p, t, src);
       }
-      else if (p.kind !== 'star' && p.kind !== 'stone') G.particles.push({ kind: 'stuck', x: p.x, y: Math.max(p.y, LANE_TOP), ang: Math.atan2(p.vy, p.vx), life: 6, max: 6 });
+      else if (p.kind !== 'star' && p.kind !== 'stone' && p.kind !== 'net') G.particles.push({ kind: 'stuck', x: p.x, y: Math.max(p.y, LANE_TOP), ang: Math.atan2(p.vy, p.vx), life: 6, max: 6 });
       p.done = true;
     }
   }
@@ -646,6 +669,8 @@ function update(dt) {
   }
   updateShrine(dt);
   for (const m of G.mines) if (m.saltT > 0) m.saltT -= dt;   // salt wears off
+  updateTraps(dt);
+  for (const team of G.teams) updateStudy(team, dt);
   recordHistory();
   assignDefendSlots();
   updateGroups(dt);
@@ -662,7 +687,8 @@ function update(dt) {
   updateSpellWorld(dt);
   updateParticles(dt);
   G.units = G.units.filter(u => !(u.dead && u.deathT > 9));
-  G.walls = G.walls.filter(w => !w.dead);
+  G.walls = G.walls.filter(w => !w.dead || w.ruin);   // ruins stay until rebuilt
+  G.towers = G.towers.filter(t => !t.dead || t.ruin);
   G.selection = G.selection.filter(u => !u.dead);
   for (const u of G.units) u.selected = G.selection.includes(u);
   if (G.over) G.overT += dt;

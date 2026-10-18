@@ -65,6 +65,7 @@ class Unit {
     this.blockT = 0;
     this.shieldWall = false;
     this.onWall = null;
+    this.rampart = -1;   // walkway spot of a garrisoned archer manning the rampart (-1: none)
     this.insp = 0;       // inspiration stacks from spearton leaders (0..3)
     this.drillN = 0;     // allies nearby counted by sword military training (0..5)
     this.refitT = 0;
@@ -180,9 +181,13 @@ function applyPerks(u) {
     u.maxHp += (P.shield ? 40 : 0) + (P.shield2 ? 40 : 0);
     u.pierce = !!P.halberd;
     u.dmg = P.halberd ? 28 : d.dmg;
-    if (P.javelin && u.javelin === undefined) u.javelin = 1;   // one javelin, refilled by garrisoning
+  } else if (u.type === 'gladiator') {
+    if (u.javelin === undefined) { u.javelin = 1; u.net = 1; u.kills = 0; }   // one of each, restocked by garrisoning or a Quartermaster
+    u.armor = P.manica ? GLADIATOR.manica : 0;
+    u.maxHp += GLADIATOR.killHp * (u.kills || 0);   // glory: tougher with every kill
   } else if (isMage(u)) {
-    u.dmg = P.focus ? 28 : d.dmg;   // heal amount for clerics, bolt damage for warlocks
+    u.dmg = P.focus2 ? 36 : P.focus ? 28 : d.dmg;   // heal amount for clerics, bolt damage for warlocks
+    if (P.focus2) { u.range = d.range + 40; u.aggro = d.aggro + 40; }
   } else if (isGiant(u)) {
     // Protein Diet scales everything; the statue's giant is bigger still
     const tier = giantTier(u);
@@ -218,24 +223,6 @@ function updateNinjaMode(u) {
   setNinjaMode(u, far || u.hp < u.maxHp * 0.35);
 }
 
-// Javelins: a Spearton hurls its one javelin at the nearest flyer in range, and gets a new one
-// whenever it garrisons.
-function updateJavelin(u) {
-  if (!u.perks.javelin) return;
-  if (u.inside) { u.javelin = 1; return; }
-  if (!u.javelin || u.stunT > 0) return;
-  let best = null, bd = JAVELIN.range;
-  for (const e of G.units) {
-    if (e.team === u.team || !isFlying(e) || e.dead || e.inside || e.stealth) continue;
-    const d = Math.abs(e.x - u.x) + Math.abs(e.y - u.y) * 0.5;
-    if (d < bd) { bd = d; best = e; }
-  }
-  if (!best) return;
-  u.javelin = 0;
-  u.facing = best.x >= u.x ? 1 : -1;
-  fireArrow(u.team, u.x + u.facing * 8, u.y - 56 * u.scale, best, JAVELIN.dmg * dmgMult(u), u, false, { kind: 'javelin' });
-}
-
 // Vanish while running; any blow (or stopping) reveals the ninja and starts the cooldown.
 function updateStealth(u, dt) {
   u.vanishCd -= dt;
@@ -253,7 +240,9 @@ function isValidTarget(t) {
 
 // Who can hit flying units: ranged attackers (and castle archers, and a ninja that can switch to stars).
 // (ballistas and firebirds only ever hit the ground)
-const canHitAir = u => !u || u.castle || (isRanged(u) && u.type !== 'ballista' && u.type !== 'firebird') || (u.type === 'ninja' && u.perks.stars && u.starMode === 'auto');
+// Giants grown to Protein Diet III (and the statue's giant) stand tall enough to swat flyers.
+const reachesAir = u => isGiant(u) && giantTier(u) >= GIANT_AIR_TIER;
+const canHitAir = u => !u || u.castle || (isRanged(u) && u.type !== 'ballista' && u.type !== 'firebird') || (u.type === 'ninja' && u.perks.stars && u.starMode === 'auto') || reachesAir(u);
 
 // Can attacker u pick e as a target at all? (Vanished ninjas are out of reach unless they brush past
 // within STEALTH_REVEAL; flyers are out of reach for melee.)
@@ -269,11 +258,25 @@ function targetScore(u, e, d) {
   let s = ninja ? e.hp + d * 0.25 - (e.type === 'archer' ? 300 : 0) : d;
   if (!(ninja && u.perks.focus)) s -= tauntBias(e) * (ninja ? 4 : 1);
   if (u && u.type === 'ballista' && d < BALLISTA.minRange + 20) s += 2000;   // too close to aim at: anything else first
+  if (e.onTower) s += 260;   // an archer behind a tower's parapet is a poor target: others first
   return s;
 }
 
+// A taunting defender standing guard over t (within TAUNT_GUARD of it), the one nearest u.
+const TAUNT_GUARD = 90;
+function tauntGuard(u, t) {
+  let best = null, bd = 1e9;
+  for (const e of G.units) {
+    if (e === t || e.team !== t.team || e.dead || !tauntBias(e) || !canTarget(u, e)) continue;
+    if (Math.abs(e.x - t.x) > TAUNT_GUARD || Math.abs(e.y - t.y) > 70) continue;
+    const d = Math.abs(e.x - u.x) + Math.abs(e.y - u.y) * 0.5;
+    if (d < bd) { bd = d; best = e; }
+  }
+  return best;
+}
+
 function inReach(u, t, slack) {
-  if (isFlying(t) && !isRanged(u)) return false;   // the blade can't reach the sky
+  if (isFlying(t) && !isRanged(u) && !reachesAir(u)) return false;   // the blade can't reach the sky (a towering giant's club can)
   const bulk = isGiant(t) ? 8 * t.scale : 0;   // giants are wide targets
   const dx = Math.abs(t.x - u.x) - (t.isStructure ? t.halfW : 0) - bulk;
   if (u.type === 'ballista' && !t.isStructure && dx < BALLISTA.minRange) return false;   // too close to aim at
@@ -283,11 +286,11 @@ function inReach(u, t, slack) {
 }
 
 const rageOf = u => (u.lastStand > 0 ? 1 : u.perks.rage ? clamp(1 - u.hp / u.maxHp, 0, 1) : 0);
-// War Blessing / Enfeeble and Haste / Hex of Slowness are exact opposites, so they cancel out.
-const spellDmg = u => 1 + (u.fx.empower > 0 ? SPELLS.empower.power : 0) - (u.fx.enfeeble > 0 ? SPELLS.enfeeble.power : 0);
-const spellSpeed = u => 1 + (u.fx.haste > 0 ? SPELLS.haste.power : 0) - (u.fx.slow > 0 ? SPELLS.slow.power : 0);
-const dmgMult = u => (1 + 0.7 * rageOf(u)) * (1 + 0.04 * u.drillN) * (1 + 0.1 * u.insp) * spellDmg(u) * clanMul(G.teams[u.team], 'dmg', u.type);
-const atkTimeOf = u => (u.atk * (1 - 0.45 * rageOf(u)) * (1 - 0.08 * u.insp)) / spellSpeed(u);
+// A Cleric's touch (quickened, blessed) and a Warlock's curse (slowed, weakened) are exact opposites, so they cancel out.
+const spellDmg = u => 1 + (u.fx.empower > 0 ? MAGE_TOUCH.dmg : 0) - (u.fx.enfeeble > 0 ? MAGE_TOUCH.dmg : 0);
+const spellSpeed = u => 1 + (u.fx.haste > 0 ? MAGE_TOUCH.speed : 0) - (u.fx.slow > 0 ? MAGE_TOUCH.speed : 0);
+const dmgMult = u => (1 + 0.7 * rageOf(u)) * (1 + 0.04 * u.drillN) * (1 + 0.1 * u.insp) * (u.fury ? 1 + MAGE_AURA.fury : 1) * spellDmg(u) * clanMul(G.teams[u.team], 'dmg', u.type) * (u.type === 'gladiator' ? gladiatorMul(u) : 1);
+const atkTimeOf = u => (u.atk * (1 - 0.45 * rageOf(u)) * (1 - 0.08 * u.insp) * (u.guardT > 0 ? GIANT_GUARD.atkMul : 1)) / spellSpeed(u) / (1 + (u.hope ? HOPE.atk : 0) - (u.fear ? HOPE.atk : 0));   // a guarding giant swings slower
 const wallHeight = w => (w.tier === 2 ? WALL_H[1] : WALL_H[0]);
 
 function armorOf(u, attacker) {
@@ -310,7 +313,10 @@ function unitSpeed(u) {
   if (u.type === 'miner') s *= 1 - 0.22 * (u.carry / u.carryCap);
   if (u.shieldWall) s *= 0.45;
   if (u.slow) s *= 0.45;
+  if (u.tarT > 0) s *= 1 - TRAP.tar.slow;   // wading through tar
   if (u.jumpT > 0) s *= 1.5;
+  if (u.cheerT > 0) s *= QM.cheerMul;   // cheered on by a Quartermaster
+  if (u.netT > 0) return 0;   // caught in a Gladiator's net
   s *= spellSpeed(u);
   // marching in formation: keep pace with the group unless catching up
   return u.capSpeed ? Math.min(s, u.capSpeed) : s;
@@ -348,7 +354,9 @@ function moveTo(u, tx, ty, dt) {
 function targetAimY(t) {
   if (t.isStatue) return LANE_TOP - 80;
   if (t.isWall) return LANE_TOP - 10;
-  return t.y - 38 * (isGiant(t) || t.type === 'golem' ? t.scale * 0.8 : 1) - (t.onWall ? wallHeight(t.onWall) : 0) - (t.alt || 0);
+  if (t.isTower) return t.y - towerH(t) * 0.6;
+  if (t.isTrap) return t.y - 4;
+  return t.y - 38 * (isGiant(t) || t.type === 'golem' ? t.scale * 0.8 : 1) - unitLift(t) - (t.alt || 0);
 }
 
 // Roll a critical hit (archers and ninjas): double damage and a little "Crit!" over the target.
@@ -382,7 +390,7 @@ function startSwing(u, kind, target) {
     u.lastStrikeT = G.time;
   }
   if (kind === 'shoot') {
-    const dx = target.x - u.x, dy = targetAimY(target) - (u.y - 46 - (u.alt || 0));
+    const dx = target.x - u.x, dy = targetAimY(target) - (u.y - 46 - (u.alt || 0) - unitLift(u));
     u.aimFa = Math.atan2(dy, Math.abs(dx)) - 0.3 * (Math.abs(dx) / u.range);
   }
 }
@@ -427,7 +435,7 @@ function onSwingHit(u) {
   } else if (u.swingKind === 'shoot') {
     if (isValidTarget(t)) {
       const aim = u.facing === 1 ? u.aimFa : Math.PI - u.aimFa;
-      const lift = (u.onWall ? wallHeight(u.onWall) : 0) + (u.alt || 0);
+      const lift = unitLift(u) + (u.alt || 0);   // (up on a trench, in a tower or on the walkway)
       const c = rollCrit(u, u.dmg * dmgMult(u));
       const kind = u.type === 'ninja' ? 'star' : u.type === 'flyer' ? 'bolt' : u.type === 'ballista' ? 'ballista' : u.type === 'beastmaster' ? 'stone' : u.type === 'firebird' ? 'pot' : 'arrow';
       const muzzle = u.type === 'ballista' ? 44 : u.type === 'beastmaster' ? 60 : 46;   // low stock; a sling whirled overhead
@@ -463,6 +471,15 @@ function onSwingHit(u) {
 function buildHit(u, w) {
   if (!w || w.dead) return;
   spawnBurst(u.x + u.facing * 18, u.y - 20, 3, { color: w.stone, speed: 60, up: 60, g: 400, life: 0.5, size: 2 });
+  if (w.isTower) {
+    // raising an archer tower, or mending one
+    if (w.progress < 1) {
+      w.progress = Math.min(1, w.progress + 1 / TOWER.buildHits);
+      w.hp = Math.max(1, w.max * w.progress);
+      if (w.progress >= 1 && w.team === 0) toast('Archer tower built: right-click it with archers to post them');
+    } else w.hp = Math.min(w.max, w.hp + w.max * WALL_REPAIR);
+    return;
+  }
   if (w.progress < 1) {
     w.progress = Math.min(1, w.progress + WALL_BUILD_PER_HIT);
     w.hp = Math.max(1, w.max * w.progress);
@@ -578,6 +595,24 @@ function shooterToCharge(u, postX) {
   return Math.abs(f.x - u.x) < (f.range || 0) + 60 ? f : null;
 }
 
+// A shooter covers its friends: when one of them nearby (or the shooter itself) is being shot at by an
+// enemy it can shoot back at (Kestrels pelting a giant, an archer sniping the line), it steps up to
+// shoot that enemy instead of standing idle. Posted units (postX) won't go more than leash past it.
+function coverTarget(u, postX, leash = CHARGE_LEASH) {
+  if (!isRanged(u) || u.type === 'ballista') return null;
+  const dir = G.teams[u.team].dir;
+  let best = null, bd = 1e9;
+  for (const f of G.units) {
+    if (f.team !== u.team || f.dead || f.inside || f.retaliateT <= 0 || Math.abs(f.x - u.x) > 260) continue;
+    const e = f.lastAttacker;
+    if (!isValidTarget(e) || e.isStructure || !canTarget(u, e) || !(isRanged(e) || isFlying(e))) continue;   // (pelting from range: melee is in front of us anyway)
+    if (postX !== undefined && dir * (e.x - postX) > leash) continue;
+    const d = Math.abs(e.x - u.x) + Math.abs(e.y - u.y) * 0.5;
+    if (d < u.range + 220 && d < bd) { bd = d; best = e; }
+  }
+  return best;
+}
+
 // The muster point, when set, is also where the army forms its defensive line.
 const defendLine = team => (team.musterX !== null ? team.musterX : team.statue.x + team.dir * DEFEND_OFFSET);
 
@@ -586,6 +621,39 @@ function goGarrison(u, dt) {
   if (u.swing >= 0) return;
   if (moveTo(u, u.garX, u.garY, dt)) u.facing = G.teams[u.team].dir;
 }
+
+// A garrisoned archer climbs onto the walkway behind the castle archers (one row of them, while
+// there's room) and keeps shooting from there; the rest wait inside. Up there it's out of reach,
+// like the castle archers.
+const RAMPART_Y = LANE_TOP + 4;   // (it stands at this lane depth, drawn lifted onto the walkway)
+function manRampart(u, team, dt) {
+  if (u.rampart < 0) {
+    const i = team.rampart.indexOf(null);
+    if (i < 0) return goGarrison(u, dt);
+    team.rampart[i] = u;
+    u.rampart = i;
+  }
+  u.x = team.edge(RAMPART_LINE_XS[u.rampart]);
+  u.y = RAMPART_Y;
+  u.facing = team.dir;
+  if (u.swing >= 0 || u.atkCd > 0) return;
+  const t = nearestEnemy(u, u.range);
+  if (t && inReach(u, t, 0)) {
+    u.facing = t.x >= u.x ? 1 : -1;
+    startSwing(u, 'shoot', t);
+  }
+}
+
+function leaveRampart(u) {
+  if (!(u.rampart >= 0)) return;
+  const team = G.teams[u.team];
+  if (team.rampart[u.rampart] === u) team.rampart[u.rampart] = null;
+  u.rampart = -1;
+  u.y = u.garY;   // back down the ladder
+}
+
+// How high above its lane spot a unit is drawn: on a trench, in a tower or up on the walkway.
+const unitLift = u => (u.dead ? 0 : u.onWall ? wallHeight(u.onWall) : u.onTower ? towerH(u.onTower) : u.rampart >= 0 ? RAMPART_Y - (WALL_TOP - 8) : 0);
 
 // Upgrades this unit's type has unlocked that the unit itself doesn't have yet.
 function missingUpgrades(u) {
@@ -625,7 +693,7 @@ function doRefit(u, dt) {
 
 // Rank offsets from the front of a formation: spearton in front, swordwrath behind them,
 // archers and mages at the back.
-const RANK_OFF = { spear: 22, sword: 0, ninja: -8, flyer: -60, archer: -85, warlock: -95, cleric: -110, ballista: -140, golem: 34, beastmaster: -70, firebird: -40 };   // the golem tanks in front
+const RANK_OFF = { spear: 22, sword: 0, ninja: -8, flyer: -60, archer: -85, warlock: -95, cleric: -110, necromancer: -100, ballista: -140, golem: 34, beastmaster: -70, firebird: -40 };   // the golem tanks in front
 
 // Where the idx-th unit of a type stands: up to six abreast, extra units form more columns.
 // Beastmasters stand behind the team's giants (which walk just behind the front line), so they
@@ -644,7 +712,14 @@ let NEXT_GROUP = 1;
 // anything close), 'advance' (march in step, fighting only what's in reach) or 'retreat'
 // (back off toward the castle in step, still fighting what's in reach).
 function formGroup(team, units, mode) {
-  units = units.filter(u => !u.dead && u.type !== 'miner' && !isGiant(u));
+  // Gladiators won't keep step: they charge on ahead (or, in a retreat, run home on their own);
+  // zombies follow their Necromancer, not the line
+  for (const u of units) {
+    if (u.dead || u.type !== 'gladiator') continue;
+    if (mode === 'retreat') setOrder(u, { type: 'move', x: team.gateX + team.dir * 60, y: u.y });
+    else { setOrder(u, { type: 'stance' }); u.ownStance = 'attack'; }
+  }
+  units = units.filter(u => !u.dead && !isWorker(u) && !isGiant(u) && u.type !== 'gladiator' && u.type !== 'zombie');
   if (!units.length) return null;
   const front = units.filter(u => u.type === 'spear' || u.type === 'sword');
   const ref = front.length ? front : units;
@@ -677,7 +752,7 @@ function updateGroups(dt) {
       for (const gi of G.units) {
         if (gi.team !== g.team || !isGiant(gi) || gi.dead || gi.inside || gi.isStatueGiant || Math.abs(gi.x - g.anchor) >= 1200) continue;
         sp = Math.min(sp, baseSpeed(gi) * spellSpeed(gi));
-        if (dir * (g.anchor - gi.x) > 220) giantLag = true;   // wait for it to catch up
+        if (dir * (g.anchor - gi.x) > 120) giantLag = true;   // wait for it to catch up (its beastmasters rank up behind it)
       }
     }
     if (g.members.some(u => u.shieldWall)) sp *= 0.45;
@@ -690,7 +765,8 @@ function updateGroups(dt) {
     // Archers, warlocks and Kestrels shooting from the back don't stop the march: they fire and
     // then hurry back into rank, and the line only waits if one falls far behind.
     const fighting = g.mode !== 'retreat' && g.members.some(u => u.grpFighting && !isRanged(u));
-    const behind = giantLag || g.members.some(u => Math.abs(u.x - u.groupSlot.x) > (g.mode === 'retreat' ? 120 : isRanged(u) ? 200 : 70));
+    // (mages stop to heal and cast as they go and hurry back after: the line only waits if one falls far behind)
+    const behind = giantLag || g.members.some(u => Math.abs(u.x - u.groupSlot.x) > (g.mode === 'retreat' ? 120 : isMage(u) ? 400 : isRanged(u) ? 200 : 70));
     const prev = g.anchor;
     // form up first (spearton to the front, archers to the back), then march
     if (g.forming === undefined) g.forming = g.mode === 'retreat' ? 0 : 4;
@@ -698,7 +774,7 @@ function updateGroups(dt) {
       g.forming -= dt;
       if (g.members.every(u => Math.abs(u.x - u.groupSlot.x) + Math.abs(u.y - u.groupSlot.y) < 28)) g.forming = 0;
     }
-    if (!fighting && !behind && g.forming <= 0) {
+    if (!fighting && !behind && g.forming <= 0 && !g.halt) {   // halt: the computer holding a siege line
       const d = goal - g.anchor, step = sp * dt;
       g.anchor = Math.abs(d) <= step ? goal : g.anchor + Math.sign(d) * step;
     }
@@ -723,6 +799,14 @@ function doGroup(u, dt) {
   let t = lagging ? null : nearestEnemy(u, reach + 10);
   if (t && !inReach(u, t, 0)) t = null;
   if (!t && g.mode === 'attack' && !lagging) t = nearestEnemy(u, isRanged(u) ? u.range : 140);
+  // advancing: shooters answer whoever is pelting the line (within a short step of their rank), and
+  // while the line is halted in a fight the ranks behind lunge at anything close to their place,
+  // then fall back into line
+  if (!t && g.mode !== 'retreat' && !lagging && !g.halt) t = coverTarget(u, slot.x, 160);   // (not out of a siege line)
+  if (!t && g.mode === 'advance' && !isRanged(u) && !g.marching) {
+    const near = nearestEnemy(u, 80);
+    if (near && Math.abs(near.x - slot.x) < 100) t = near;
+  }
   // swordwrath (and ninjas) behind the spear line sprint out and leap over it once the enemy is close
   if (!t && (u.type === 'sword' || u.type === 'ninja') && g.mode !== 'retreat') {
     const near = nearestEnemy(u, 150);
@@ -808,10 +892,17 @@ function updateFighter(u, dt) {
   const team = G.teams[u.team], o = u.order;
   if (o.type === 'refit') return doRefit(u, dt);
   if (o.type === 'manwall') return doManWall(u, team, dt);
+  if (o.type === 'tower') return doTower(u, team, dt);
   if (o.type === 'salt') return doSalt(u, team, dt);
   if (handleBlocked(u, dt)) return;
   if (u.type === 'beastmaster' && !u.inside && beastmasterProd(u)) return;
   if (o.type === 'attack') {
+    // a taunting defender (a shield wall, a hunkered golem) next to the target draws the blow instead:
+    // no picking past it, unless you're a ninja with Focus
+    if (o.target && !o.target.isStructure && !(u.type === 'ninja' && u.perks.focus)) {
+      const guard = tauntGuard(u, o.target);
+      if (guard) o.target = guard;
+    }
     if (isValidTarget(o.target) && (o.target.isStructure || canTarget(u, o.target))) return engage(u, o.target, dt);
     u.order = { type: 'hold', x: u.x, y: u.y };
     return;
@@ -827,7 +918,7 @@ function updateFighter(u, dt) {
     return;
   }
   if (o.type === 'hold') {
-    const t = nearestEnemy(u, isRanged(u) ? u.range : 170, isRanged(u) ? u.x : o.x) || shooterToCharge(u, o.x);
+    const t = nearestEnemy(u, isRanged(u) ? u.range : 170, isRanged(u) ? u.x : o.x) || shooterToCharge(u, o.x) || coverTarget(u, o.x);
     if (t) return engage(u, t, dt);
     const es = G.teams[1 - u.team].statue;
     if (!es.dead && Math.abs(es.x - u.x) < (isRanged(u) ? u.range : 170) + es.halfW) return engage(u, es, dt);
@@ -836,18 +927,34 @@ function updateFighter(u, dt) {
   }
   if (o.type === 'group') return doGroup(u, dt);
   const stance = u.ownStance || team.stance;
-  if (o.type === 'garrison' || stance === 'garrison') return goGarrison(u, dt);
+  if (o.type === 'garrison' || stance === 'garrison') return u.type === 'archer' && u.inside ? manRampart(u, team, dt) : goGarrison(u, dt);
 
   if (stance === 'defend') {
     const lineX = defendLine(team);
-    const t = defendTarget(u, team, lineX) || shooterToCharge(u, lineX);
+    const t = defendTarget(u, team, lineX) || shooterToCharge(u, lineX) || coverTarget(u, lineX);
     if (t) return engage(u, t, dt);
     // spearton in front, swordwrath on the line, archers and mages behind
     const s = rankSlot(u.type, u.slotIdx, team.slotCount[u.type] || 1, lineX, team.dir, team);
     if (u.swing < 0 && moveTo(u, s.x, s.y, dt)) u.facing = team.dir;
     return;
   }
-  // attack stance: fight anything nearby, otherwise march on the enemy statue
+  // attack stance: fight anything nearby, otherwise march on the enemy statue. Beastmasters drive
+  // their giants from behind: while one is near, they keep behind the last giant and only sling at
+  // what's in range, instead of running out in front of it.
+  if (u.type === 'beastmaster') {
+    const gs = G.units.filter(g => g.team === u.team && isGiant(g) && !g.dead && !g.inside && !g.isStatueGiant && Math.abs(g.x - u.x) < 700);
+    if (gs.length) {
+      const dir = team.dir, back = (dir > 0 ? Math.min(...gs.map(g => g.x)) : Math.max(...gs.map(g => g.x))) - dir * 70;
+      const near = nearestEnemy(u, u.range + 10);
+      if (near && inReach(u, near, 0)) return engage(u, near, dt);
+      const pest = coverTarget(u);   // something is pelting the giants: drive it off
+      if (pest) return engage(u, pest, dt);
+      const st = G.teams[1 - u.team].statue;
+      if (!st.dead && inReach(u, st, 0)) return engage(u, st, dt);
+      if (u.swing < 0 && moveTo(u, back, u.slotY, dt)) u.facing = dir;
+      return;
+    }
+  }
   const t = nearestEnemy(u, u.aggro);
   if (t) {
     if (u.shieldWall && inReach(u, t, 10)) { u.facing = t.x >= u.x ? 1 : -1; return; }
@@ -945,14 +1052,15 @@ function doPan(u, team, dt) {
   u.panT += (dt * u.panMul) / PAN_TICK;
   while (u.panT >= 1) {
     u.panT -= 1;
-    team.gold += 1;
+    const g = team.upgrades.castle.sifter ? SIFTER_GOLD : 1;   // the Sifter catches more of the gold
+    team.gold += g;
     team.mana = Math.min(MAX_MANA, team.mana + 1);
-    G.stats[u.team].gold += 1;
+    G.stats[u.team].gold += g;
     G.stats[u.team].mana += 1;
     u.panTicks++;
     if (u.panTicks % 4 === 0) {
       spawnBurst(u.x + u.facing * 10, u.y - 6, 3, { color: '#c99b2a', speed: 30, up: 50, g: 300, life: 0.5, size: 1.6 });
-      if (u.team === 0) floatText(u.x, u.y - 50, '+4 / +4', '#d8c48a');
+      if (u.team === 0) floatText(u.x, u.y - 50, `+${Math.round(4 * g)} / +4`, '#d8c48a');
     }
   }
 }
@@ -1031,7 +1139,7 @@ function doBuild(u, team, dt) {
   const w = u.order.wall;
   if (!trenchNeedsWork(w)) { setOrder(u, { type: 'stance' }); return; }
   if (u.swing >= 0) return;
-  const wx = w.x - team.dir * 22, wy = LANE_TOP + 8 + (u.id % 4) * 24;
+  const wx = w.x - team.dir * 22, wy = w.isTower ? clamp(w.y + ((u.id % 3) - 1) * 10, LANE_TOP, LANE_BOT) : LANE_TOP + 8 + (u.id % 4) * 24;
   if (moveTo(u, wx, wy, dt)) {
     u.facing = team.dir;
     if (u.atkCd <= 0) startSwing(u, 'build', w);
@@ -1071,6 +1179,8 @@ function leaveWall(u) {
 function setOrder(u, order) {
   if (u.type === 'miner' && order.type !== 'mana') freeManaSlot(u);
   if (order.type !== 'manwall' || order.wall !== u.order.wall) leaveWall(u);
+  if (u.onTower && order.type !== 'tower') leaveTower(u);
+  if (u.rampart >= 0 && order.type !== 'garrison') leaveRampart(u);
   u.slow = false;
   u.capSpeed = null;
   u.settled = false;
@@ -1093,6 +1203,7 @@ function addDecal(x, y, r, a) {
 
 // aoe: splash, blasts and pools (a Parry can't turn those aside)
 function damage(t, amt, src, aoe) {
+  if (t.invulnT > 0) return;   // the statue's giant, just risen, can't be hurt yet
   amt = Math.max(1, Math.round(amt));
   if (t.isStructure) {
     if (t.dead) return;
@@ -1109,11 +1220,20 @@ function damage(t, amt, src, aoe) {
     }
     if (t.hp <= 0) {
       if (t.isStatue) destroyStatue(t);
+      else if (t.isTower) destroyTower(t, src);
+      else if (t.isTrap) destroyTrap(t);
       else destroyWall(t);
     }
     return;
   }
+  // an archer in a tower: melee blows land on the tower instead (bring it down and the archer goes with it)
+  if (t.onTower && !t.onTower.dead && src && !aoe && !src.isStructure && !src.castle && !isRanged(src)) { damage(t.onTower, amt, src); return; }
+  // ...and arrows, bolts and stones mostly hit the parapet in front of it
+  if (t.onTower && !t.onTower.dead && src && !aoe && (src.castle || isRanged(src))) amt = Math.max(1, Math.round(amt * (t.onTower.mid ? TOWER.mid.projMul : TOWER.projMul)));
   if (t.lastStand > 0) { t.flash = 0.12; return; }   // already living on borrowed time
+  if (t.ward) amt = Math.max(1, Math.round(amt * (1 - MAGE_AURA.ward)));   // a Cleric's ward nearby
+  if (t.hope || t.fear) amt = Math.max(1, Math.round(amt * (1 - (t.hope ? HOPE.dmg : 0) + (t.fear ? HOPE.dmg : 0))));   // Hope and Fear
+  if (t.type === 'zombie' && src && (src.castle || isRanged(src))) amt = Math.max(1, Math.round(amt * NECRO.rangedMul));   // arrows pass through rotten flesh
   if (t.type === 'golem' && src && src.type === 'warlock') amt = Math.max(1, Math.round(amt * GOLEM.spellMul));   // golems shrug off Warlock magic
   // archers are the giant-killers: extra damage, and a chance to send it into a confused rage
   if (isGiant(t) && src && src.type === 'beastmaster') amt = Math.round(amt * BEASTMASTER.giantMul);   // the giant-killer's sling
@@ -1201,12 +1321,17 @@ function killUnit(u, src) {
   freeManaSlot(u);
   freePanSlot(u);
   leaveWall(u);
+  leaveTower(u);
+  leaveRampart(u);
   addDecal(u.x - u.facing * 14, u.y + 1, rnd(6, 10), 0.6);
   if (src) {
     G.stats[src.team].kills++;
+    // a Gladiator feeds on glory; a zombie's victim gets up again on the zombie's side
+    if (src.type === 'gladiator' && !src.dead && src.team !== u.team) gladiatorKill(src);
+    if (src.type === 'zombie' && src.team !== u.team && !isGiant(u) && u.type !== 'zombie' && !u.inside && !isFlying(u)) raiseZombie(src.team, u.x, u.y, src.necro && !src.necro.dead ? src.necro : null);
     // Mercenary bounty: a share of what the fallen unit cost
     const bounty = clanOf(G.teams[src.team]).bounty;
-    if (bounty && src.team !== u.team) {
+    if (bounty && src.team !== u.team && u.type !== 'zombie') {
       const pay = Math.round(unitCost(G.teams[u.team], u.type).gold * bounty);
       G.teams[src.team].gold += pay;
       G.stats[src.team].gold += pay;
@@ -1222,6 +1347,7 @@ function killUnit(u, src) {
 
 function destroyWall(w) {
   w.dead = true;
+  w.ruin = true;   // the earthworks stay, slumped, to be dug out again cheaply
   w.hp = 0;
   for (let k = 0; k < WALL_SEGS; k++) spawnBurst(w.x, wallSegY(k) - 30, 6, { color: w.stone, speed: 160, up: 120, g: 650, life: 1.1, size: 4 });
   for (const g of w.guards) g.onWall = null;
@@ -1231,7 +1357,28 @@ function destroyWall(w) {
 // Recompute aura buffs: sword Military Training (allies nearby) and spearton inspiration stacks.
 function updateBuffs() {
   const alive = G.units.filter(u => !u.dead);
-  for (const u of alive) { u.insp = 0; u.drillN = 0; }
+  for (const u of alive) { u.insp = 0; u.drillN = 0; u.ward = false; u.fury = false; u.hope = false; u.fear = false; }
+  // mages' auras (a single stack each): ward and fury on friends close by; with Hope, friends anywhere
+  // in a Cleric's range take heart, and with Fear, enemies in a Warlock's range lose it
+  for (const m of alive) {
+    if ((m.type !== 'cleric' && m.type !== 'warlock') || m.inside) continue;
+    const reach = m.perks.hope || m.perks.fear ? m.range : 0;
+    for (const o of alive) {
+      if (o.inside || isWorker(o) || Math.abs(o.y - m.y) > 70) continue;
+      const dx = Math.abs(o.x - m.x);
+      if (o.team === m.team) {
+        if (dx <= MAGE_AURA.r) { if (m.type === 'cleric') o.ward = true; else o.fury = true; }
+        if (m.perks.hope && dx <= reach) o.hope = true;
+      } else if (m.perks.fear && dx <= reach) o.fear = true;
+    }
+  }
+  // Gladiators count the friends around them (the fewer, the harder they hit)
+  for (const u of alive) {
+    if (u.type !== 'gladiator' || u.inside) continue;
+    let n = 0;
+    for (const o of alive) if (o !== u && o.team === u.team && !o.inside && !isWorker(o) && Math.abs(o.x - u.x) < GLADIATOR.aloneR && Math.abs(o.y - u.y) < 70) n++;
+    u.friendsNear = n;
+  }
   for (const u of alive) {
     if (u.type !== 'sword' || !u.perks.drill || u.inside) continue;
     let n = 0;
@@ -1307,8 +1454,15 @@ function updateUnit(u, dt) {
     if (Math.abs(u.knockV) < 6) u.knockV = 0;
   }
   if (u.stunT > 0) u.stunT -= dt;
-  if (u.stunT > 0) { /* stunned: no actions */ }
+  if (u.cheerT > 0) u.cheerT -= dt;
+  if (u.netT > 0) u.netT -= dt;
+  if (u.type !== 'miner' && u.type !== 'architect') u.retaliateT -= dt;   // (workers count theirs down themselves)
+  if (u.stunT > 0 || u.netT > 0) { /* stunned, or pinned under a net: no actions */ }
   else if (u.type === 'miner') updateMiner(u, dt);
+  else if (u.type === 'architect') updateArchitect(u, dt);
+  else if (u.type === 'quartermaster') updateQuartermaster(u, dt);
+  else if (u.type === 'necromancer') updateNecromancer(u, dt);
+  else if (u.type === 'zombie') updateZombie(u, dt);
   else if (isGiant(u)) updateGiant(u, dt);
   else if (isMage(u) && updateMageCasting(u, dt)) { /* busy casting or walking to cast */ }
   else if (u.type === 'cleric') updateCleric(u, dt);
@@ -1316,15 +1470,23 @@ function updateUnit(u, dt) {
   if (!u.praying) u.pray = -1;
   if (u.type === 'miner' && !u.panUsed) freePanSlot(u);
   if (u.type === 'ninja' || u.type === 'saboteur') updateStealth(u, dt);
-  if (u.type === 'spear') updateJavelin(u);
+  if (u.type === 'saboteur' && (u.huntT = (u.huntT || 0) - dt) <= 0) { u.huntT = 0.5; saboteurHunt(u); }   // sniffing out traps
+  if (u.tarT > 0) u.tarT -= dt;
+  if (u.type === 'gladiator') updateGladiatorGear(u);
   if (u.type === 'golem' && u.perks.core && u.hp < u.maxHp && u.lastStand <= 0) u.hp = Math.min(u.maxHp, u.hp + GOLEM.regen * dt);   // Mana Core
+  if (u.type === 'golem' && u.shieldWall) {   // hunkering down burns the team's mana; when it runs dry the golem stands up
+    if (team.mana >= GOLEM.hunkerMana * dt) team.mana -= GOLEM.hunkerMana * dt;
+    else { u.shieldWall = false; if (u.team === 0) floatText(u.x, u.y - 90, 'Out of mana', '#9fd8ec'); }
+  }
   // legs move in step with the distance actually covered, so a fast unit held to a slow
   // formation pace walks slowly instead of sprinting on the spot; sprinters drop to a walk
   const inst = dt > 0 ? Math.min(1.6, u.stepDist / (dt * baseSpeed(u))) : 0;
   u.pace += (inst - u.pace) * Math.min(1, dt * 8);
   if (u.moving) {
     const sprinter = (u.type === 'sword' || u.type === 'ninja') && !u.slow && u.pace > 0.8;
-    u.walk += dt * (sprinter ? 13 : u.type === 'miner' ? 7 : 9) * u.speedMul * Math.max(0.35, u.pace);
+    // golems and giants are heavy: their feet keep exact pace with the ground they cover
+    if (u.type === 'golem' || isGiant(u)) u.walk += (u.stepDist / ((u.type === 'golem' ? GOLEM_STRIDE : GIANT_STRIDE) * u.scale)) * Math.PI;
+    else u.walk += dt * (sprinter ? 13 : u.type === 'miner' ? 7 : 9) * u.speedMul * Math.max(0.35, u.pace);
     u.stillT = 0;
   } else {
     u.stillT += dt;
@@ -1386,7 +1548,7 @@ function assignDefendSlots() {
     for (const u of G.units) {
       if (u.team !== team.id || u.dead) continue;
       if (isGiant(u)) u.giantIdx = giants++;
-      else if (u.type !== 'miner' && u.order.type === 'stance') u.slotIdx = idx[u.type] = (idx[u.type] ?? -1) + 1;
+      else if (!isWorker(u) && u.order.type === 'stance') u.slotIdx = idx[u.type] = (idx[u.type] ?? -1) + 1;
     }
     team.slotCount = Object.fromEntries(Object.entries(idx).map(([k, v]) => [k, v + 1]));
     team.giantCols = Math.ceil(giants / 2);   // beastmasters rank up behind the last column

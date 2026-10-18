@@ -47,7 +47,7 @@ function unitAt(wx, wy, team) {
     if (u.dead || (team !== undefined && u.team !== team)) continue;
     if ((u.inside || u.stealth) && u.team !== 0) continue;   // vanished ninjas can't be clicked on
     if (team === 0 && !selectable(u)) continue;   // giants can't be picked without blinders
-    const s = u.scale, uy = u.y - (u.onWall ? wallHeight(u.onWall) : 0) - u.alt;
+    const s = u.scale, uy = u.y - unitLift(u) - u.alt;
     const hw = u.type === 'ballista' ? 27 * BALLISTA.drawScale : 14;   // the ballista is a wide engine, crewman included
     if (Math.abs(wx - u.x) < hw * s && wy < uy + 8 && wy > uy - 74 * s) {
       const d = Math.abs(wx - u.x) + Math.abs(wy - (uy - 35)) * 0.3;
@@ -77,18 +77,18 @@ function statueAt(wx, wy) {
 function wallAt(wx, wy) {
   return G.walls.find(w => !w.dead && Math.abs(wx - w.x) < 20 && wy > LANE_TOP - 90 && wy < LANE_BOT + 6) || null;
 }
+function towerAt(wx, wy) {
+  return G.towers.find(t => !t.dead && Math.abs(wx - t.x) < (t.mid ? 46 : 28) && wy > t.y - towerH(t) - 20 && wy < t.y + 8) || null;
+}
 
-// Player's buildings inside the castle. On the rampart, the mage halls, Dojo and Aerie open their
-// own upgrades and the rest of the rampart and tower open the castle's upgrades.
+// The player's buildings: one per class of unit (key: its training group), each opening the
+// upgrades of every unit it trains. The rampart and tower open the castle's upgrades.
 function buildingAt(wx, wy) {
-  if (wx < GATE_X + 14 && wy > WALL_TOP - 240 && wy < WALL_TOP + 16) {
-    for (const [type, hx] of Object.entries(RAMPART_HALL_X)) if (Math.abs(wx - hx) < 28 && wy > WALL_TOP - 90) return type;
-    return 'castle';
-  }
-  // the pit outside the gate: the Giant Pit, or the Golem Forge for the Arcane Circle
-  if (Math.abs(wx - GIANT_PIT_X) < 52 && wy > LANE_TOP - 100 && wy < LANE_TOP + 2) return canTrain(G.teams[0], 'golem') ? 'golem' : 'giant';
-  if (wy < LANE_TOP - 128 || wy > LANE_TOP) return null;
-  for (const [type, bx] of Object.entries(BUILD_X)) if (Math.abs(wx - bx) < 52) return type;
+  if (wx < GATE_X + 14 && wy > WALL_TOP - 240 && wy < WALL_TOP + 16) return 'castle';
+  // the pit outside the gate: the Giant Pit (the Golem Forge for the Arcane Circle)
+  if (Math.abs(wx - GIANT_PIT_X) < 52 && wy > LANE_TOP - 100 && wy < LANE_TOP + 2) return 'giants';
+  if (wy < LANE_TOP - 160 || wy > LANE_TOP) return null;
+  for (const key of ['infantry', 'mages', 'ranged', 'workers']) if (Math.abs(wx - CLASS_X[key]) < 52) return key;
   return null;
 }
 
@@ -106,15 +106,16 @@ function selectType(type) {
 // ---------------------------------------------------------------- commands
 
 const liveSel = () => G.selection.filter(u => !u.dead);
-const milSel = () => liveSel().filter(u => u.type !== 'miner' && !isGiant(u));
+const milSel = () => liveSel().filter(u => !isWorker(u) && !isGiant(u));
 // Giants obey nobody directly: only those with Blinders can be selected (for move / hold).
-const selectable = u => !isGiant(u) || (!u.isStatueGiant && !!u.perks.blinders);
+const selectable = u => u.type !== 'zombie' && (!isGiant(u) || (!u.isStatueGiant && !!u.perks.blinders));   // (zombies follow their Necromancer)
 const meleeSel = () => liveSel().filter(u => u.type === 'sword' || u.type === 'spear');
 const minerSel = () => liveSel().filter(u => u.type === 'miner');
 const mageSel = () => liveSel().filter(u => isMage(u));
-const builderSelection = () => minerSel().filter(u => u.perks.walls);
-const fortifierSelection = () => minerSel().filter(u => u.perks.walls2);
-const prospectorSelection = () => minerSel().filter(u => u.perks.prospect);
+const archSel = () => liveSel().filter(u => u.type === 'architect');
+const builderSelection = () => (G.teams[0].upgrades.architect.walls ? archSel() : []);     // Earthworks: trenches
+const fortifierSelection = () => (G.teams[0].upgrades.architect.walls2 ? archSel() : []);  // Palisade
+const prospectorSelection = () => liveSel().filter(u => u.type === 'quartermaster');   // (Quartermasters restore deposits)
 // Units that can brace: Spearton with Shields (Shield Wall) and Spirit Golems (Hunker Down).
 const shieldSelection = () => liveSel().filter(u => (u.type === 'spear' && u.perks.shield) || u.type === 'golem');
 const refitSelection = () => liveSel().filter(u => missingUpgrades(u).length);
@@ -139,6 +140,43 @@ function issueCommand(wx, wy) {
 
   const foe = unitAt(wx, wy, 1);
   const st = statueAt(wx, wy);
+  // a ruin: architects rebuild it cheaply (ours, or the Monolith's tower)
+  const ruin = [...G.towers, ...G.walls].find(s => s.ruin && Math.abs(s.x - wx) < (s.isTower ? (s.mid ? 50 : 36) : 22) && (s.isTower ? wy > s.y - 50 && wy < s.y + 10 : wy > LANE_TOP - 30 && wy < LANE_BOT + 6));
+  const rebuilders = sel.filter(u => u.type === 'architect');
+  if (ruin && rebuilders.length && !foe) {
+    if (rebuildStructure(me, ruin, rebuilders)) marker(ruin.x, ruin.isTower ? ruin.y : LANE_BOT, '#c9b27a');
+    return;
+  }
+  // a tower: archers climb into ours (or a free neutral one), architects finish or mend ours,
+  // anyone can attack the enemy's
+  const tw = towerAt(wx, wy);
+  if (tw && !foe) {
+    const archers = sel.filter(u => u.type === 'archer'), archs = sel.filter(u => u.type === 'architect');
+    const free = tw.team === -1 && (!tw.archer || tw.archer.dead || tw.archer.team === 0);
+    if ((tw.team === 0 || free) && archers.length && tw.progress >= 1) {
+      const a = archers.sort((p, q) => Math.abs(p.x - tw.x) - Math.abs(q.x - tw.x))[0];
+      if (postArcher(a, tw)) marker(tw.x, tw.y, '#9fb4cc');
+      else if (me.id === 0) toast('That tower already has an archer');
+      return;
+    }
+    if (tw.team === 0 && archs.length && (tw.progress < 1 || tw.hp < tw.max)) {
+      for (const u of archs) setOrder(u, { type: 'build', wall: tw });
+      marker(tw.x, tw.y, '#c9b27a');
+      return;
+    }
+    if (tw.team === 1) {
+      for (const u of sel) setOrder(u, { type: 'attack', target: tw });
+      marker(tw.x, tw.y, '#c9533e');
+      return;
+    }
+  }
+  // an enemy trap your saboteurs have found
+  const trap = G.traps.find(t => t.team === 1 && t.armed && t.spotted[0] && Math.abs(t.x - wx) < 14 && Math.abs(t.y - wy) < 10);
+  if (trap && !foe) {
+    for (const u of sel) setOrder(u, { type: 'attack', target: trap });
+    marker(trap.x, trap.y, '#c9533e');
+    return;
+  }
   const wall = wallAt(wx, wy);
   const enemyWall = wall && wall.team === 1 && wall.progress >= 1 ? wall : null;
   if (foe || (st && st.team === 1) || enemyWall) {
@@ -149,7 +187,7 @@ function issueCommand(wx, wy) {
   }
   if (wall && wall.team === 0) {
     // our wall: builders finish or fortify it, soldiers climb up to defend it
-    const builders = sel.filter(u => u.type === 'miner' && u.perks.walls);
+    const builders = sel.filter(u => u.type === 'architect');   // architects finish and mend trenches
     if (wall.progress < 1 && builders.length) {
       for (const u of builders) setOrder(u, { type: 'build', wall });
       marker(wall.x, LANE_BOT, '#c9b27a');
@@ -161,7 +199,7 @@ function issueCommand(wx, wy) {
       marker(wall.x, LANE_BOT, '#c9b27a');
       return;
     }
-    const fort = sel.filter(u => u.type === 'miner' && u.perks.walls2);
+    const fort = me.upgrades.architect.walls2 ? sel.filter(u => u.type === 'architect') : [];
     if (wall.progress >= 1 && fort.length && wall.tier !== 2) {
       if (reinforceWall(me, wall, fort)) marker(wall.x, LANE_BOT, '#c9b27a');
       return;
@@ -181,8 +219,8 @@ function issueCommand(wx, wy) {
       marker(mine.x, mine.y, '#f0eee8');
       if (sabs.length === sel.length) return;
     }
-    const prospectors = sel.filter(u => u.type === 'miner' && u.perks.prospect);
-    if (mine.gold <= 0 && prospectors.length) {
+    const prospectors = sel.filter(u => u.type === 'quartermaster');
+    if (mine.gold < mine.max && prospectors.length) {
       for (const u of prospectors) setOrder(u, { type: 'replenish', mine });
       marker(mine.x, mine.y, '#e8c25a');
       return;
@@ -233,12 +271,18 @@ function startPlacing(mode) {
   const me = G.teams[0];
   const need = (list, key, name) => {
     if (list().length) return true;
-    toast(me.upgrades.miner[key] ? `Select miners with ${name} (refit older ones with R)` : `Research ${name} at the Miners' Lodge first`);
+    if (key === 'prospect') toast('Select a Quartermaster: they restore gold deposits');
+    else toast(me.upgrades.architect[key] ? 'Select architects' : `Research ${name} first (⚒ on the Architect button)`);
     return false;
   };
   if (mode === 'wall' && !need(builderSelection, 'walls', 'Earthworks')) return;
   if (mode === 'reinforce' && !need(fortifierSelection, 'walls2', 'Palisade')) return;
   if (mode === 'replenish' && !need(prospectorSelection, 'prospect', 'Prospecting')) return;
+  if ((mode === 'tar' || mode === 'mine' || mode === 'tower') && !archSel().length) return toast('Select architects');
+  if (mode === 'tar' || mode === 'mine') {
+    const cd = (me.trapCd || {})[mode] || 0;
+    if (cd > G.time) return toast(`${TRAP[mode].name} ready in ${Math.ceil(cd - G.time)}s`);
+  }
   UI.placing = mode;
 }
 
@@ -246,10 +290,13 @@ function toggleShieldWall() {
   const s = shieldSelection();
   if (!s.length) {
     if (canTrain(G.teams[0], 'golem')) return toast('Select Spirit Golems or Spearton with Shields');
-    return toast(G.teams[0].upgrades.spear.shield ? 'Select Spearton with Shields (refit older ones with R)' : 'Research Shields at the Spear Hall first');
+    return toast(G.teams[0].upgrades.spear.shield ? 'Select Spearton with Shields (refit older ones with R)' : 'Research Shields at the Barracks first');
   }
   const on = !s.every(u => u.shieldWall);
+  const broke = on && G.teams[0].mana < GOLEM.hunkerMana;   // golems need mana to hunker down
+  if (broke && s.some(u => u.type === 'golem')) toast(`Hunkering down costs ${GOLEM.hunkerMana} mana per second: not enough mana`);
   for (const u of s) {
+    if (broke && u.type === 'golem') continue;
     u.shieldWall = on;
     if (on && u.swing >= 0) u.swing = -1;
   }
@@ -323,9 +370,9 @@ function castAt(k, wx, wy) {
   return true;
 }
 
-// 7 8 9 0 cast spell slots 1-4. With both mage types selected, Shift picks the Warlock's spells.
+// 7 and 8 cast spell slots 1 and 2. With both mage types selected, Shift picks the Warlock's spells.
 function spellHotkey(code, shift) {
-  const slot = ['Digit7', 'Digit8', 'Digit9', 'Digit0'].indexOf(code);
+  const slot = ['Digit7', 'Digit8'].indexOf(code);
   const types = [...new Set(mageSel().map(u => u.type))];
   if (!types.length) return;
   const owner = types.length === 1 ? types[0] : shift ? 'warlock' : 'cleric';
@@ -350,6 +397,9 @@ const ICONS = {
   wall: '<path d="M2 20h5l3-9h5l3 9h4" stroke-width="1.8"/><path d="M15 15l6-4M13 12l5-4" stroke-width="1.6"/><path d="M3 20l2 2h0" stroke-width="1.4"/>',
   reinforce: '<path d="M6 21V9l2-3 2 3v12M11 21V8l2-3 2 3v13M16 21V9l2-3 2 3v12" stroke-width="1.6"/><path d="M4 15h18" stroke-width="1.4"/>',
   repair: '<path d="M14 3l-8 14" stroke-width="2"/><path d="M4 15l4 3-2 4-4-3z" fill="currentColor" stroke="none"/><path d="M13 21h9l-3-6h-4z" stroke-width="1.6"/>',
+  tar: '<ellipse cx="12" cy="16" rx="9" ry="4" fill="currentColor" stroke="none"/><circle cx="9" cy="10" r="1.6" stroke-width="1.4"/><circle cx="15" cy="7" r="1.2" stroke-width="1.4"/>',
+  landmine: '<ellipse cx="11" cy="17" rx="7" ry="3.5" fill="currentColor" stroke="none"/><path d="M13 15q3-6 7-5" stroke-width="1.6"/><path d="M20 4v3M18.5 5.5h3" stroke-width="1.4"/>',
+  tower: '<path d="M7 22l2-14h6l2 14M9 8h6M6 8h12v-3h-2v2h-2v-2h-4v2H8V5H6z" stroke-width="1.6"/><path d="M9 15h6" stroke-width="1.4"/>',
   salt: '<path d="M8 4h8l2 5H6z" fill="currentColor" stroke="none"/><path d="M6 9h12v6a6 6 0 0 1-12 0z" stroke-width="1.8"/><path d="M9 21h1M13 22h1M16 20h1" stroke-width="2"/>',
   replenish: '<path d="M4 21l4-7h8l4 7z" fill="currentColor" stroke="none"/><path d="M12 11V3M8 7l4-4 4 4" stroke-width="2"/>',
   refit: '<path d="M4 18h16M7 18v-4h10v4M9 14V9h6v5M12 9V4" stroke-width="2"/>',
@@ -371,7 +421,10 @@ const COMMANDS = [
   { id: 'pan', label: 'Pan', key: '⇧Q', show: s => s.miner && s.mil, run: () => minerSel().forEach(u => setOrder(u, { type: 'pan' })) },
   { id: 'wall', label: 'Dig trench', key: 'B', show: s => s.build, run: () => startPlacing('wall') },
   { id: 'reinforce', label: 'Palisade', key: 'J', show: s => s.fort, run: () => startPlacing('reinforce') },
-  { id: 'repair', label: 'Repair', key: 'Y', show: s => s.build, run: () => { const w = repairTrenches(G.teams[0], builderSelection()); if (w) G.markers.push({ x: w.x, y: LANE_BOT, t: 0, color: '#c9b27a' }); else toast('None of your trenches need repair'); } },
+  { id: 'repair', label: 'Repair', key: 'Y', show: s => s.arch, run: () => { const w = repairStructures(G.teams[0], archSel()); if (w) G.markers.push({ x: w.x, y: w.isTower ? w.y : LANE_BOT, t: 0, color: '#c9b27a' }); else toast('None of your trenches or towers need repair'); } },
+  { id: 'tar', label: s => `Tar pit (${trapCost(G.teams[0], 'tar')})`, key: '⇧B', show: s => s.arch, run: () => startPlacing('tar'), cd: 'tar' },
+  { id: 'landmine', label: s => `Mine (${trapCost(G.teams[0], 'mine')})`, key: '⇧N', show: s => s.arch, run: () => startPlacing('mine'), cd: 'mine' },
+  { id: 'tower', label: `Archer tower (${TOWER.cost})`, key: '⇧Y', show: s => s.arch, run: () => startPlacing('tower') },
   { id: 'replenish', label: 'Replenish', key: 'N', show: s => s.prosp, run: () => startPlacing('replenish') },
   { id: 'salt', label: 'Salt mine', key: 'RMB', show: s => s.sab, run: () => { UI.placing = 'salt'; } },
   { id: 'refit', label: 'Refit', key: 'R', show: () => true, run: refitSelected },
@@ -402,6 +455,7 @@ function selectionCaps() {
     shield: shieldSelection().length > 0,
     golemOnly: shieldSelection().length > 0 && shieldSelection().every(u => u.type === 'golem'),
     build: builderSelection().length > 0,
+    arch: archSel().length > 0,
     fort: fortifierSelection().length > 0,
     prosp: prospectorSelection().length > 0,
     mage: mageSel().length > 0,
@@ -428,6 +482,12 @@ function placeAt(wx, wy, keep) {
   const me = G.teams[0];
   if (UI.placing === 'wall') {
     if (placeWall(me, wx, builderSelection()) && !keep) UI.placing = null;
+  } else if (UI.placing === 'tar' || UI.placing === 'mine') {
+    const t = orderTrap(me, UI.placing, wx, clamp(wy, LANE_TOP + 4, LANE_BOT - 4), archSel());
+    if (t) { G.markers.push({ x: t.x, y: t.y, t: 0, color: '#c9b27a' }); UI.placing = null; }
+  } else if (UI.placing === 'tower') {
+    const t = orderTower(me, wx, clamp(wy, LANE_TOP + 4, LANE_BOT - 4), archSel());
+    if (t) { G.markers.push({ x: t.x, y: t.y, t: 0, color: '#c9b27a' }); UI.placing = null; }
   } else if (UI.placing === 'flag') {
     setMuster(me, wx);
     toast('Muster point set: newly trained soldiers gather here');
@@ -526,6 +586,9 @@ function initInput() {
     if (trainKey) { queueUnit(me, trainKey); return; }
     // Shift + Q/W/E give the order to the selected units only; plain Q/W/E command the whole army.
     if (e.shiftKey && e.code === 'KeyZ') { toggleSiegeMode(); return; }
+    if (e.shiftKey && e.code === 'KeyB') { startPlacing('tar'); return; }     // architects: tar pit
+    if (e.shiftKey && e.code === 'KeyN') { startPlacing('mine'); return; }    // mine
+    if (e.shiftKey && e.code === 'KeyY') { startPlacing('tower'); return; }   // archer tower
     if (e.shiftKey && ['KeyQ', 'KeyW', 'KeyE', 'KeyC'].includes(e.code)) {
       runCommand({ KeyQ: 'garrison', KeyW: 'defend', KeyE: 'attack', KeyC: 'retreat' }[e.code]);
       return;
@@ -540,7 +603,7 @@ function initInput() {
       case 'KeyK': runCommand('manwall'); break;
       case 'KeyL': runCommand('auto'); break;
       case 'KeyM': runCommand('stars'); break;
-      case 'Digit7': case 'Digit8': case 'Digit9': case 'Digit0': spellHotkey(e.code, e.shiftKey); break;
+      case 'Digit7': case 'Digit8': spellHotkey(e.code, e.shiftKey); break;
       case 'KeyI': runCommand('mine'); break;
       case 'KeyO': runCommand('pray'); break;
       case 'KeyF': selectType('sword'); break;
@@ -554,7 +617,7 @@ function initInput() {
       case 'KeyR': refitSelected(); break;
       case 'KeyU': {
         // cycle through the buildings this clan can use (and the castle)
-        const open = RESEARCH_TYPES.filter(t => t === 'castle' || canTrain(G.teams[0], t)), i = open.indexOf(UI.panel);
+        const open = [...TRAIN_GROUPS.filter(g => g.types.some(t => canTrain(G.teams[0], t))).map(g => g.key), 'castle'], i = open.indexOf(UI.panel);
         openPanel(open[(i + 1) % open.length]);
         break;
       }
@@ -648,10 +711,13 @@ const CMD_TIPS = {
   mine: 'Go back to mining gold.',
   pray: 'Kneel at the statue and pray for mana (4 at a time).',
   pan: 'Go into the castle and pan the stream for gold and mana (5 at a time).',
-  wall: `Mark out a trench (${WALL_COST} gold). Miners with Earthworks dig it and pile up an earth rampart behind it.`,
-  repair: 'Send the selected builders to shovel your most damaged trench back into shape.',
+  wall: `Mark out a trench (${WALL_COST} gold). Architects (with Earthworks) dig it and pile up an earth rampart behind it.`,
+  tar: `Lay a hidden tar pit: the first enemy on foot to step on it springs a pool of tar that slows everyone wading through it for ${TRAP.tar.poolTime}s. Arcane Circle tar burns too. Not past the middle; ${TRAP.lineMax} to a line across the lane.`,
+  landmine: `Bury a hidden mine: the first enemy on foot to step on it blows up everyone nearby (${TRAP.mine.dmg} damage at the centre, more for the Arcane Circle). Ninjas, saboteurs and flyers don't set traps off.`,
+  tower: `Raise an archer tower (${TOWER.cost} gold). Right-click it with an archer to post them: +${TOWER.range} range, and arrows hurt them less. If melee troops wreck it, the archer dies in the collapse.`,
+  repair: 'Send the selected architects to mend your most damaged trench or tower.',
   reinforce: `Raise a sharpened log palisade on a finished trench (${WALL_COST} gold, +${WALL_HP2} hp).`,
-  replenish: 'Restore a gold deposit, even an exhausted one.',
+  replenish: 'Quartermasters: restore a gold deposit, even an exhausted one (they do it on their own too).',
   refit: `Walk back to their building and take every upgrade they're missing (${REFIT_COST} gold and ${REFIT_TIME}s each).`,
   auto: `When on, mages cast their spells on their own and answer enemy spells with the opposite one. They keep ${SPELL_RESERVE} mana in reserve. You can still force any spell yourself.`,
   salt: `Click a gold deposit (or right-click it): the saboteurs sneak over and salt it. For ${SABOTEUR.saltDur}s enemy miners keep only half the gold they dig there.`,
@@ -671,7 +737,8 @@ function tipHTML(el) {
     const locked = d.requires && !me.upgrades[type][d.requires] ? `Requires ${upgradeDef(type, d.requires).name}` : '';
     const state = me.upgrades[type][key] ? 'Researched' : r && r.key === key ? 'Researching… (right-click to cancel)' : locked;
     const note = d.team ? 'Takes effect immediately.' : `Only units trained after research get this. Veterans can refit (R) for ${REFIT_COST} gold.`;
-    return `<b>${d.name}</b><span class="cost"><i class="ico gold"></i>${d.cost}${d.mana ? ` <i class="ico mana"></i>${d.mana}` : ''} · ${d.time}s</span><p>${d.desc}</p><em>${state || note}</em>`;
+    const p = upgradePrice(me, type, d), save = p.off ? ` <i class="save">(-${Math.round(p.off * 100)}%)</i>` : '';   // architects' savings
+    return `<b>${d.name}</b><span class="cost"><i class="ico gold"></i>${p.gold}${p.mana ? ` <i class="ico mana"></i>${p.mana}` : ''}${save} · ${d.time}s</span><p>${d.desc}</p><em>${state || note}</em>`;
   }
   if (el.dataset.cmd && el.dataset.cmd.startsWith('spell:')) {
     const k = el.dataset.cmd.slice(6), S = SPELLS[k], cd = spellCooldown(k);
@@ -727,12 +794,12 @@ function buildTrainBar() {
       b.innerHTML = `
         <canvas width="84" height="84"></canvas>
         <kbd>${def.hotkey}</kbd><span class="badge"></span>
-        <button class="ub" data-tip="${def.building} upgrades (U)">⚒</button>
+        <button class="ub" data-tip="${buildingName(type, G.teams[0])}: upgrades (U)">⚒</button>
         <div class="prog"><i></i></div>
         <span class="cost">${cost.gold}${cost.mana ? `<i class="ico mana"></i>${cost.mana}` : ''}</span>`;
       drawUnitIcon(b.querySelector('canvas'), type);
       b.addEventListener('click', e => {
-        if (e.target.closest('.ub')) return UI.panel === type ? closePanel() : openPanel(type);
+        if (e.target.closest('.ub')) return UI.panel === groupOf(type).key ? closePanel() : openPanel(groupOf(type).key);
         queueUnit(G.teams[0], type);
       });
       b.addEventListener('contextmenu', e => { e.preventDefault(); dequeueUnit(G.teams[0], type); });
@@ -798,12 +865,22 @@ function upgradeChains(type) {
   return chains;
 }
 
-function openPanel(type) {
-  if (type !== 'castle' && !canTrain(G.teams[0], type)) {
-    toast(`The ${clanOf(G.teams[0]).name} doesn't use the ${buildingName(type)}`);
+// The unit types whose upgrades a building's panel lists: the castle's own, or every unit of the
+// class this clan can train (and that has something to research).
+function panelTypes(key) {
+  if (key === 'castle') return ['castle'];
+  const g = TRAIN_GROUPS.find(x => x.key === key);
+  return g ? g.types.filter(t => canTrain(G.teams[0], t) && upgradeChains(t).length) : [];
+}
+
+// key: a class (training group) or 'castle'. A unit type opens its class's building.
+function openPanel(key) {
+  if (key !== 'castle' && !TRAIN_GROUPS.some(g => g.key === key)) key = groupOf(key).key;
+  if (!panelTypes(key).length) {
+    toast(`The ${clanOf(G.teams[0]).name} doesn't use the ${buildingName(key, G.teams[0])}`);
     return;
   }
-  UI.panel = type;
+  UI.panel = key;
   UI.cardMode = '';   // force the card to rebuild
 }
 
@@ -818,25 +895,40 @@ function buildCard(mode) {
   UI.cardMode = mode;
   UI.last.cardInfo = null;
   if (mode.startsWith('upg:')) {
-    const type = mode.slice(4);
-    card.innerHTML = `<div class="uhead"><b>${buildingName(type)}</b><span class="rs"></span><button class="x" data-tip="Close (Esc)">✕</button></div><div class="ulist"></div>`;
+    const key = mode.slice(4), types = panelTypes(key);
+    card.innerHTML = `<div class="uhead"><b>${buildingName(key, G.teams[0])}</b><span class="rs"></span><button class="x" data-tip="Close (Esc)">✕</button></div><div class="ulist"></div>`;
     card.querySelector('.x').addEventListener('click', closePanel);
     const list = card.querySelector('.ulist');
-    // one button per upgrade chain; it shows the next tier once the previous one is done
-    for (const chain of upgradeChains(type)) {
-      const b = document.createElement('button');
-      b.className = 'ubtn';
-      b.dataset.chain = chain.map(d => d.key).join(',');
-      b.dataset.tip = '';
-      b.innerHTML = `<canvas width="80" height="80"></canvas><span class="uc"></span><div class="prog"><i></i></div>` +
-        (chain.length > 1 ? `<span class="pips">${chain.map(() => '<i></i>').join('')}</span>` : '');
-      b.addEventListener('click', () => startResearch(G.teams[0], type, b.dataset.upg.split(':')[1]));
-      b.addEventListener('contextmenu', e => {
-        e.preventDefault();
-        const r = G.teams[0].research[type];
-        if (r && r.key === b.dataset.upg.split(':')[1]) cancelResearch(G.teams[0], type);
-      });
-      list.appendChild(b);
+    // a row per unit the building trains; one button per upgrade chain, showing the next tier once
+    // the previous one is done. The book in the corner sets the architects studying it.
+    for (const type of types) {
+      if (types.length > 1) {
+        const h = document.createElement('div');
+        h.className = 'usec';
+        h.textContent = UNIT_TYPES[type].name;
+        list.appendChild(h);
+      }
+      for (const chain of upgradeChains(type)) {
+        const b = document.createElement('button');
+        b.className = 'ubtn';
+        b.dataset.type = type;
+        b.dataset.chain = chain.map(d => d.key).join(',');
+        b.dataset.tip = '';
+        b.innerHTML = `<canvas width="80" height="80"></canvas><span class="uc"></span><div class="prog"><i></i></div>` +
+          (chain.length > 1 ? `<span class="pips">${chain.map(() => '<i></i>').join('')}</span>` : '') +
+          `<i class="study" data-tip="Architects: study this to make it cheaper (click again to stop)"><svg viewBox="0 0 16 16"><path d="M2 3.5C4 2.6 6 2.7 8 4c2-1.3 4-1.4 6-.5v9c-2-.9-4-.8-6 .5-2-1.3-4-1.4-6-.5z" fill="currentColor"/><path d="M8 4v9" stroke="#1a140e" stroke-width="1"/></svg></i>`;
+        b.addEventListener('click', e => {
+          const k = b.dataset.upg.split(':')[1];
+          if (e.target.closest('.study')) return setStudyFocus(G.teams[0], type, k);
+          startResearch(G.teams[0], type, k);
+        });
+        b.addEventListener('contextmenu', e => {
+          e.preventDefault();
+          const r = G.teams[0].research[type];
+          if (r && r.key === b.dataset.upg.split(':')[1]) cancelResearch(G.teams[0], type);
+        });
+        list.appendChild(b);
+      }
     }
   } else if (mode.startsWith('sel:')) {
     const caps = selectionCaps();
@@ -848,7 +940,7 @@ function buildCard(mode) {
     const mixed = new Set(mageSel().map(u => u.type)).size > 1;
     const spellBtns = caps.spells.map(k => {
       const S = SPELLS[k];
-      const key = (mixed && S.owner === 'warlock' ? '⇧' : '') + ['7', '8', '9', '0'][S.slot];
+      const key = (mixed && S.owner === 'warlock' ? '⇧' : '') + ['7', '8'][S.slot];
       return `<button class="cmd spell ${S.owner}" data-cmd="spell:${k}" data-tip=""><canvas width="40" height="40" data-icon="${S.owner}:${S.perk}"></canvas><span>${S.name}</span><kbd>${key}</kbd><i class="cdshade"></i><b class="mc">${S.mana}</b></button>`;
     });
     card.innerHTML = `<div id="cardInfo" class="cinfo"></div><div class="cmds">${btns.join('')}${spellBtns.join('')}</div>`;
@@ -886,6 +978,22 @@ function unitJob(u, me) {
     return ({ mana: 'Praying for mana', pan: 'Going to pan', build: 'Working on a trench', replenish: 'Replenishing a deposit', refit: 'Going to refit', garrison: 'Garrisoned', move: 'Moving', hold: 'Holding', attack: 'Fighting' }[u.order.type]
       || (u.retaliateT > 0 ? 'Defending itself' : u.praying ? 'Praying for mana' : u.carry >= u.carryCap ? 'Returning gold' : u.mine ? 'Mining gold' : 'Idle'));
   }
+  if (u.type === 'architect') {
+    if (u.order.type === 'build') return u.order.wall.isTower ? (u.order.wall.progress < 1 ? 'Building a tower' : 'Repairing a tower') : 'Working on a trench';
+    if (u.order.type === 'trap') return u.laying ? `Laying a ${TRAP[u.order.trap.kind].name.toLowerCase()}` : 'Going to lay a trap';
+    if (u.inside) return 'Studying in the castle';
+    if (u.order.type === 'stance' && !u.moving) return 'Studying (cheaper upgrades)';
+  }
+  if (u.type === 'quartermaster' && (u.order.type === 'stance' || u.order.type === 'replenish')) {
+    if (u.order.type === 'replenish' || (u.qmJob && u.qmJob.kind === 'prospect')) return 'Restoring a gold deposit';
+    const j = u.qmJob;
+    if (j) return { heal: 'Patching up a soldier', refit: 'Refitting a veteran', gear: 'Bringing a new net and javelin', cheer: 'Cheering on the miners', materials: 'Bringing an Architect materials' }[j.kind];
+    return u.qmRole === 'troops' ? 'With the troops' : 'With the workers';
+  }
+  if (u.type === 'necromancer' && u.order.type === 'stance') return `Leading ${zombiesOf(u).length}/${hordeSize(me)} zombies`;
+  if (u.rampart >= 0) return 'Manning the rampart';
+  if (u.netT > 0) return 'Caught in a net!';
+  if (u.order.type === 'tower') return u.onTower ? 'Posted in a tower' : 'Climbing into a tower';
   if (u.shieldWall) return u.type === 'golem' ? 'Hunkered down' : 'Shield wall';
   if (u.order.type === 'stance') {
     const s = u.ownStance || me.stance;
@@ -902,15 +1010,19 @@ function selectionInfoHTML(me) {
     const perks = UPGRADES[u.type].filter(d => u.perks[d.key]).map(d => d.name);
     const buffs = [];
     if (u.insp) buffs.push(`Inspired ×${u.insp}`);
+    if (u.type === 'gladiator') buffs.push(`Glory ×${u.kills || 0}${u.javelin ? ' · javelin' : ''}${u.net ? ' · net' : ''}`);
+    if (u.cheerT > 0) buffs.push('Cheered on');
     if (u.drillN) buffs.push(`Drilled +${u.drillN}`);
     if (rageOf(u) > 0.2) buffs.push('Adrenaline');
     if (u.burnT > 0) buffs.push('Burning');
     if (u.onWall) buffs.push('On the rampart');
     if (u.fx.shield > 0) buffs.push(`Shielded (${Math.ceil(u.fx.shield)})`);
-    if (u.fx.haste > 0) buffs.push('Hasted');
+    if (u.fx.haste > 0) buffs.push('Quickened');
     if (u.fx.slow > 0) buffs.push('Slowed');
     if (u.fx.empower > 0) buffs.push('Blessed');
-    if (u.fx.enfeeble > 0) buffs.push('Enfeebled');
+    if (u.fx.enfeeble > 0) buffs.push('Weakened');
+    if (u.hope) buffs.push('Hope');
+    if (u.fear) buffs.push('Fear');
     if (u.inside && u.hp < u.maxHp) buffs.push('Healing');
     if (isMage(u)) buffs.push(u.auto ? 'Auto-cast on' : 'Auto-cast off');
     if (u.type === 'ninja') {
@@ -953,7 +1065,7 @@ function updateHUD(dt) {
     b.querySelector('.prog i').style.width = training ? ((q[0].t / def.time) * 100).toFixed(1) + '%' : '0%';
     const ub = b.querySelector('.ub');
     ub.classList.toggle('busy', !!me.research[type]);
-    ub.classList.toggle('on', UI.panel === type);
+    ub.classList.toggle('on', UI.panel === groupOf(type).key);
   });
   const cb = document.querySelector('#train .castlebtn');
   cb.classList.toggle('busy', !!me.research.castle);
@@ -970,25 +1082,36 @@ function updateHUD(dt) {
   else if (sel.length) mode = 'sel:' + JSON.stringify(selectionCaps());
   if (mode !== UI.cardMode) buildCard(mode);
   if (UI.panel) {
-    const type = UI.panel, r = me.research[type], card = $('card');
-    card.querySelector('.rs').textContent = r ? `Researching ${upgradeDef(type, r.key).name}` : 'Idle';
+    const card = $('card'), active = panelTypes(UI.panel).filter(t => me.research[t]).map(t => upgradeDef(t, me.research[t].key).name);
+    card.querySelector('.rs').textContent = active.length ? `Researching ${active.join(', ')}` : 'Idle';
+    const studying = canTrain(me, 'architect') && G.units.some(u => u.team === 0 && !u.dead && u.type === 'architect');
     card.querySelectorAll('.ubtn').forEach(b => {
+      const type = b.dataset.type, r = me.research[type];
       const chain = b.dataset.chain.split(',').map(k => upgradeDef(type, k));
       const d = chain.find(c => !me.upgrades[type][c.key]) || chain[chain.length - 1];
       const key = d.key;
       if (b.dataset.upg !== `${type}:${key}`) {
-        // moved on to the next tier: swap the icon and price
+        // moved on to the next tier: swap the icon
         b.dataset.upg = `${type}:${key}`;
         drawUpgradeIcon(b.querySelector('canvas'), type, key);
-        b.querySelector('.uc').innerHTML = `${d.cost}${d.mana ? `<i class="ico mana"></i>${d.mana}` : ''}`;
+      }
+      const p = upgradePrice(me, type, d), priceKey = `${key}:${p.gold}:${p.mana}`;   // the price (after the architects' savings)
+      if (b.dataset.price !== priceKey) {
+        b.dataset.price = priceKey;
+        b.querySelector('.uc').innerHTML = `${p.gold}${p.mana ? `<i class="ico mana"></i>${p.mana}` : ''}`;
+        b.classList.toggle('saved', p.off > 0);
       }
       b.querySelectorAll('.pips i').forEach((p, i) => p.classList.toggle('on', !!me.upgrades[type][chain[i].key]));
       const done = !!me.upgrades[type][key], active = r && r.key === key;
       b.classList.toggle('done', done);
       b.classList.toggle('active', !!active);
-      b.classList.toggle('poor', !done && !active && (me.gold < d.cost || me.mana < (d.mana || 0)));
+      b.classList.toggle('poor', !done && !active && (me.gold < p.gold || me.mana < p.mana));
       b.classList.toggle('blocked', !done && !active && (!!r || (d.requires && !me.upgrades[type][d.requires])));
       b.querySelector('.prog i').style.width = active ? ((r.t / d.time) * 100).toFixed(1) + '%' : '0%';
+      // the architects' study book: shown while you have an Architect, lit on the upgrade they study
+      const book = b.querySelector('.study');
+      book.style.display = studying && !done && !active ? '' : 'none';
+      book.classList.toggle('on', me.studyFocus === `${type}:${key}`);
     });
   } else {
     setHTML('cardInfo', selectionInfoHTML(me));
@@ -1055,7 +1178,7 @@ function drawMinimap() {
     c.fill();
   }
   for (const wl of G.walls) {
-    c.fillStyle = wl.progress >= 1 ? '#bdb5a2' : '#7a7266';
+    c.fillStyle = wl.ruin ? '#4a4038' : wl.progress >= 1 ? '#bdb5a2' : '#7a7266';
     c.fillRect(wl.x * k - 1, gy - 6, 3, lh + 6);
   }
   for (const p of G.pools) {

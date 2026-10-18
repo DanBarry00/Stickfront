@@ -85,6 +85,7 @@ function cycleAutopilot() {
   const d = G.dbg, i = AUTOPILOTS.indexOf(d.autopilotLevel);
   d.autopilotLevel = AUTOPILOTS[(i + 1) % AUTOPILOTS.length];
   G.autopilot = d.autopilotLevel === null ? null : d.autopilotLevel === 'easy' ? new PoorAI(0) : new SmartAI(0, d.autopilotLevel);
+  G.teams[0].aiControl = false;   // (a SmartAI autopilot sets it again on its first think)
   toast(d.autopilotLevel ? `Autopilot: ${AI_LEVELS[d.autopilotLevel].name} AI is playing your side` : 'Autopilot off — you have control', 'debug');
   refreshDebug();
 }
@@ -162,6 +163,28 @@ function playHeadless(seed, left, right, maxTime, clans = ['base', 'base']) {
   G.autopilot = left === 'easy' ? new PoorAI(0) : new SmartAI(0, left);
   while (!G.over && G.time < maxTime) update(1 / 30);
   return { seed, clans: clans.join(' vs '), winner: G.over ? G.over.winner : 'draw', time: Math.round(G.time), map: `${G.map.lane.key}/${G.map.mineLayout.key}${G.shrine ? '/monolith' : ''}` };
+}
+
+// One headless game with the computer (right) forced to a play style: runStyleTest('veryhard',
+// 'rush', 'hard', 'fortress', 4) plays 4 random maps against a Hard opponent playing Fortress (leave
+// the opponent's style out for a random one) and lists who won, when, and how each plan unfolded.
+function playStyleGame(level, style, opp, oppStyle, seed, clans = ['base', 'base'], maxTime = 1500) {
+  setDifficulty('normal');   // (no Very Hard head start from newGame: it's given below, once)
+  newGame(seed, clans);
+  G.state = 'sim';
+  G.ai = new SmartAI(1, level, style);
+  if (level === 'veryhard') veryHardHeadStart(G.teams[1]);
+  G.autopilot = new SmartAI(0, opp, oppStyle);
+  while (!G.over && G.time < maxTime) update(1 / 30);
+  return { winner: G.over ? (G.over.winner === 1 ? 'computer' : 'opponent') : 'draw', time: Math.round(G.time), plan: G.ai.log.join(' > '), opponentPlan: G.autopilot.log[0] };
+}
+
+function runStyleTest(level, style, opp = 'hard', oppStyle, maps = 4, clans) {
+  const keep = AI_DIFFICULTY, games = [];
+  for (let i = 0; i < maps; i++) games.push(playStyleGame(level, style, opp, oppStyle, randomSeed(), clans));
+  console.table(games);
+  endTest(keep);
+  return games.reduce((w, g) => (w[g.winner]++, w), { computer: 0, opponent: 0, draw: 0 });
 }
 
 // Restores the player's settings and shows the title screen after a test.
@@ -325,6 +348,14 @@ function drawChart(canvas, key) {
 function battleInsights(won) {
   const out = [], hist = G.history;
   if (hist.length < 2) return out;
+  // the computer's play style, how it unfolded, and any head start it had
+  if (G.ai && G.ai.log && G.ai.log.length > 1) {
+    const [style, ...phases] = G.ai.log;
+    const shown = phases.length > 5 ? [...phases.slice(0, 5), '…'] : phases;
+    const b = G.ai.boosts || [], list = b.length > 1 ? `${b.slice(0, -1).join(', ')} and ${b[b.length - 1]}` : b[0];
+    const boosts = list ? ` It started with ${list}.` : '';
+    out.push(`The enemy's plan (${style}): ${shown.join(' → ')}.${boosts}`);
+  }
   const me = 0, foe = 1, end = teamSnapshot(me), endFoe = teamSnapshot(foe);
   const peak = (id, k) => Math.max(...hist.map(h => h.teams[id][k]));
   const at = t => hist.reduce((best, h) => (Math.abs(h.t - t) < Math.abs(best.t - t) ? h : best), hist[0]);

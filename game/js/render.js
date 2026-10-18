@@ -176,7 +176,7 @@ function drawDecals(ctx, x0, x1) {
 
 // Units standing on a wall are drawn lifted onto its top.
 function drawUnit(ctx, u) {
-  const lift = u.onWall && !u.dead ? wallHeight(u.onWall) : 0;
+  const lift = unitLift(u);   // up on a trench, in a tower or on the walkway
   if (!lift) return drawUnitBody(ctx, u);
   ctx.save();
   ctx.translate(0, -lift);
@@ -219,12 +219,13 @@ function drawUnitInAir(ctx, u, dying, fall, alpha, lift) {
     flash: u.flash, seed: u.seed, fall, alpha, perks: u.perks, lift,
     pray: u.praying && !dying ? u.pray % 1 : -1, rage: dying ? 0 : rageOf(u), panning: u.panning && !dying,
     flash: u.lastStand > 0 ? (Math.sin(RT * 30) > 0 ? 1 : 0) : u.flash,
-    wall: u.shieldWall, arch: u.type === 'archer' ? archPose(u, dying) : null, cast: u.swingKind === 'cast',
-    chains: isGiant(u) ? giantChains(u) : 0, stone: u.isStatueGiant ? G.teams[u.team].statue.stone : null,
-    starRanged: u.starRanged, grounded: u.grounded, aimFa: u.aimFa, pace: u.pace, salting: u.salting, javelin: !!(u.perks.javelin && u.javelin),
+    wall: u.shieldWall, arch: u.type === 'archer' ? archPose(u, dying) : null, cast: u.swingKind === 'cast' || u.swingKind === 'summon',
+    chains: isGiant(u) ? giantChains(u) : 0, stone: u.isStatueGiant ? G.teams[u.team].statue.stone : null, guard: u.guardT > 0, invuln: u.invulnT > 0,
+    starRanged: u.starRanged, grounded: u.grounded, aimFa: u.aimFa, pace: u.pace, salting: u.salting, laying: u.laying, javelin: !!(u.type === 'gladiator' && u.javelin), net: !!(u.type === 'gladiator' && u.net), netT: u.netT, kills: u.kills || 0, rise: u.riseT > 0 ? u.riseT : 0,
   });
   if (dying) return;
   drawBuffsOver(ctx, u);
+  if (u.netT > 0) drawNetOver(ctx, u.x, u.y, u.scale, Math.min(1, u.netT));   // pinned under a Gladiator's net
   const barY = u.y - 82 * u.scale;
   if (u.selected || u.showHp > 0 || u.hp < u.maxHp) {
     const w = 26, f = u.hp / u.maxHp;
@@ -313,6 +314,20 @@ function drawBuffsOver(ctx, u) {
   if (u.drillN > 0) {
     ctx.fillStyle = '#9fb4cc';
     for (let i = 0; i < u.drillN; i++) ctx.fillRect(u.x - 11 + i * 5, top + 7, 3, 2);
+  }
+  // mages' auras: a pale cross (Cleric's ward), a violet flame (Warlock's fury)
+  if (u.ward) {
+    ctx.strokeStyle = 'rgba(200,255,225,0.85)';
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(u.x - 9, top + 1); ctx.lineTo(u.x - 9, top - 5);
+    ctx.moveTo(u.x - 12, top - 2); ctx.lineTo(u.x - 6, top - 2);
+    ctx.stroke();
+  }
+  if (u.fury) {
+    ctx.fillStyle = 'rgba(200,120,255,0.85)';
+    ellipse(ctx, u.x + 9, top - 2, 2, 3.4);
+    ctx.fill();
   }
 }
 
@@ -469,6 +484,22 @@ function drawProjectiles(ctx) {
       if (chance(0.5)) G.particles.push({ kind: 'spark', x: p.x, y: p.y - 4, vx: rnd(-8, 8), vy: rnd(-20, -5), life: 0.3, max: 0.3, color: '#ff9a2e', size: 1.4 });
       continue;
     }
+    if (p.kind === 'net') {
+      // a net spinning open as it flies
+      const open = 4 + Math.min(1, p.t / p.T) * 7, spin = p.t * 9;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(spin);
+      ctx.strokeStyle = '#c8b890';
+      ctx.lineWidth = 0.9;
+      ctx.beginPath();
+      for (let i = -1; i <= 1; i++) { ctx.moveTo(-open, i * open * 0.5); ctx.lineTo(open, i * open * 0.5); ctx.moveTo(i * open * 0.5, -open); ctx.lineTo(i * open * 0.5, open); }
+      ctx.stroke();
+      ctx.fillStyle = '#6a6e74';
+      for (const [dx, dy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { ctx.beginPath(); ctx.arc(dx * open, dy * open, 1.4, 0, TAU); ctx.fill(); }
+      ctx.restore();
+      continue;
+    }
     if (p.kind === 'stone') {
       ctx.fillStyle = '#7d7870';
       ctx.beginPath();
@@ -602,6 +633,21 @@ function drawPlacing(ctx) {
     const ok = w && w.team === 0 && w.progress >= 1 && w.tier !== 2;
     ctx.fillStyle = ok ? '#d8f0c8' : '#9c8f76';
     ctx.fillText(ok ? `Raise a palisade here (${w.reinforcing ? 'resume' : WALL_COST + ' gold'})` : 'Click one of your finished trenches', x, y - 24);
+  } else if (UI.placing === 'tar' || UI.placing === 'mine' || UI.placing === 'tower') {
+    // the architect's work: a ghost at the cursor, red with the reason when it can't go there
+    const tower = UI.placing === 'tower', yy = tower ? towerY() : clamp(y, LANE_TOP + 4, LANE_BOT - 4);   // towers always go at the back
+    const problem = tower ? towerSpotProblem(me, x, yy) : trapSpotProblem(me, x, yy);
+    ctx.globalAlpha = 0.55;
+    if (tower) { const ghost = { x, y: yy, progress: 1, hp: 1, max: 1, team: 0, flash: problem ? 1 : 0 }; drawTower(ctx, ghost); drawTowerFront(ctx, ghost); }
+    else drawTrap(ctx, { kind: UI.placing, x, y: yy, team: 0, armed: true, magic: magicTraps(me), spotted: [true, true] });
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = problem ? '#d04030' : '#8fbf6a';
+    ctx.lineWidth = 1.5;
+    ellipse(ctx, x, yy, tower ? 34 : UI.placing === 'tar' ? TRAP.tar.coverR + 3 : 14, tower ? 8 : UI.placing === 'tar' ? 11 : 5);
+    ctx.stroke();
+    ctx.fillStyle = problem ? '#ffb3a8' : '#d8f0c8';
+    const name = tower ? `Archer tower (${TOWER.cost} gold)` : `${TRAP[UI.placing].name} (${trapCost(me, UI.placing)} gold)`;
+    ctx.fillText(problem || name, x, yy - (tower ? TOWER.h + 40 : 24));
   } else if (UI.placing === 'salt') {
     const m = mineAt(x, y, false);
     ctx.fillStyle = m ? '#f0eee8' : '#9c8f76';
@@ -657,6 +703,9 @@ function render(ctx) {
   }
   drawDecals(ctx, x0, x1);
   drawPools(ctx, x0, x1);
+  for (const p of G.tarPools) if (inView(p.x)) drawTarPool(ctx, p);
+  for (const tr of G.traps) if (inView(tr.x)) drawTrap(ctx, tr);
+  drawRanges(ctx);
   for (const t of G.teams) if (inView(t.statue.x, 200)) drawStatue(ctx, t.statue);
   if (G.shrine && inView(G.shrine.x, 200)) drawShrine(ctx, G.shrine);
 
@@ -664,12 +713,17 @@ function render(ctx) {
   const ents = [];
   drawDefendFlag(ctx, G.teams[0]);
   for (const m of G.mines) if (inView(m.x)) ents.push({ y: m.gold > 0 ? m.y : m.y - 30, m });
-  for (const w of G.walls) if (inView(w.x)) for (let k = 0; k < WALL_SEGS; k++) ents.push({ y: wallSegY(k), w, k });
+  const rebuilders = G.selection.some(u => u.type === 'architect' && !u.dead);
+  for (const w of G.walls) if (inView(w.x)) { if (w.ruin) ents.push({ y: LANE_TOP, ruin: w }); else for (let k = 0; k < WALL_SEGS; k++) ents.push({ y: wallSegY(k), w, k }); }
+  for (const tw of G.towers) if (inView(tw.x)) { if (tw.ruin) ents.push({ y: tw.y, ruin: tw }); else ents.push({ y: tw.y, tw }, { y: tw.y + 2.5, twf: tw }); }   // twf: parapet and roof, over the archer (who stands at y + 2)
   for (const u of G.units) if (inView(u.x)) ents.push({ y: u.y + (u.onWall ? 0.5 : 0), u });
   ents.sort((a, b) => a.y - b.y);
   for (const e of ents) {
     if (e.m) drawMine(ctx, e.m, UI.hoverMine === e.m);
     else if (e.w) drawWallSeg(ctx, e.w, e.k);
+    else if (e.tw) drawTower(ctx, e.tw);
+    else if (e.twf) drawTowerFront(ctx, e.twf);
+    else if (e.ruin) drawRuin(ctx, e.ruin, rebuilders && (e.ruin.team === 0 || e.ruin.mid));
     else drawUnit(ctx, e.u);
   }
 
@@ -699,15 +753,13 @@ function render(ctx) {
   ctx.globalAlpha = 1;
 
   if (UI.hoverBuilding && G.state === 'play') {
-    const type = UI.hoverBuilding, hall = RAMPART_HALL_X[type];
-    const bx = type === 'castle' ? 250 : hall || BUILD_X[type] || GIANT_PIT_X;
-    const ly = type === 'castle' ? WALL_TOP - 40 : hall ? WALL_TOP - 115 : LANE_TOP - 135;
+    const type = UI.hoverBuilding, bx = type === 'castle' ? 250 : CLASS_X[type], ly = type === 'castle' ? WALL_TOP - 40 : type === 'giants' ? LANE_TOP - 135 : LANE_TOP - 155;
     ctx.font = '600 13px "Segoe UI", sans-serif';
     ctx.textAlign = 'center';
     ctx.fillStyle = 'rgba(0,0,0,0.7)';
     ctx.fillRect(bx - 80, ly - 15, 160, 20);
     ctx.fillStyle = '#e6d6aa';
-    ctx.fillText(`${buildingName(type)} — click for upgrades`, bx, ly);
+    ctx.fillText(`${buildingName(type, G.teams[0])} — click for upgrades`, bx, ly);
   }
   if (UI.placing) drawPlacing(ctx);
 
@@ -753,4 +805,37 @@ function vignette(vw) {
   g.fillRect(0, 0, w, h);
   VIG = { vw, c };
   return c;
+}
+
+// Selected shooters and casters show their reach as a dotted ellipse on the ground around them:
+// ranged units their shot (with a tower's bonus while posted in one; a ballista's dead zone too),
+// ninjas with Throwing Stars their throw, and mages both their staff and how far they can cast.
+function drawRanges(ctx) {
+  const cy = (LANE_TOP + LANE_BOT) / 2, ry = (LANE_BOT - LANE_TOP) / 2 + 16;
+  const ring = (u, r, col, dash, lift = 0) => {
+    ctx.strokeStyle = col;
+    ctx.setLineDash(dash);
+    ctx.beginPath();
+    ctx.ellipse(u.x, cy - lift, r, ry, 0, 0, TAU);
+    ctx.stroke();
+  };
+  ctx.save();
+  ctx.lineWidth = 1.4;
+  let n = 0;
+  for (const u of G.selection) {
+    if (u.dead || u.team !== 0 || n >= 16) continue;
+    if (isMage(u)) {
+      const spell = Math.max(...Object.values(SPELLS).filter(S => S.owner === u.type).map(S => S.range));
+      ring(u, spell, u.type === 'cleric' ? 'rgba(170,240,200,0.55)' : 'rgba(200,140,255,0.55)', [8, 6]);
+      ring(u, u.range, 'rgba(235,225,200,0.35)', [3, 5]);
+      n++;
+    } else if (isRanged(u) || (u.type === 'ninja' && u.perks.stars)) {
+      const r = isRanged(u) ? u.range : STAR.range;
+      ring(u, r, 'rgba(235,225,200,0.5)', [6, 6]);
+      if (u.type === 'ballista') ring(u, BALLISTA.minRange, 'rgba(220,110,90,0.45)', [2, 5]);
+      n++;
+    }
+  }
+  ctx.setLineDash([]);
+  ctx.restore();
 }

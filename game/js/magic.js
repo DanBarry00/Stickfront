@@ -66,14 +66,6 @@ function releaseSpell(u, c) {
     case 'fireball':
       G.spellShots.push({ kind: 'fireball', team, src: u, x: u.x + u.facing * 12, y: u.y - 74, sx: u.x + u.facing * 12, sy: u.y - 74, tx: c.x, ty: c.y - 20, t: 0, T: 0.9 });
       break;
-    case 'haste':
-    case 'empower':
-      for (const o of allies) o.fx[c.k] = S.dur;
-      break;
-    case 'slow':
-    case 'enfeeble':
-      for (const o of foes) o.fx[c.k] = S.dur;
-      break;
   }
 }
 
@@ -94,7 +86,7 @@ function bestSpot(u, S, centers, members, weight) {
 
 // Decide where (and whether) an auto-casting mage should use each spell. Every spell has an
 // eye out for its opposite: Healing Pool answers Blight Pool, Sanctuary answers an incoming
-// Fireball, Haste answers Hex of Slowness, War Blessing answers Enfeeble — and vice versa.
+// Fireball — and vice versa.
 function planSpell(u, k, S, allies, foes) {
   const near = (m, list) => list.some(f => Math.abs(f.x - m.x) < 75 && Math.abs(f.y - m.y) < 32);
   const enemyPools = kind => G.pools.filter(p => p.team !== u.team && p.kind === kind).map(p => ({ x: p.x, y: p.y, bonus: 1 }));
@@ -115,14 +107,6 @@ function planSpell(u, k, S, allies, foes) {
       const s = bestSpot(u, S, foes, foes, m => 0.75 + (m.fx.shield > 0 ? 0.25 : 0));
       return s && s.score >= 3 ? s : null;
     }
-    case 'haste':
-      return bestSpot(u, S, allies, allies, m => (m.fx.haste > 2 ? 0 : (m.fx.slow > 0 ? 1.2 : 0) + (near(m, foes) ? 0.75 : 0)));
-    case 'slow':
-      return bestSpot(u, S, foes, foes, m => (m.fx.slow > 2 ? 0 : (m.fx.haste > 0 ? 1.2 : 0) + (near(m, allies) ? 0.75 : 0)));
-    case 'empower':
-      return bestSpot(u, S, allies, allies, m => (m.fx.empower > 2 || m.type === 'miner' ? 0 : (m.fx.enfeeble > 0 ? 1.2 : 0) + (near(m, foes) ? 0.75 : 0)));
-    case 'enfeeble':
-      return bestSpot(u, S, foes, foes, m => (m.fx.enfeeble > 2 || m.type === 'miner' ? 0 : (m.fx.empower > 0 ? 1.2 : 0) + (near(m, allies) ? 0.75 : 0)));
   }
   return null;
 }
@@ -146,6 +130,8 @@ function autoCast(u) {
 
 function healUnit(t, amt, src) {
   if (t.dead || t.hp >= t.maxHp) return;
+  // a Cleric's touch: quickened and blessed for as long as the Cleric takes to heal again
+  if (src && src.type === 'cleric') { const T = atkTimeOf(src); t.fx.haste = Math.max(t.fx.haste, T); t.fx.empower = Math.max(t.fx.empower, T); }
   t.hp = Math.min(t.maxHp, t.hp + amt);
   t.showHp = 2;
   if (src) {
@@ -208,6 +194,8 @@ function updateSpellWorld(dt) {
       const step = 430 * dt;
       if (d <= step + 6) {
         damage(t, s.dmg, s.src && !s.src.dead ? s.src : null);
+        // the Warlock's curse: slowed and weakened for as long as the Warlock takes to cast again
+        if (s.src && !t.dead && t.fx) { const T = atkTimeOf(s.src); t.fx.slow = Math.max(t.fx.slow, T); t.fx.enfeeble = Math.max(t.fx.enfeeble, T); }
         spawnBurst(tx, ty, 5, { color: '#b04dff', speed: 70, up: 20, g: 100, life: 0.4, size: 2 });
         s.done = true;
       } else {
