@@ -259,6 +259,9 @@ function targetScore(u, e, d) {
   if (!(ninja && u.perks.focus)) s -= tauntBias(e) * (ninja ? 4 : 1);
   if (u && u.type === 'ballista' && d < BALLISTA.minRange + 20) s += 2000;   // too close to aim at: anything else first
   if (e.onTower) s += 260;   // an archer behind a tower's parapet is a poor target: others first
+  // the snowballers are everyone's business: a Gladiator full of glory, a Necromancer fat on souls
+  if (e.type === 'gladiator') s -= (e.kills || 0) * 15;
+  else if (e.type === 'necromancer') s -= 60 + (e.souls || 0) * 8;
   return s;
 }
 
@@ -429,7 +432,8 @@ function onSwingHit(u) {
   } else if (u.swingKind === 'cast') {
     releaseSpell(u, t);
   } else if (u.swingKind === 'heal') {
-    if (t && !t.dead) healUnit(t, u.dmg * rnd(0.85, 1.15) * dmgMult(u), u);
+    if (t && !t.dead && t.team !== u.team) smiteUndead(u, t);   // holy light on an enemy zombie
+    else if (t && !t.dead) healUnit(t, u.dmg * rnd(0.85, 1.15) * dmgMult(u), u);
   } else if (u.swingKind === 'shoot' && u.type === 'warlock') {
     if (isValidTarget(t)) fireBolt(u, t, u.dmg * rnd(0.85, 1.15) * dmgMult(u));
   } else if (u.swingKind === 'shoot') {
@@ -1234,6 +1238,8 @@ function damage(t, amt, src, aoe) {
   if (t.ward) amt = Math.max(1, Math.round(amt * (1 - MAGE_AURA.ward)));   // a Cleric's ward nearby
   if (t.hope || t.fear) amt = Math.max(1, Math.round(amt * (1 - (t.hope ? HOPE.dmg : 0) + (t.fear ? HOPE.dmg : 0))));   // Hope and Fear
   if (t.type === 'zombie' && src && (src.castle || isRanged(src))) amt = Math.max(1, Math.round(amt * NECRO.rangedMul));   // arrows pass through rotten flesh
+  const home = homeGround(t);   // defenders fight better near their own castle
+  if (home) amt = Math.max(1, Math.round(amt * (1 - home)));
   if (t.type === 'golem' && src && src.type === 'warlock') amt = Math.max(1, Math.round(amt * GOLEM.spellMul));   // golems shrug off Warlock magic
   // archers are the giant-killers: extra damage, and a chance to send it into a confused rage
   if (isGiant(t) && src && src.type === 'beastmaster') amt = Math.round(amt * BEASTMASTER.giantMul);   // the giant-killer's sling
@@ -1324,14 +1330,14 @@ function killUnit(u, src) {
   leaveTower(u);
   leaveRampart(u);
   addDecal(u.x - u.facing * 14, u.y + 1, rnd(6, 10), 0.6);
-  if (src) {
+  if (src && G.stats[src.team]) {   // (kills by the Monolith tower's neutral archers count for nobody)
     G.stats[src.team].kills++;
     // a Gladiator feeds on glory; a zombie's victim gets up again on the zombie's side
     if (src.type === 'gladiator' && !src.dead && src.team !== u.team) gladiatorKill(src);
-    if (src.type === 'zombie' && src.team !== u.team && !isGiant(u) && u.type !== 'zombie' && !u.inside && !isFlying(u)) raiseZombie(src.team, u.x, u.y, src.necro && !src.necro.dead ? src.necro : null);
+    if (src.type === 'zombie' && src.team !== u.team && src.necro && !src.necro.dead) zombieKill(src.necro, u);
     // Mercenary bounty: a share of what the fallen unit cost
     const bounty = clanOf(G.teams[src.team]).bounty;
-    if (bounty && src.team !== u.team && u.type !== 'zombie') {
+    if (bounty && src.team !== u.team && u.type !== 'zombie' && G.teams[u.team]) {
       const pay = Math.round(unitCost(G.teams[u.team], u.type).gold * bounty);
       G.teams[src.team].gold += pay;
       G.stats[src.team].gold += pay;
@@ -1425,6 +1431,7 @@ function updateUnit(u, dt) {
     }
     if (u.swing >= 1) { u.swing = -1; u.leapSwing = false; }
   }
+  if (u.team === NEUTRAL) { updateNeutralArcher(u); return; }   // the Monolith tower's own archers
   u.capSpeed = null;
   u.moving = false;
   u.stepDist = 0;

@@ -31,6 +31,7 @@ function debugDamage(src, amt, structure) {
   if (!G.dbg || src.team === undefined || amt <= 0) return;
   const key = src.castle ? 'castle' : src.type || 'other';
   const d = G.dbg.dmg[src.team];
+  if (!d) return;   // (the Monolith tower's neutral archers aren't tallied)
   d[key] = (d[key] || 0) + amt;
   if (structure) d._structures = (d._structures || 0) + amt;
 }

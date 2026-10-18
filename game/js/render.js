@@ -211,6 +211,14 @@ function drawUnitBody(ctx, u) {
 }
 
 function drawUnitInAir(ctx, u, dying, fall, alpha, lift) {
+  // a Gladiator's glory glows about his feet, brighter with every kill
+  if (u.type === 'gladiator' && u.kills && !dying) {
+    const r = 16 + u.kills, g = ctx.createRadialGradient(u.x, u.y - 4, 2, u.x, u.y - 4, r);
+    g.addColorStop(0, `rgba(240,200,90,${Math.min(0.55, 0.12 + u.kills * 0.025)})`);
+    g.addColorStop(1, 'rgba(240,200,90,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(u.x - r, u.y - 4 - r, 2 * r, 2 * r);
+  }
   // a vanished ninja is a faint shimmer (your own are a little easier to see)
   if (u.stealth && !dying) alpha *= u.team === 0 ? 0.35 : 0.18;
   drawStickman(ctx, {
@@ -233,6 +241,15 @@ function drawUnitInAir(ctx, u, dying, fall, alpha, lift) {
     ctx.fillRect(u.x - w / 2 - 1, barY - 1, w + 2, 5);
     ctx.fillStyle = f > 0.5 ? '#6aa84f' : f > 0.25 ? '#c9a23a' : '#b5402f';
     ctx.fillRect(u.x - w / 2, barY, w * f, 3);
+  }
+  // what a Quartermaster is up to; a Necromancer's pack and souls; a Gladiator's glory
+  if (u.type === 'quartermaster') {
+    const j = u.order.type === 'replenish' ? { kind: 'prospect' } : u.qmJob;
+    if (j && !u.inside) drawJobIcon(ctx, u.x, barY - 12, j.kind, j.kind === 'refit' ? j.time / QM.refitTime : j.kind === 'heal' ? j.time / QM.healTime : 0);
+  } else if (u.type === 'necromancer' && !u.inside) {
+    drawCountBadge(ctx, u.x, barY - 11, 'skull', `${zombiesOf(u).length}/${hordeSize(G.teams[u.team], u)}${u.souls ? ` · ${u.souls}` : ''}`, '#9fe8a0');
+  } else if (u.type === 'gladiator' && u.kills && !u.inside) {
+    drawCountBadge(ctx, u.x, barY - 11, 'star', `${u.kills}`, '#e8c860');
   }
   if (u.refitting) {
     const w = 26;

@@ -152,11 +152,11 @@ function issueCommand(wx, wy) {
   const tw = towerAt(wx, wy);
   if (tw && !foe) {
     const archers = sel.filter(u => u.type === 'archer'), archs = sel.filter(u => u.type === 'architect');
-    const free = tw.team === -1 && (!tw.archer || tw.archer.dead || tw.archer.team === 0);
+    const free = tw.team === -1 && towerCrew(tw).every(a => a.team === 0);   // the Monolith's, once nobody else holds it
     if ((tw.team === 0 || free) && archers.length && tw.progress >= 1) {
       const a = archers.sort((p, q) => Math.abs(p.x - tw.x) - Math.abs(q.x - tw.x))[0];
       if (postArcher(a, tw)) marker(tw.x, tw.y, '#9fb4cc');
-      else if (me.id === 0) toast('That tower already has an archer');
+      else if (me.id === 0) toast(towerCrew(tw).length >= towerSlots(tw) ? 'That tower is full' : 'Clear the tower first');
       return;
     }
     if (tw.team === 0 && archs.length && (tw.progress < 1 || tw.hp < tw.max)) {
@@ -164,7 +164,7 @@ function issueCommand(wx, wy) {
       marker(tw.x, tw.y, '#c9b27a');
       return;
     }
-    if (tw.team === 1) {
+    if (tw.team === 1 || (tw.mid && ![-1, 0].includes(towerHolder(tw)))) {   // the enemy's, or the Monolith's while someone else holds it
       for (const u of sel) setOrder(u, { type: 'attack', target: tw });
       marker(tw.x, tw.y, '#c9533e');
       return;
@@ -990,7 +990,7 @@ function unitJob(u, me) {
     if (j) return { heal: 'Patching up a soldier', refit: 'Refitting a veteran', gear: 'Bringing a new net and javelin', cheer: 'Cheering on the miners', materials: 'Bringing an Architect materials' }[j.kind];
     return u.qmRole === 'troops' ? 'With the troops' : 'With the workers';
   }
-  if (u.type === 'necromancer' && u.order.type === 'stance') return `Leading ${zombiesOf(u).length}/${hordeSize(me)} zombies`;
+  if (u.type === 'necromancer' && u.order.type === 'stance') return `Leading ${zombiesOf(u).length}/${hordeSize(me, u)} zombies (${u.souls || 0} souls)`;
   if (u.rampart >= 0) return 'Manning the rampart';
   if (u.netT > 0) return 'Caught in a net!';
   if (u.order.type === 'tower') return u.onTower ? 'Posted in a tower' : 'Climbing into a tower';

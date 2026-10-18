@@ -14,6 +14,14 @@ const POP_CAP = 30;
 const START_GOLD = 500;
 const MAX_MANA = 1000;
 const STATUE_HP = 2500;
+// Defense beats offense, and a lost fight isn't a lost game:
+// - home ground: troops take up to homeMax less damage near their own castle (full within the
+//   castle archers' reach, fading to nothing at the middle of the map)
+// - a statue with no enemy soldier within regenR for regenDelay seconds mends regen hp a second
+// - rally: a side whose army has fallen below rallyAt of the enemy's (once the enemy's is worth
+//   rallyMin) trains rallyTrain times as fast, earns rallyGold a second and its castle archers
+//   shoot rallyArchers times as fast, until it recovers past rallyEnd
+const DEFENSE = { homeMax: 0.2, regen: 6, regenR: 900, regenDelay: 15, rallyAt: 0.55, rallyEnd: 0.8, rallyMin: 700, rallyTrain: 1.35, rallyGold: 1.5, rallyArchers: 1.25 };
 const STATUE_X = 800;        // distance of each statue from its world edge
 const GATE_X = 560;          // castle front wall (gate) distance from world edge
 const BUILD_X = { sword: 95, spear: 215, archer: 335, miner: 455 };   // building centers inside the castle
@@ -28,12 +36,16 @@ const JAVELIN = { range: 300, dmg: 30 };   // a Gladiator's javelin (one, refill
 // per veteran, free); cheer miners within cheerR to hurry (speed cheerMul) for cheerTime, every
 // cheerCd; bring an architect materials for a free trap every materialsCd; keep safe from enemies.
 const QM = { heal: 14, healSalves: 22, healTime: 1.2, healReach: 60, refitTime: 2, cheerR: 140, cheerTime: 10, cheerMul: 1.4, cheerCd: 22, materialsCd: 75, materialsWagon: 45, safe: 170 };
-// Gladiators: the net pins its target for netTime (it reaches netRange); every kill (up to maxKills)
+// Gladiators: the net pins its target for netTime (it reaches netRange); every kill (up to maxKills: a snowball)
 // adds killHp and killDmg; with fewer than aloneN friends within aloneR, alonePer more damage each.
-const GLADIATOR = { netRange: 150, netTime: 3, netTimeWeighted: 5, killHp: 12, killDmg: 0.05, maxKills: 10, aloneR: 160, aloneN: 5, alonePer: 0.08, manica: 0.2 };
+const GLADIATOR = { netRange: 150, netTime: 3, netTimeWeighted: 5, killHp: 15, killDmg: 0.04, maxKills: 25, aloneR: 160, aloneN: 5, alonePer: 0.08, manica: 0.2 };
 // Necromancers: up to max zombies (+2 per Horde upgrade), one raised every summonCd seconds (rites:
 // Quick Rites) for mana; zombies stay within leash of it, and take rangedMul of projectile damage.
-const NECRO = { max: 6, summonCd: 6, rites: 4, mana: 5, leash: 170, rangedMul: 0.5, graveHp: 1.5 };
+const NECRO = { max: 6, summonCd: 6, rites: 4, mana: 5, leash: 170, rangedMul: 0.5, graveHp: 1.5,
+  souls: 25, soulsPerSlot: 4, maxExtra: 5, soulPower: 0.03, soulHaste: 0.02 };   // souls: each kill by its zombies (up to souls) grows the pack by one per soulsPerSlot, and its zombies' power and summoning speed
+// The undead and holy light: an enemy Healing Pool burns zombies for poolMul times its healing, and a
+// Cleric with nobody to heal smites the nearest enemy zombie for smiteMul times its heal.
+const UNDEAD = { poolMul: 5, smiteMul: 3 };
 const LEVY_INTERVAL = 60;    // seconds between free Swordwrath with the Levy castle upgrade
 const DEFEND_OFFSET = 250;   // defend line distance in front of statue
 const GARRISON_HEAL = 9;     // hp per second inside the castle
@@ -77,8 +89,11 @@ const TRAP = {
 // Archer towers: an architect raises one (cost, buildHits blows of the hammer); an archer posted in
 // it reaches range further and takes projMul of projectile damage. Melee troops that bring it down
 // bury the archer in the rubble. Reinforced Towers: hp2 times the health; Watchtowers: range3 more.
+// The Monolith's tower holds two archers, and starts manned by two neutral ones (team NEUTRAL) who shoot
+// at both sides with neutral.dmg damage and neutral.range more reach than an archer.
+const NEUTRAL = 2;
 const TOWER = { cost: 150, hp: 500, h: 92, range: 120, projMul: 0.25, buildHits: 14, max: 3, hp2: 1.6, range3: 60,
-  mid: { h: 102, hp: 1400, range: 240, projMul: 0.15, rebuild: 120 } };   // mid: the neutral stone tower at the Monolith, stronger than any a side can build
+  mid: { h: 102, hp: 1400, range: 240, projMul: 0.15, rebuild: 120, slots: 2, neutral: { dmg: 16, range: 120 } } };   // mid: the neutral stone tower at the Monolith, stronger than any a side can build
 const towerH = tw => (tw.mid ? TOWER.mid.h : TOWER.h);   // how high a posted archer stands
 const towerY = () => LANE_TOP + 3;                        // towers stand at the back of the lane, out of the way
 // Wrecked trenches and towers leave a ruin in place (it doesn't block or count as a target) that
@@ -232,7 +247,7 @@ const trainCode = def => def.code || 'Digit' + def.hotkey;
 // of their class's building; Kestrels and Firebirds launch off the rampart above the Range.
 const GIANT_PIT_X = 655;
 const CLASS_X = { infantry: BUILD_X.sword, mages: BUILD_X.spear, ranged: BUILD_X.archer, workers: BUILD_X.miner, giants: GIANT_PIT_X };
-const KESTREL_PERCH_X = 462;   // where flyers launch from the rampart
+const KESTREL_PERCH_X = 270;   // where flyers launch from the rampart (clear of the castle archers and the rampart line)
 const DOOR_X = {};
 for (const g of TRAIN_GROUPS) for (const t of g.types) DOOR_X[t] = CLASS_X[g.key];
 Object.assign(DOOR_X, { flyer: KESTREL_PERCH_X, firebird: KESTREL_PERCH_X, ballista: 500, zombie: CLASS_X.mages });   // ballistas roll out by the gate
@@ -495,6 +510,7 @@ const SHRINE = {
 const TEAM_STYLE = [
   { name: 'Order', body: '#161514', accent: '#c49a2c', accent2: '#e9d7a0', crystal: '#58c3e8', ui: '#c49a2c', statue: '#b8a27a' },
   { name: 'Chaos', body: '#1c0e0e', accent: '#a82a24', accent2: '#ff5a44', crystal: '#b066e8', ui: '#c0432f', statue: '#686268' },
+  { name: 'Neutral', body: '#24221e', accent: '#8a847a', accent2: '#c8c2b4', crystal: '#cfc6b0', ui: '#9a948a', statue: '#8a847a' },   // the Monolith tower's own archers
 ];
 
 const THEMES = [

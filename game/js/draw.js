@@ -3,7 +3,7 @@
 // Limb angles are in a "facing right" frame; `f` (+1/-1) mirrors x.
 
 const NO_PERKS = {};
-const CLOTH = ['#3a2e22', '#3a1512'];
+const CLOTH = ['#3a2e22', '#3a1512', '#3a3a34'];   // (the third: the Monolith tower's neutral archers)
 
 function polar(x, y, ang, len, f) {
   return [x + Math.cos(ang) * len * f, y + Math.sin(ang) * len];
@@ -2813,6 +2813,49 @@ function drawSpearHall(ctx, x, base, st, hover) {
   ctx.stroke();
 }
 
+
+// The flyers' launch perch on the rampart, where Kestrels and Firebirds take off: a timber frame
+// with a plank jutting out over the battlements, a winch for hauling the wings up, and a windsock
+// in the side's colour.
+function drawLaunchPerch(ctx, x, base, st) {
+  const wood = '#5e4128', dark = '#24180d', top = base - 46;
+  ctx.save();
+  ctx.lineCap = 'round';
+  // frame: two posts and a brace
+  ctx.strokeStyle = dark;
+  ctx.lineWidth = 4.5;
+  ctx.beginPath();
+  ctx.moveTo(x - 14, base); ctx.lineTo(x - 12, top);
+  ctx.moveTo(x + 10, base); ctx.lineTo(x + 9, top);
+  ctx.stroke();
+  ctx.strokeStyle = wood;
+  ctx.lineWidth = 3;
+  ctx.stroke();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = shade(wood, -0.15);
+  ctx.beginPath(); ctx.moveTo(x - 13, base - 4); ctx.lineTo(x + 9, top + 12); ctx.moveTo(x + 10, base - 4); ctx.lineTo(x - 12, top + 12); ctx.stroke();
+  // the launch plank, jutting out toward the field
+  ctx.fillStyle = '#4a3420';
+  ctx.beginPath(); ctx.moveTo(x - 18, top); ctx.lineTo(x + 38, top - 3); ctx.lineTo(x + 38, top + 2); ctx.lineTo(x - 18, top + 5); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = dark; ctx.lineWidth = 1; ctx.stroke();
+  ctx.strokeStyle = 'rgba(16,10,5,0.6)';
+  ctx.beginPath(); for (let px = x - 10; px < x + 36; px += 9) { ctx.moveTo(px, top - 1); ctx.lineTo(px, top + 4); } ctx.stroke();
+  // a winch drum and rope
+  ctx.fillStyle = '#3a2814';
+  ctx.beginPath(); ctx.arc(x - 2, top + 20, 4.5, 0, TAU); ctx.fill();
+  ctx.strokeStyle = '#a89870'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(x - 2, top + 16); ctx.lineTo(x + 24, top - 1); ctx.stroke();
+  // windsock
+  ctx.strokeStyle = dark; ctx.lineWidth = 1.4;
+  ctx.beginPath(); ctx.moveTo(x - 12, top); ctx.lineTo(x - 12, top - 22); ctx.stroke();
+  const flap = Math.sin(RT * 3 + x) * 2;
+  ctx.fillStyle = shade(st.accent, -0.1);
+  ctx.beginPath(); ctx.moveTo(x - 12, top - 22); ctx.lineTo(x + 4, top - 20 + flap); ctx.lineTo(x + 3, top - 15 + flap); ctx.lineTo(x - 12, top - 15); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.35)';
+  ctx.fillRect(x - 6, top - 21 + flap * 0.4, 2.5, 6);
+  weather(ctx, x - 18, top - 2, 56, base - top + 2, 61, 0.6);
+  ctx.restore();
+}
 // The Mage Tower: a round stone tower under a slate cone, one window for each of the mages it
 // trains: the Cleric's candlelit arch, the Warlock's violet rose window and the Necromancer's
 // green-lit skull niche over the door.
@@ -3406,6 +3449,9 @@ function drawCastle(ctx, team, hoverKey) {
     ctx.fillRect(x, ceilTop - 14, 14, 14);
     ctx.strokeRect(x, ceilTop - 14, 14, 14);
   }
+  // the flyers' launch perch on the rampart
+  drawLaunchPerch(ctx, KESTREL_PERCH_X, ceilTop, st);
+
   // hanging banners inside the hall
   for (const bx of [146, 266, 386]) drawBanner(ctx, bx, ceilBot, 22, 46, c.banner, st);
 
@@ -4151,7 +4197,7 @@ function drawMidTowerFront(ctx, tw) {
     }
   }
   weather(ctx, x - 56, top - 16, 112, 16, tw.x * 0.29, 0.8);
-  const holder = tw.archer && !tw.archer.dead ? tw.archer.team : -1;
+  const holder = towerHolder(tw);   // a side, NEUTRAL (its own archers) or -1 (empty)
   ctx.lineWidth = 1.4;
   ctx.beginPath(); ctx.moveTo(x + 46, top - 16); ctx.lineTo(x + 46, top - 46); ctx.stroke();
   ctx.fillStyle = holder >= 0 ? shade(TEAM_STYLE[holder].accent, -0.1) : '#9a948a';
@@ -4445,6 +4491,85 @@ function drawNetOver(ctx, x, y, scale, k) {
   ctx.stroke();
   ctx.fillStyle = '#6a6e74';   // lead weights on the hem
   for (let i = 0; i <= 4; i++) { ctx.beginPath(); ctx.arc(-w * 1.25 + i * (w * 2.5 / 4), -2, 1.6, 0, TAU); ctx.fill(); }
+  ctx.restore();
+}
+
+// What a Quartermaster is busy with, as a little sign over its head: a bandage (healing), hammer and
+// wrench (refitting, with a ring filling as it works), a net (Gladiator gear), a horn (cheering the
+// miners), a crate (trap materials) or a pick over gold (restoring a deposit).
+function drawJobIcon(ctx, x, y, kind, k) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.fillStyle = 'rgba(16,12,8,0.78)';
+  ctx.beginPath(); ctx.arc(0, 0, 8, 0, TAU); ctx.fill();
+  ctx.strokeStyle = 'rgba(232,216,168,0.55)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  if (k > 0) {   // progress around the rim
+    ctx.strokeStyle = '#a7c98a';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(0, 0, 8, -Math.PI / 2, -Math.PI / 2 + TAU * Math.min(1, k)); ctx.stroke();
+  }
+  ctx.lineCap = 'round';
+  switch (kind) {
+    case 'heal':
+      ctx.fillStyle = '#f0ece0'; ctx.fillRect(-4.5, -4.5, 9, 9);
+      ctx.fillStyle = '#c0402e'; ctx.fillRect(-1.2, -3.6, 2.4, 7.2); ctx.fillRect(-3.6, -1.2, 7.2, 2.4);
+      break;
+    case 'refit':
+      ctx.strokeStyle = '#8a6a40'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(-4, 4); ctx.lineTo(3, -3); ctx.stroke();
+      ctx.fillStyle = '#b8bec4'; ctx.save(); ctx.rotate(-0.8); ctx.fillRect(-1, -6.5, 6, 3); ctx.restore();
+      ctx.strokeStyle = '#b8bec4'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(4, 4); ctx.lineTo(-2, -2); ctx.stroke();
+      ctx.beginPath(); ctx.arc(-3, -3, 1.8, 0, TAU); ctx.stroke();
+      break;
+    case 'gear':
+      ctx.strokeStyle = '#c8b890'; ctx.lineWidth = 0.9; ctx.beginPath();
+      for (let i = -1; i <= 1; i++) { ctx.moveTo(-4.5, i * 2.5); ctx.lineTo(4.5, i * 2.5); ctx.moveTo(i * 2.5, -4.5); ctx.lineTo(i * 2.5, 4.5); }
+      ctx.stroke();
+      break;
+    case 'cheer':
+      ctx.fillStyle = '#d8b060'; ctx.beginPath(); ctx.moveTo(-4.5, -1.5); ctx.lineTo(3, -4.5); ctx.lineTo(3, 4.5); ctx.lineTo(-4.5, 1.5); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = '#f0e0a8'; ctx.lineWidth = 0.9; ctx.beginPath(); ctx.moveTo(5, -3); ctx.lineTo(6.5, -4.5); ctx.moveTo(5.5, 0); ctx.lineTo(7, 0); ctx.moveTo(5, 3); ctx.lineTo(6.5, 4.5); ctx.stroke();
+      break;
+    case 'materials':
+      ctx.fillStyle = '#8a6a40'; ctx.fillRect(-4.5, -4, 9, 8);
+      ctx.strokeStyle = '#3a2814'; ctx.lineWidth = 1; ctx.strokeRect(-4.5, -4, 9, 8);
+      ctx.beginPath(); ctx.moveTo(-4.5, -4); ctx.lineTo(4.5, 4); ctx.moveTo(4.5, -4); ctx.lineTo(-4.5, 4); ctx.stroke();
+      break;
+    case 'prospect':
+      ctx.fillStyle = '#d8ac2c'; ctx.beginPath(); ctx.arc(2, 2.5, 2.6, 0, TAU); ctx.fill();
+      ctx.strokeStyle = '#8a6a40'; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(-3.5, 4); ctx.lineTo(2, -2.5); ctx.stroke();
+      ctx.strokeStyle = '#b8bec4'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.moveTo(-2.5, -4); ctx.quadraticCurveTo(2.5, -4.5, 4.5, -1); ctx.stroke();
+      break;
+  }
+  ctx.restore();
+}
+
+// A small badge over a unit's head: a glyph and a count (a Necromancer's pack, a Gladiator's glory).
+function drawCountBadge(ctx, x, y, glyph, text, col) {
+  ctx.save();
+  ctx.font = '700 10px "Segoe UI", sans-serif';
+  const w = ctx.measureText(text).width + 17;
+  ctx.fillStyle = 'rgba(16,12,8,0.78)';
+  ctx.fillRect(x - w / 2, y - 7, w, 13);
+  ctx.strokeStyle = rgba(col, 0.6);
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x - w / 2 + 0.5, y - 6.5, w - 1, 12);
+  const gx = x - w / 2 + 7;
+  ctx.fillStyle = col;
+  if (glyph === 'skull') {
+    ctx.beginPath(); ctx.arc(gx, y - 1.5, 3.4, 0, TAU); ctx.fill();
+    ctx.fillRect(gx - 2, y + 1, 4, 2.6);
+    ctx.fillStyle = '#10140c'; ctx.fillRect(gx - 2, y - 2.5, 1.5, 1.5); ctx.fillRect(gx + 0.5, y - 2.5, 1.5, 1.5);
+  } else {
+    ctx.beginPath();
+    for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, r = i % 2 ? 1.7 : 4.2; ctx.lineTo(gx + Math.cos(a) * r, y + Math.sin(a) * r); }
+    ctx.closePath(); ctx.fill();
+  }
+  ctx.fillStyle = col;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, gx + 6, y + 0.5);
   ctx.restore();
 }
 function grainOver(c, w, h, alpha) {

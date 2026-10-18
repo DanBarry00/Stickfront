@@ -204,33 +204,43 @@ function orderTower(team, x, y, builders, free) {
 function addTower(teamId, x, y, built, team) {
   y = towerY();   // always at the back of the lane, so it never hides the fighting
   const max = towerMaxHp(team);
-  const t = { isTower: true, isStructure: true, team: teamId, x, y, halfW: 20, hp: built ? max : 1, max, progress: built ? 1 : 0, dead: false, flash: 0, stone: '#6a4a2c', archer: null };
+  const t = { isTower: true, isStructure: true, team: teamId, x, y, halfW: 20, hp: built ? max : 1, max, progress: built ? 1 : 0, dead: false, flash: 0, stone: '#6a4a2c', archers: [null] };
   G.towers.push(t);
   return t;
 }
 
-// An archer climbs into a tower (its own side's, or a free neutral one) and shoots from it.
+// Who's in a tower: tw.archers holds one slot (two for the Monolith's), each an archer or null.
+const towerSlots = tw => (tw.mid ? TOWER.mid.slots : 1);
+const towerCrew = tw => tw.archers.filter(a => a && !a.dead);
+const towerHolder = tw => { const c = towerCrew(tw); return c.length ? c[0].team : -1; };   // a side, NEUTRAL, or -1 when empty
+const towerSlotDx = (tw, i) => (tw.mid ? (i ? 30 : -30) : 0);   // the Monolith's archers stand on either pier
+// Room for u: a free slot, and nobody else in it but its own side.
+const towerHasRoom = (tw, u) => { const c = towerCrew(tw).filter(a => a !== u); return c.length < towerSlots(tw) && c.every(a => a.team === u.team); };
+
+// An archer climbs into a tower (its own side's, or the Monolith's once nobody else holds it) and shoots from it.
 function postArcher(u, tower) {
   if (!tower || tower.dead || tower.progress < 1) return false;
   if (tower.team !== -1 && tower.team !== u.team) return false;
-  if (tower.archer && tower.archer !== u && !tower.archer.dead) return false;
+  if (!towerHasRoom(tower, u)) return false;
   setOrder(u, { type: 'tower', tower });
   return true;
 }
 
 function doTower(u, team, dt) {
   const tw = u.order.tower;
-  if (!tw || tw.dead || (tw.archer && tw.archer !== u && !tw.archer.dead)) { setOrder(u, { type: 'stance' }); return; }
+  if (!tw || tw.dead || (u.onTower !== tw && !towerHasRoom(tw, u))) { setOrder(u, { type: 'stance' }); return; }
   if (u.onTower !== tw) {
-    if (!moveTo(u, tw.x + (tw.postDx || 0), tw.y + 2, dt)) return;
+    const i = tw.archers.findIndex(a => !a || a.dead);
+    if (!moveTo(u, tw.x + towerSlotDx(tw, i), tw.y + 2, dt)) return;
     // climb up: the tower's reach is added to the archer's own
     u.onTower = tw;
-    tw.archer = u;
+    u.towerSlot = i;
+    tw.archers[i] = u;
     u.towerBonus = tw.mid ? TOWER.mid.range : towerRange(team);   // the Monolith's stone tower reaches furthest
     u.range += u.towerBonus;
     u.aggro = Math.max(u.aggro, u.range + 40);
   }
-  u.x = tw.x + (tw.postDx || 0);
+  u.x = tw.x + towerSlotDx(tw, u.towerSlot);
   u.y = tw.y + 2;
   const t = nearestEnemy(u, u.range + 10);
   if (t && inReach(u, t, 0)) return engage(u, t, dt);
@@ -244,22 +254,52 @@ function leaveTower(u) {
   u.range -= u.towerBonus || 0;
   u.towerBonus = 0;
   u.onTower = null;
-  if (tw.archer === u) tw.archer = null;
+  if (tw.archers[u.towerSlot] === u) tw.archers[u.towerSlot] = null;
 }
 
-// A tower falls. Brought down by melee troops, the archer inside goes down with it.
+// The Monolith tower's own two archers, at the start of a game: they shoot at anyone in reach.
+function manNeutralTower(tw) {
+  for (let i = 0; i < towerSlots(tw); i++) {
+    const a = new Unit('archer', NEUTRAL, tw.x + towerSlotDx(tw, i), tw.y + 2, {});
+    a.dmg = TOWER.mid.neutral.dmg;
+    a.towerBonus = TOWER.mid.neutral.range;
+    a.range += a.towerBonus;
+    a.aggro = a.range + 40;
+    a.onTower = tw;
+    a.towerSlot = i;
+    a.order = { type: 'neutral' };
+    tw.archers[i] = a;
+    G.units.push(a);
+  }
+}
+
+// A neutral archer just stands its ground on the tower and shoots the nearest soldier of either side.
+function updateNeutralArcher(u) {
+  const tw = u.onTower;
+  if (!tw || tw.dead) { killUnit(u, null); return; }
+  u.x = tw.x + towerSlotDx(tw, u.towerSlot);
+  u.y = tw.y + 2;
+  if (u.swing >= 0 || u.atkCd > 0 || u.stunT > 0) return;
+  const t = nearestEnemy(u, u.range);
+  if (t && inReach(u, t, 0)) {
+    u.facing = t.x >= u.x ? 1 : -1;
+    startSwing(u, 'shoot', t);
+  }
+}
+
+// A tower falls. Brought down by melee troops, the archers inside go down with it (the Monolith's
+// neutral archers fall with their tower however it comes down).
 function destroyTower(tw, src) {
   tw.dead = true;
   tw.ruin = true;   // the wreck stays, to be rebuilt cheaply
   tw.hp = 0;
   for (let k = 0; k < 4; k++) spawnBurst(tw.x + rnd(-12, 12), tw.y - rnd(10, 50), 8, { color: '#6a4a2c', speed: 150, up: 120, g: 600, life: 1, size: 3.5 });
-  const a = tw.archer;
-  if (a && !a.dead) {
+  for (const a of towerCrew(tw)) {
     leaveTower(a);
-    if (src && !src.isStructure && !src.castle && !isRanged(src)) {
+    if (a.team === NEUTRAL || (src && !src.isStructure && !src.castle && !isRanged(src))) {
       if (a.team === 0) floatText(a.x, a.y - 70, 'Crushed!', '#e0503a');
       a.hp = 0;
-      killUnit(a, src);
+      killUnit(a, a.team === NEUTRAL ? null : src);
     } else setOrder(a, { type: 'stance' });
   }
   if (tw.team === 0) toast('An archer tower has fallen', 'warn');
@@ -273,7 +313,7 @@ function makeMidTower(t) {
   t.max = t.hp = TOWER.mid.hp;
   t.stone = '#7a746a';
   t.halfW = 32;
-  t.postDx = -30;   // the archer stands on the left pier, beside the Monolith's tip
+  t.archers = new Array(TOWER.mid.slots).fill(null);   // room for two, one on each pier beside the Monolith's tip
   return t;
 }
 
@@ -431,7 +471,7 @@ function freeTrap(teamId, kind, x, y) {
 // Monolith that whichever side posts an archer in it first can use.
 function spawnNeutralWorks(map) {
   for (const t of map.traps || []) freeTrap(-1, t.kind, t.x, t.y);
-  if (G.shrine) makeMidTower(addTower(-1, G.shrine.x, LANE_BOT - 6, true, null));
+  if (G.shrine) manNeutralTower(makeMidTower(addTower(-1, G.shrine.x, LANE_BOT - 6, true, null)));   // manned by two neutral archers to start
 }
 
 // Very Hard's head start: its architects have been busy before the battle (a quarter off four

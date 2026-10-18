@@ -190,7 +190,7 @@ function updateQueues(team, dt) {
   for (const g of TRAIN_GROUPS) {
     const q = team.queues[g.key];
     if (!q.length) continue;
-    q[0].t += dt;
+    q[0].t += dt * (team.rally ? DEFENSE.rallyTrain : 1);   // a rallying side trains faster
     if (q[0].t >= UNIT_TYPES[q[0].type].time) {
       const { type } = q.shift();
       spawnUnit(team, type);
@@ -457,6 +457,36 @@ function castleArcherStats(team) {
   };
 }
 
+
+// Defense beats offense (see DEFENSE): a statue left in peace mends itself, and a side that has
+// fallen far behind rallies until it recovers.
+function updateDefense(team, dt) {
+  if (G.over) return;
+  const s = team.statue, foe = 1 - team.id;
+  if (!s.dead && s.hp < s.max) {
+    const threat = G.units.some(e => e.team === foe && !e.dead && !e.inside && !isWorker(e) && Math.abs(e.x - s.x) < DEFENSE.regenR);
+    team.calmT = threat ? 0 : (team.calmT || 0) + dt;
+    if (team.calmT > DEFENSE.regenDelay) s.hp = Math.min(s.max, s.hp + DEFENSE.regen * dt);
+  }
+  team.rallyT = (team.rallyT || 0) - dt;
+  if (team.rallyT <= 0) {
+    team.rallyT = 1;
+    const ours = armyPower(team.id), theirs = armyPower(foe), was = !!team.rally;
+    if (!team.rally && theirs >= DEFENSE.rallyMin && ours < theirs * DEFENSE.rallyAt) team.rally = true;
+    else if (team.rally && (ours >= theirs * DEFENSE.rallyEnd || theirs < DEFENSE.rallyMin * 0.6)) team.rally = false;
+    if (team.rally !== was && team.id === 0 && G.state === 'play') toast(team.rally ? 'Your side rallies: troops train faster, the castle archers shoot faster and the castle pays a little extra' : 'The rally is over: your army has recovered', team.rally ? 'warn' : undefined);
+  }
+  if (team.rally && !s.dead) team.gold += DEFENSE.rallyGold * dt;
+}
+
+// How much less damage a unit takes fighting on home ground: the full share within its castle
+// archers' reach, fading to nothing at the middle of the map.
+function homeGround(u) {
+  const team = G.teams[u.team];
+  if (!team) return 0;
+  const d = team.dir > 0 ? u.x : WORLD_W - u.x, reach = castleArcherStats(team).reach, mid = WORLD_W / 2;
+  return DEFENSE.homeMax * clamp((mid - d) / (mid - reach), 0, 1);
+}
 function updateCastleArcher(team, a, dt, garrisoned) {
   const S = castleArcherStats(team);
   const line = team.edge(S.reach), range = Math.abs(line - a.x);   // farther-back archers need a longer shot
@@ -478,7 +508,7 @@ function updateCastleArcher(team, a, dt, garrisoned) {
     a.target = null;
     if (a.phase !== 'release') { a.phase = 'idle'; a.k = 0; }
   }
-  a.k += (dt * (garrisoned ? 1.5 : 1) * S.rate) / ARCHER_PHASES[a.phase];
+  a.k += (dt * (garrisoned ? 1.5 : 1) * (team.rally ? DEFENSE.rallyArchers : 1) * S.rate) / ARCHER_PHASES[a.phase];
   if (a.k < 1) return;
   a.k = 0;
   if (a.phase === 'idle') { if (best) a.phase = 'nock'; }
@@ -662,6 +692,7 @@ function update(dt) {
     updateResearch(team, dt);
     updateCastle(team, dt);
     updateSiegeMode(team, dt);
+    updateDefense(team, dt);
   }
   if (!G.over) {
     G.ai.update(dt);
