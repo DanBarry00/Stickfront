@@ -220,6 +220,13 @@ function generateMap(seed, opts = {}) {
   }
   // a rich vein in the middle (the Monolith takes that spot when there is one)
   if (!map.shrine && lr.chance(ml.center)) map.mines.push(makeMine(r, WORLD_W / 2 + lr.range(-120, 120), lr.range(LANE_TOP + 15, LANE_BOT - 20), theme, 1.6 * Math.max(1, ml.rich), Math.round(lr.range(1600, 2400) * 1.6 * Math.max(1, ml.rich) * map.goldLevel.mul)));
+  // neutral traps: hidden hazards in no man's land (either side can set them off), mirrored so
+  // neither side is favoured. The Monolith, when there is one, gets a neutral archer tower (build.js).
+  map.traps = [];
+  for (let i = 0, n = lr.int(0, 2); i < n; i++) {
+    const d = lr.range(TRAP.midClear + 20, 700), y = lr.range(LANE_TOP + 15, LANE_BOT - 15), kind = lr.chance(0.5) ? 'tar' : 'mine';   // none in the middle
+    map.traps.push({ kind, x: WORLD_W / 2 - d, y }, { kind, x: WORLD_W / 2 + d, y });
+  }
 
   // distant smoke from old battles, drawn on the mid hill layer
   map.smoke = [];

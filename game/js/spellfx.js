@@ -95,7 +95,7 @@ function drawSpellShots(ctx) {
   }
 }
 
-// Under the unit: Sanctuary bubble glow, Haste wind / Hex chains at the feet.
+// Under the unit: Sanctuary bubble glow, the Cleric's quickening wind / the Warlock's slowing chains at the feet.
 function drawSpellEffectsUnder(ctx, u) {
   const fx = u.fx, s = u.scale;
   if (fx.haste > 0) {

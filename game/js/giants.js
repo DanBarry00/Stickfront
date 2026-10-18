@@ -34,6 +34,11 @@ function updateGiant(u, dt) {
   if (u.obeyT <= 0) { u.obeyT = 0.5; u.obey = giantObedience(u); }
   u.confusedT -= dt;
   u.confuseCd -= dt;
+  if (u.invulnT > 0) u.invulnT -= dt;
+  // pelted hard by arrows and the like: raise an arm across the face for a while
+  u.guardT = Math.max(0, (u.guardT || 0) - dt);
+  u.arrowHurt = Math.max(0, (u.arrowHurt || 0) - u.maxHp * GIANT_GUARD.decay * dt);
+  if (u.arrowHurt > u.maxHp * GIANT_GUARD.trigger) { u.guardT = GIANT_GUARD.time; u.arrowHurt = 0; }
   if (o.type === 'refit' && !u.isStatueGiant) return doRefit(u, dt);
   if (handleBlocked(u, dt)) return;
 
@@ -52,11 +57,26 @@ function updateGiant(u, dt) {
     return;
   }
 
+  // pelted by something it can't reach (Kestrels, for a giant too small to swat them): if no friendly
+  // shooter nearby is fighting back, it falls back toward its castle archers instead of standing
+  // there taking it
+  const pest = u.lastAttacker;
+  if (u.retaliateT > 0 && !u.isStatueGiant && isValidTarget(pest) && !pest.isStructure && !canTarget(u, pest)) {
+    const covered = G.units.some(f => f.team === u.team && f !== u && !f.dead && !f.inside && canTarget(f, pest) && Math.abs(f.x - pest.x) < (f.range || 0) + 120);
+    if (!covered) {
+      if (u.swing < 0) moveTo(u, team.gateX + team.dir * 140, giantSlot(u).y, dt);
+      return;
+    }
+  }
+
   // a mind of its own: every few seconds a poorly chained giant may charge off or refuse to budge
   u.mindT -= dt;
   if (u.mindT <= 0) {
     u.mindT = rnd(3, 5);
     u.rogue = u.isStatueGiant ? 'charge' : chance(1 - u.obey) ? (chance(0.55) ? 'charge' : 'stay') : null;
+    // the computer can't call a runaway back the way a player can, so while its army holds the
+    // line a restless giant of its sulks in place rather than charging off alone to its death
+    if (u.rogue === 'charge' && !u.isStatueGiant && team.aiControl && !armyAttacking(u)) u.rogue = 'stay';
   }
   const t = nearestFoe(u, u.aggro);
   if (u.rogue === 'charge') {
@@ -78,12 +98,21 @@ function updateGiant(u, dt) {
     return;
   }
 
-  // follow the troops around it, staying near the front of them
-  const friends = G.units.filter(f => f.team === u.team && !f.dead && !f.inside && f.type !== 'miner' && !isGiant(f) && Math.abs(f.x - u.x) < 500);
+  // follow the troops around it, staying at the front of them. A marching formation's front is its
+  // spear line, on defence the defend line; otherwise the foremost troops. Beastmasters drive their giants from behind, so they
+  // never count as the front: with only them around, the giant leads and they follow it.
+  const friends = G.units.filter(f => f.team === u.team && !f.dead && !f.inside && !isWorker(f) && !isGiant(f) && Math.abs(f.x - u.x) < 500);
   if (friends.length) {
-    const front = team.dir > 0 ? Math.max(...friends.map(f => f.x)) : Math.min(...friends.map(f => f.x));
+    const march = G.groups.find(g => g.team === u.team && g.mode !== 'retreat' && Math.abs(g.anchor - u.x) < 600);
+    const line = friends.filter(f => f.type !== 'beastmaster');
+    const foremost = list => (team.dir > 0 ? Math.max(...list.map(f => f.x)) : Math.min(...list.map(f => f.x)));
+    const front = march ? march.anchor + team.dir * RANK_OFF.spear
+      : team.stance === 'defend' ? defendLine(team) + team.dir * RANK_OFF.spear   // holding: on the line with the spears
+      : line.length ? foremost(line)
+      : foremost(friends) + team.dir * (130 + ((team.giantCols || 1) - 1) * GIANT_COL_GAP);
     const fighting = friends.some(f => f.grpFighting || (f.swing >= 0 && (f.swingKind === 'attack' || f.swingKind === 'shoot')));
-    if (t && fighting) return engage(u, t, dt);
+    // (a line holding a siege outside the castle archers' reach: only smash what comes into arm's reach)
+    if (t && fighting && !(march && march.halt && Math.abs(t.x - u.x) > u.range + 60)) return engage(u, t, dt);
     const s = giantSlot(u);
     if (u.swing < 0 && moveTo(u, front - team.dir * (30 + s.back), s.y, dt)) u.facing = team.dir;
     return;
@@ -157,7 +186,7 @@ function confuseGiant(t, p) {
 
 // Knock a unit away from the source and stun it. Giants stand firm.
 function knock(t, src, dist, stun) {
-  if (t.dead || t.isStructure || isGiant(t)) return;
+  if (t.dead || t.isStructure || isGiant(t) || t.onTower) return;   // an archer in a tower is braced behind its parapet
   t.knockV = Math.sign(t.x - src.x || src.facing) * dist * 3.5;
   t.stunT = Math.max(t.stunT || 0, stun);
   t.swing = -1;
@@ -171,12 +200,13 @@ function giantImpact(u, t, amt) {
   if (u.isStatueGiant && !u.swept) {
     u.swept = true;
     for (const e of G.units.slice()) {
-      if (e === t || e.team === u.team || e.dead || e.inside || isFlying(e) || Math.abs(e.x - u.x) > 160 || Math.abs(e.y - u.y) > 90) continue;
+      if (e === t || e.team === u.team || e.dead || e.inside || isFlying(e) || Math.abs(e.x - u.x) > STATUE_SWEEP.r || Math.abs(e.y - u.y) > 110) continue;
       damage(e, amt * 0.6, u, true);
-      knock(e, u, 100, 2.5);
+      knock(e, u, STATUE_SWEEP.knock, STATUE_SWEEP.stun);
     }
-    knock(t, u, 100, 2.5);
-    G.spellFx.push({ kind: 'ring', x: u.x, y: u.y, r: 160, color: '#b8a27a', t: 0, max: 0.7 });
+    knock(t, u, STATUE_SWEEP.knock, STATUE_SWEEP.stun);
+    u.range = u.baseRange || u.range;   // back to its normal reach after the opening sweep
+    G.spellFx.push({ kind: 'ring', x: u.x, y: u.y, r: STATUE_SWEEP.r, color: '#b8a27a', t: 0, max: 0.7 });
     floatText(u.x, u.y - 40 - 70 * u.scale, 'SWEEP!', '#e0bf5a');
     return;
   }
@@ -198,6 +228,9 @@ function releaseStatueGiant(s) {
   g.hp = g.maxHp;
   g.aggro = 700;
   g.mindT = 0;
+  g.invulnT = STATUE_GIANT_IMMUNE;   // it can't be hurt for its first moments
+  g.baseRange = g.range;
+  g.range += STATUE_SWEEP.reach;     // and its opening sweep reaches further
   team.statueGiant = g;
   G.units.push(g);
   for (let i = 0; i < 4; i++) spawnBurst(s.x + rnd(-40, 40), LANE_TOP - rnd(20, 160), 10, { color: s.stone, speed: 200, up: 140, g: 600, life: 1.4, size: 5 });

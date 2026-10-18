@@ -9,19 +9,19 @@
 const FLOOR_Y = LANE_TOP - 10;
 const KEEP_LIGHTS = [
   // wall torches inside the hall
-  { x: 155, y: FLOOR_Y - 125, r: 120, col: [255, 150, 60], a: 0.55, flick: 1 },
-  { x: 395, y: FLOOR_Y - 117, r: 120, col: [255, 150, 60], a: 0.55, flick: 2 },
-  { x: 530, y: FLOOR_Y - 95, r: 110, col: [255, 150, 60], a: 0.5, flick: 3 },
+  { x: 155, y: FLOOR_Y - 125, r: 190, col: [255, 160, 70], a: 0.75, flick: 1 },
+  { x: 395, y: FLOOR_Y - 117, r: 190, col: [255, 160, 70], a: 0.75, flick: 2 },
+  { x: 530, y: FLOOR_Y - 95, r: 170, col: [255, 160, 70], a: 0.7, flick: 3 },
+  { x: 275, y: FLOOR_Y + 60, r: 220, col: [255, 190, 120], a: 0.45, flick: 11 },   // torchlight pooled on the floor
   // lit windows and doorways of the buildings
-  { x: BUILD_X.sword, y: FLOOR_Y - 60, r: 60, col: [255, 180, 90], a: 0.35, flick: 4 },
-  { x: BUILD_X.spear, y: FLOOR_Y - 55, r: 55, col: [255, 180, 90], a: 0.3, flick: 5 },
-  { x: BUILD_X.archer, y: FLOOR_Y - 58, r: 55, col: [255, 180, 90], a: 0.3, flick: 6 },
+  { x: BUILD_X.sword, y: FLOOR_Y - 60, r: 60, col: [255, 180, 90], a: 0.5, flick: 4 },
+  { x: CLASS_X.mages - 12, y: FLOOR_Y - 92, r: 50, col: [255, 225, 150], a: 0.4, flick: 5 },   // the Mage Tower's windows: candlelight...
+  { x: CLASS_X.mages + 14, y: FLOOR_Y - 70, r: 45, col: [190, 120, 255], a: 0.35, flick: 9 },   // ...a violet glow...
+  { x: CLASS_X.mages, y: FLOOR_Y - 46, r: 40, col: [130, 255, 150], a: 0.3, flick: 10 },   // ...and the necromancer's green
+  { x: BUILD_X.archer, y: FLOOR_Y - 58, r: 55, col: [255, 180, 90], a: 0.45, flick: 6 },
   { x: BUILD_X.miner, y: FLOOR_Y - 40, r: 70, col: [255, 140, 50], a: 0.45, flick: 7 },   // the lodge's forge
   // braziers flanking the gate, outside
   { x: GATE_X + 34, y: LANE_TOP - 30, r: 130, col: [255, 140, 50], a: 0.6, flick: 8 },
-  // the mages' halls on the rampart
-  { x: RAMPART_HALL_X.cleric, y: WALL_TOP - 40, r: 60, col: [190, 255, 220], a: 0.35, flick: 9 },
-  { x: RAMPART_HALL_X.warlock, y: WALL_TOP - 40, r: 60, col: [190, 120, 255], a: 0.35, flick: 10 },
 ];
 
 let LIGHT = null;
@@ -97,7 +97,7 @@ function drawLighting(ctx, vw) {
   g.fillStyle = grad;
   g.fillRect(camX, 0, vw, VIEW_H);
   // indoors: the keeps are gloomy
-  g.fillStyle = 'rgba(8,6,10,0.42)';
+  g.fillStyle = 'rgba(8,6,10,0.16)';
   for (const t of G.teams) {
     const a = t.edge(-80), b = t.edge(GATE_X - 14);
     g.fillRect(Math.min(a, b), WALL_TOP + 14, Math.abs(b - a), LANE_BOT + 16 - WALL_TOP - 14);
