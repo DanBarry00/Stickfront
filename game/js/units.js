@@ -599,6 +599,44 @@ function shooterToCharge(u, postX) {
   return Math.abs(f.x - u.x) < (f.range || 0) + 60 ? f : null;
 }
 
+// Nobody stands idle while being shot. A unit that has been hit and has done nothing about it for a
+// moment (no swing, not moving) makes a change: it charges whoever is hitting it if it can reach them
+// and they're not too far off, and otherwise falls back out of their reach (melee units can't touch a
+// Kestrel; a shooter can outrange it). Once that's dealt with it goes back to what it was doing.
+const PELT_REACT = 1.2;      // seconds of standing there being hit before reacting
+const PELT_CHASE = 520;      // how far it will go after the shooter
+function reactToFire(u, dt) {
+  if (u.dead || isWorker(u) || isGiant(u) || u.type === 'zombie' || u.type === 'necromancer' || u.team === NEUTRAL) return;
+  if (u.inside || u.onTower || u.onWall || u.rampart >= 0 || u.order.type === 'refit' || u.order.react) { u.peltT = 0; return; }
+  const f = u.lastAttacker;
+  if (u.retaliateT <= 0 || !isValidTarget(f) || f.isStructure || f.castle || u.swing >= 0 || u.moving) { u.peltT = 0; return; }
+  u.peltT = (u.peltT || 0) + dt;
+  if (u.peltT < PELT_REACT) return;
+  u.peltT = 0;
+  const back = u.order, d = Math.abs(f.x - u.x);
+  const inLine = u.order.type === 'group';   // in a formation: only a short sortie, never falling out of it to retreat
+  if (u.type !== 'cleric' && canTarget(u, f) && d < (inLine ? 300 : PELT_CHASE)) {
+    u.order = { type: 'attack', target: f, back, react: true };
+  } else if (!inLine) {
+    // out of its reach, toward home
+    const team = G.teams[u.team], away = Math.max(60, (f.range || 0) - d + 80);
+    // (a unit told to hold a spot holds the safe one instead of walking back into the arrows)
+    u.order = { type: 'move', x: clamp(u.x - team.dir * away, Math.min(team.gateX, u.x), Math.max(team.gateX, u.x)), y: u.y, back: back.type === 'hold' ? null : back, react: true };
+  }
+}
+
+// The order to go back to after reacting to fire (or null when it no longer makes sense).
+function afterReact(u, o) {
+  const b = o.back;
+  if (!b) return null;
+  if (b.type === 'group') {
+    if (b.g.done || !b.g.members.length) return { type: 'stance' };
+    if (!b.g.members.includes(u)) b.g.members.push(u);   // back into its place in the line
+  }
+  if (b.type === 'attack' && !isValidTarget(b.target)) return { type: 'stance' };
+  return b;
+}
+
 // A shooter covers its friends: when one of them nearby (or the shooter itself) is being shot at by an
 // enemy it can shoot back at (Kestrels pelting a giant, an archer sniping the line), it steps up to
 // shoot that enemy instead of standing idle. Posted units (postX) won't go more than leash past it.
@@ -907,8 +945,11 @@ function updateFighter(u, dt) {
       const guard = tauntGuard(u, o.target);
       if (guard) o.target = guard;
     }
-    if (isValidTarget(o.target) && (o.target.isStructure || canTarget(u, o.target))) return engage(u, o.target, dt);
-    u.order = { type: 'hold', x: u.x, y: u.y };
+    if (isValidTarget(o.target) && (o.target.isStructure || canTarget(u, o.target))) {
+      // a reaction to fire gives up once the shooter is out of reach for good
+      if (!o.react || Math.abs(o.target.x - u.x) < PELT_CHASE + 120) return engage(u, o.target, dt);
+    }
+    u.order = afterReact(u, o) || { type: 'hold', x: u.x, y: u.y };
     return;
   }
   if (o.type === 'move') {
@@ -918,7 +959,7 @@ function updateFighter(u, dt) {
       const t = nearestEnemy(u, isRanged(u) ? u.range : 180) || shooterToCharge(u);   // the same reach as when holding there
       if (t) return engage(u, t, dt);
     }
-    if (moveTo(u, o.x, o.y, dt)) u.order = { type: 'hold', x: o.x, y: o.y };
+    if (moveTo(u, o.x, o.y, dt)) u.order = afterReact(u, o) || { type: 'hold', x: o.x, y: o.y };
     return;
   }
   if (o.type === 'hold') {
@@ -972,7 +1013,7 @@ function updateFighter(u, dt) {
 function updateMiner(u, dt) {
   const team = G.teams[u.team], o = u.order;
   u.retaliateT -= dt;
-  if (u.qmHoldT > 0 && u.swing < 0) { u.qmHoldT -= dt; return; }   // standing still while a Quartermaster refits it
+
   if (o.type === 'refit') return doRefit(u, dt);
   if (handleBlocked(u, dt)) return;
   if (o.type === 'attack') {
@@ -1466,7 +1507,9 @@ function updateUnit(u, dt) {
   if (u.cheerT > 0) u.cheerT -= dt;
   if (u.netT > 0) u.netT -= dt;
   if (u.type !== 'miner' && u.type !== 'architect') u.retaliateT -= dt;   // (workers count theirs down themselves)
+  if (u.qmHoldT > 0) u.qmHoldT -= dt;
   if (u.stunT > 0 || u.netT > 0) { /* stunned, or pinned under a net: no actions */ }
+  else if (u.qmHoldT > 0 && u.swing < 0) { /* stopped by a Quartermaster to be patched up or refitted */ }
   else if (u.type === 'miner') updateMiner(u, dt);
   else if (u.type === 'architect') updateArchitect(u, dt);
   else if (u.type === 'quartermaster') updateQuartermaster(u, dt);
@@ -1476,6 +1519,7 @@ function updateUnit(u, dt) {
   else if (isMage(u) && updateMageCasting(u, dt)) { /* busy casting or walking to cast */ }
   else if (u.type === 'cleric') updateCleric(u, dt);
   else updateFighter(u, dt);
+  reactToFire(u, dt);
   if (!u.praying) u.pray = -1;
   if (u.type === 'miner' && !u.panUsed) freePanSlot(u);
   if (u.type === 'ninja' || u.type === 'saboteur') updateStealth(u, dt);

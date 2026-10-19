@@ -1,12 +1,4 @@
 @echo off
-rem Launches Stickfront in its own Microsoft Edge app window (no browser tabs/toolbars).
-setlocal
-set "GAME=%~dp0game\index.html"
-set "URL=file:///%GAME:\=/%"
-set "EDGE=%ProgramFiles(x86)%\Microsoft\Edge\Application\msedge.exe"
-if not exist "%EDGE%" set "EDGE=%ProgramFiles%\Microsoft\Edge\Application\msedge.exe"
-if exist "%EDGE%" (
-  start "" "%EDGE%" --app="%URL%" --start-maximized
-) else (
-  start "" "%GAME%"
-)
+rem Starts Stickfront: checks GitHub for an update (and offers to install it), then opens the game
+rem in its own Microsoft Edge app window. Same as the desktop shortcut the setup makes.
+powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "%~dp0launcher\launch.ps1"

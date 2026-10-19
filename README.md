@@ -2,8 +2,18 @@
 
 A Stick War 2–style side-scrolling battle game. It's a test build with randomly generated maps (each with its own lane depth, gold layout and sometimes a Monolith to fight over), nine clans to choose from, a castle you can garrison, statues with health and mana, gold mines, miners, seven soldier types plus giants (including vanishing ninjas and flying Kestrels), tiered upgrades, and a computer opponent with four difficulty levels.
 
+## Install (Windows)
+Download **[StickfrontSetup.bat](https://github.com/DanBarry00/Stickfront/raw/main/installer/StickfrontSetup.bat)** and double-click it. The setup wizard:
+1. checks for Git, and offers to install it (with winget) if it's missing,
+2. downloads the game from this repository into `%LOCALAPPDATA%\Programs\Stickfront` (or a folder you pick),
+3. puts a **Stickfront** shortcut on your desktop.
+
+Every time you start the game from the shortcut, it checks GitHub for a newer version. If there is one, it lists what changed and asks whether to update; **Yes** runs a `git pull`, then the game starts. Offline, it just starts the game. Running the setup again on an existing install updates it and recreates the shortcut. Windows may warn about a downloaded script the first time; choose **More info → Run anyway**.
+
+The installer takes the `main` branch (set `$Branch` near the top of the file to give testers another one). For testing the setup itself, `SF_UNATTENDED=1` answers every question with Yes, and `SF_DIR`, `SF_DESKTOP`, `SF_REPO` and `SF_BRANCH` override the folder, the shortcut's location, the repository and the branch. `launcher\launch.ps1 -CheckOnly` prints how many updates are waiting.
+
 ## Run it
-Double-click **`Play Stickfront.bat`**. It opens the game in its own Microsoft Edge app window. If Edge isn't installed, it opens in your default browser. Nothing else needs to be installed.
+Use the desktop shortcut, or double-click **`Play Stickfront.bat`** in the game folder (it does the same update check). It opens the game in its own Microsoft Edge app window, or your default browser if Edge isn't installed. With a plain copy of the files (no Git), it skips the update check and just starts the game.
 
 ## Starting a skirmish
 The setup screen lets you choose **your clan** and the **enemy clan** (or **Random** for either; random clans are revealed when the battle begins, and both sides can draw the same clan), the opponent's **difficulty**, whether there is a **Monolith**, how much **gold** the deposits hold, and the map **seed**. The map behind the menu is a live preview of your choices. Your settings are remembered. Restart and Rematch keep the same clans and map.
@@ -208,7 +218,7 @@ A rider under big flame-membraned da Vinci wings, trained in the Ranged group (h
 
 ## Quartermaster (Workers' Lodge, every clan)
 200 gold, hotkey `,`, as fast as a Swordwrath; you can have two. It never fights and backs away from any enemy that comes close.
-- **Always busy, in this order:** restock Gladiators with a new net and javelin; refit veterans on the spot for free, soldiers and workers alike (one at a time, 1.2 seconds each; a miner stops work while it's kitted out); patch up the wounded (20 hp a bandage every second, 30 with Healing Salves); restore worked-out gold deposits on your half (it's the only prospector: right-click a deposit with it, or press N); bring an Architect materials for a free trap every 60 seconds (35 with Supply Wagon; the Architect lays a random trap ahead of the line on its own); and cheer the miners on. It re-thinks every second, so something more urgent always comes first, and with nothing to do it makes the rounds between the miners and the army. It leaves soldiers in the thick of a fight alone.
+- **Always busy, in this order:** restock Gladiators with a new net and javelin; refit veterans on the spot for free, soldiers and workers alike (one at a time, 1.2 seconds each; a miner stops work while it's kitted out); patch up the wounded (20 hp a bandage every second, 30 with Healing Salves); restore worked-out gold deposits on your half (it's the only prospector: right-click a deposit with it, or press N); bring an Architect materials for a free trap every 60 seconds (35 with Supply Wagon; the Architect lays a random trap ahead of the line on its own); and cheer the miners on. It re-thinks every second, so something more urgent always comes first, and with nothing to do it makes the rounds between the miners and the army. It calls whoever it's about to tend to a halt, so it can catch a soldier on the move, but it leaves soldiers in the thick of a fight alone.
 - **Cheering:** every miner within earshot is fired up for 30 seconds: it walks 50% faster and mines, pans and prays twice as fast. The Quartermaster tops them up before it wears off, so one Quartermaster keeps a group of miners going nearly all the time.
 - **Two Quartermasters:** the first looks after the troops (restocking, refits, healing), the second the workers (refits, deposits, materials, cheering); each lends a hand with the other's work when it has nothing of its own. A sign over his head shows what he's doing (a bandage, tools with a ring that fills as he refits, a net, a horn, a crate or a pick).
 - **Upgrades:** Healing Salves, Supply Wagon.
@@ -247,6 +257,7 @@ A rider under big flame-membraned da Vinci wings, trained in the Ranged group (h
 - **Chasing:** melee troops lunge after a target that backs away during their swing, so they can cut down a slower unit (like a miner) running for the castle.
 - **Covering fire:** archers, Beastmasters and other shooters step up to shoot whatever is hitting a friend nearby (Kestrels pelting a giant, say), even past the defend line (up to 400 beyond it, or a short step out of a formation). A giant pelted by something it can't reach falls back toward its castle archers unless friendly shooters nearby are fighting back. In an Advance formation, while the line is halted in a fight, the ranks behind lunge at enemies close to their place and then step back into line.
 - **Under fire:** a melee soldier being shot by an enemy it can reach (an archer standing beyond the defend line, say) charges the shooter instead of standing there, whether it's defending, holding or walking to the muster point. They give up the chase once the shooter is more than 400 past their defend line or hold spot, so a lone archer can't lure them into the enemy army. Spearton behind a raised shield wall hold their ground.
+- **Nobody stands there being shot:** any soldier that's been hit and has done nothing about it for a moment makes a change. If it can reach the attacker (and it's within about 520), it goes after it; if it can't (a melee soldier under a Kestrel, a shooter that's outranged), it falls back out of reach toward its castle. Afterwards it returns to what it was doing; one told to hold a spot holds the safe one instead. A soldier in a formation only makes a short sortie (300) and then rejoins the line.
 
 ## Economy
 - **Mining** about 2.3 gold/s per miner. **Praying** at the statue about 2.3 mana/s (4 at a time).
@@ -300,5 +311,6 @@ A rider under big flame-membraned da Vinci wings, trained in the Ranged group (h
 - `quartermaster.js`, `gladiator.js`, `necromancer.js`: the Quartermaster's jobs, the Gladiator's throws and glory, and the Necromancer and its zombies
 - `ai.js`: the computer opponents (Easy, Normal, Hard, Very Hard)
 - `clans.js`: the clans (starting armies, free and locked upgrades, prices, buffs) and the helpers the game uses to apply them
+- `../launcher/launch.ps1`, `../installer/StickfrontSetup.bat`: the update-checking launcher (the desktop shortcut runs it) and the Windows setup wizard
 - `stats.js`: the battle timeline and end-screen charts, the debug overlay, autopilot and the headless balance and clan tests
 - `render.js`, `ui.js`, `main.js`: rendering, input, the HUD and command card, and the main loop
