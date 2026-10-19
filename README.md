@@ -2,8 +2,18 @@
 
 A Stick War 2–style side-scrolling battle game. It's a test build with randomly generated maps (each with its own lane depth, gold layout and sometimes a Monolith to fight over), nine clans to choose from, a castle you can garrison, statues with health and mana, gold mines, miners, seven soldier types plus giants (including vanishing ninjas and flying Kestrels), tiered upgrades, and a computer opponent with four difficulty levels.
 
+## Install (Windows)
+Download **[StickfrontSetup.bat](https://github.com/DanBarry00/Stickfront/raw/main/installer/StickfrontSetup.bat)** and double-click it. The setup wizard:
+1. checks for Git, and offers to install it (with winget) if it's missing,
+2. downloads the game from this repository into `%LOCALAPPDATA%\Programs\Stickfront` (or a folder you pick),
+3. puts a **Stickfront** shortcut on your desktop.
+
+Every time you start the game from the shortcut, it checks GitHub for a newer version. If there is one, it lists what changed and asks whether to update; **Yes** runs a `git pull`, then the game starts. Offline, it just starts the game. Running the setup again on an existing install updates it and recreates the shortcut. Windows may warn about a downloaded script the first time; choose **More info → Run anyway**.
+
+The installer takes the `main` branch (set `$Branch` near the top of the file to give testers another one). For testing the setup itself, `SF_UNATTENDED=1` answers every question with Yes, and `SF_DIR`, `SF_DESKTOP`, `SF_REPO` and `SF_BRANCH` override the folder, the shortcut's location, the repository and the branch. `launcher\launch.ps1 -CheckOnly` prints how many updates are waiting.
+
 ## Run it
-Double-click **`Play Stickfront.bat`**. It opens the game in its own Microsoft Edge app window. If Edge isn't installed, it opens in your default browser. Nothing else needs to be installed.
+Use the desktop shortcut, or double-click **`Play Stickfront.bat`** in the game folder (it does the same update check). It opens the game in its own Microsoft Edge app window, or your default browser if Edge isn't installed. With a plain copy of the files (no Git), it skips the update check and just starts the game.
 
 ## Starting a skirmish
 The setup screen lets you choose **your clan** and the **enemy clan** (or **Random** for either; random clans are revealed when the battle begins, and both sides can draw the same clan), the opponent's **difficulty**, whether there is a **Monolith**, how much **gold** the deposits hold, and the map **seed**. The map behind the menu is a live preview of your choices. Your settings are remembered. Restart and Rematch keep the same clans and map.
@@ -301,5 +311,6 @@ A rider under big flame-membraned da Vinci wings, trained in the Ranged group (h
 - `quartermaster.js`, `gladiator.js`, `necromancer.js`: the Quartermaster's jobs, the Gladiator's throws and glory, and the Necromancer and its zombies
 - `ai.js`: the computer opponents (Easy, Normal, Hard, Very Hard)
 - `clans.js`: the clans (starting armies, free and locked upgrades, prices, buffs) and the helpers the game uses to apply them
+- `../launcher/launch.ps1`, `../installer/StickfrontSetup.bat`: the update-checking launcher (the desktop shortcut runs it) and the Windows setup wizard
 - `stats.js`: the battle timeline and end-screen charts, the debug overlay, autopilot and the headless balance and clan tests
 - `render.js`, `ui.js`, `main.js`: rendering, input, the HUD and command card, and the main loop
