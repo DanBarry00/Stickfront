@@ -272,7 +272,7 @@ function updateCleric(u, dt) {
   }
   if (u.swing >= 0) return;
   if (o.type === 'move') {
-    if (moveTo(u, o.x, o.y, dt)) u.order = { type: 'hold', x: o.x, y: o.y };
+    if (moveTo(u, o.x, o.y, dt)) u.order = afterReact(u, o) || { type: 'hold', x: o.x, y: o.y };
     return;
   }
   if (o.type === 'hold') { moveTo(u, o.x, o.y, dt); return; }

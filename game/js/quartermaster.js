@@ -101,6 +101,9 @@ function updateQuartermaster(u, dt) {
   if (!j) return qmIdle(u, team, dt);
   if (j.kind === 'prospect') return qmProspect(u, j, dt);
   const t = j.t;
+  // closing in on someone to tend: call them to a halt ("hold still!") so a moving unit can be caught
+  const tending = j.kind === 'heal' || j.kind === 'refit' || j.kind === 'gear';
+  if (tending && !inMelee(t) && Math.abs(t.x - u.x) < 90 && Math.abs(t.y - u.y) < 50) t.qmHoldT = 0.35;
   if (Math.abs(t.x - u.x) > 34 || Math.abs(t.y - u.y) > 20) {
     j.time = 0;
     moveTo(u, t.x - (t.facing || team.dir) * 22, t.y, dt);
@@ -115,7 +118,7 @@ function updateQuartermaster(u, dt) {
     u.qmJob = null;
   } else if (j.kind === 'refit') {
     u.laying = true;
-    if (isWorker(t)) t.qmHoldT = 0.3;   // a miner stops what it's doing while it's kitted out
+
     if (j.time < QM.refitTime) return;
     const missing = missingUpgrades(t);
     for (const k of missing) t.perks[k] = true;
