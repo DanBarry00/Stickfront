@@ -365,6 +365,7 @@ function updateArchitect(u, dt) {
   const team = G.teams[u.team], o = u.order;
   u.retaliateT -= dt;
   u.laying = false;
+  if (u.qmHoldT > 0 && u.swing < 0) { u.qmHoldT -= dt; return; }   // standing still while a Quartermaster refits it
   if (o.type === 'refit') return doRefit(u, dt);
   if (handleBlocked(u, dt)) return;
   if (o.type === 'attack') {

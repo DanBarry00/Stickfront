@@ -11,6 +11,16 @@ function orderCast(u, k, x, y, forced = true) {
   u.pendingCast = { k, x: clamp(x, 0, WORLD_W), y: clamp(y, LANE_TOP, LANE_BOT), forced };
 }
 
+
+// A mage told to go somewhere (a move order, garrisoning, a retreat, a marching formation) keeps
+// going: it heals and auto-casts only once it has stopped, instead of dawdling to its death.
+function mageOnTheMove(u) {
+  const o = u.order, team = G.teams[u.team];
+  if (o.type === 'move' || o.type === 'refit') return true;
+  if (o.type === 'garrison' || (o.type === 'stance' && (u.ownStance || team.stance) === 'garrison')) return !u.inside;
+  if (o.type === 'group') return o.g.mode === 'retreat' || !!o.g.marching;
+  return false;
+}
 // Runs every frame for mages before their normal behaviour.
 // Returns true while the mage is busy with a spell (casting, or walking into range for one).
 function updateMageCasting(u, dt) {
@@ -18,7 +28,7 @@ function updateMageCasting(u, dt) {
   for (const k in u.cd) u.cd[k] -= dt;
   if (u.swing >= 0 && u.swingKind === 'cast') return true;
   u.autoT -= dt;
-  if (u.auto && !u.pendingCast && u.autoT <= 0 && !u.inside) {
+  if (u.auto && !u.pendingCast && u.autoT <= 0 && !u.inside && !mageOnTheMove(u)) {
     u.autoT = 0.3;
     autoCast(u);
   }
@@ -61,7 +71,7 @@ function releaseSpell(u, c) {
       G.pools.push({ team, kind: c.k, x: c.x, y: c.y, r: S.r, t: S.dur, dur: S.dur, power: S.power, tick: 0, src: u, seed: rnd(0, 10) });
       break;
     case 'sanctuary':
-      for (const o of allies) { o.fx.shield = Math.max(o.fx.shield, S.power); o.fx.shieldT = S.dur; }
+      for (const o of allies) if (o.type !== 'zombie') { o.fx.shield = Math.max(o.fx.shield, S.power); o.fx.shieldT = S.dur; }   // (no blessing for the dead)
       break;
     case 'fireball':
       G.spellShots.push({ kind: 'fireball', team, src: u, x: u.x + u.facing * 12, y: u.y - 74, sx: u.x + u.facing * 12, sy: u.y - 74, tx: c.x, ty: c.y - 20, t: 0, T: 0.9 });
@@ -139,7 +149,7 @@ function smiteUndead(u, t) {
   damage(t, u.dmg * UNDEAD.smiteMul * rnd(0.9, 1.1), u);
 }
 function healUnit(t, amt, src) {
-  if (t.dead || t.hp >= t.maxHp) return;
+  if (t.dead || t.hp >= t.maxHp || t.type === 'zombie') return;   // (nothing heals the dead)
   // a Cleric's touch: quickened and blessed for as long as the Cleric takes to heal again
   if (src && src.type === 'cleric') { const T = atkTimeOf(src); t.fx.haste = Math.max(t.fx.haste, T); t.fx.empower = Math.max(t.fx.empower, T); }
   t.hp = Math.min(t.maxHp, t.hp + amt);
@@ -227,7 +237,7 @@ function updateSpellWorld(dt) {
 function mostWounded(u) {
   let best = null, bf = 1;
   for (const o of G.units) {
-    if (o.team !== u.team || o.dead) continue;
+    if (o.team !== u.team || o.dead || o.type === 'zombie') continue;
     if (Math.abs(o.x - u.x) > u.range || o.hp >= o.maxHp - 3) continue;
     const f = o.hp / o.maxHp;
     if (f < bf) { bf = f; best = o; }
@@ -251,7 +261,7 @@ function updateCleric(u, dt) {
   const team = G.teams[u.team], o = u.order;
   if (o.type === 'refit') return doRefit(u, dt);
   if (o.type === 'manwall' || o.type === 'attack') u.order = { type: 'hold', x: u.x, y: u.y };
-  if (u.swing < 0 && u.atkCd <= 0) {
+  if (u.swing < 0 && u.atkCd <= 0 && !mageOnTheMove(u)) {   // (on the move it keeps moving: it heals once stopped)
     // heal the most wounded friend; with nobody to heal, smite an enemy zombie with holy light
     const p = mostWounded(u) || nearestZombie(u);
     if (p) {

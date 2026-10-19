@@ -74,7 +74,7 @@ Every unit trains in its class's building, which also holds all of that class's 
 - **Crits:** 10% chance of a double-damage critical hit.
 - **Upgrades (Barracks):**
   - **Serrated Blades:** ignores 65% of armor instead of 30%.
-  - **Parry:** every 6s, blocks one attack completely (not area damage) and stuns a melee attacker for 1.5s.
+  - **Parry:** every 6s, blocks one attack completely (not area damage, and never a giant's club) and stuns a melee attacker for 1.5s.
   - **Focus:** ignores taunts.
   - **Throwing Stars:** a ranged attack (range 230, 11 damage) that can hit Kestrels and sometimes disorients giants (15% chance per star, reduced by Blinders). **M** switches the selected ninjas between **Auto** (stars against Kestrels and giants, or when below 35% health; blade otherwise), **Blade** and **Stars**. The ambush only works with the blade.
   - **Vital Points:** crit chance 10% → 20%.
@@ -161,6 +161,7 @@ Two spells each, unlocked by research:
 | Healing Pool: heals 10/s for 5s | Blight Pool: 10 damage/s for 5s | 40 | 12s |
 | Sanctuary: each ally gets a 60-point shield | Fireball: 60 damage to every enemy in the blast | 80 | 22s |
 
+- **On the move:** a mage told to go somewhere (a move order, garrisoning, a retreat, a marching formation) keeps going and only heals or casts once it has stopped.
 - **Gap between casts:** each mage must wait 2.5 seconds between any two spells.
 - **Auto-cast is on by default:** mages pick good targets and counter enemy spells. They throw Sanctuary over allies an incoming Fireball is aimed at and a Healing Pool onto a Blight Pool, and the reverse for Warlocks. Auto keeps 15 mana in reserve.
 - **Forcing a spell:** click a spell on the command card (or press 7 / 8), then click where to cast it. It works even with auto on. The nearest ready mage walks into range and casts. With both mage types selected, Shift + 7 / 8 casts the Warlock's spells.
@@ -207,9 +208,9 @@ A rider under big flame-membraned da Vinci wings, trained in the Ranged group (h
 
 ## Quartermaster (Workers' Lodge, every clan)
 200 gold, hotkey `,`, as fast as a Swordwrath; you can have two. It never fights and backs away from any enemy that comes close.
-- **With the troops:** patches up wounded soldiers (14 hp a bandage, 22 with Healing Salves), refits veterans on the spot for free (no walk back to the castle, no fee) and hands Gladiators a new net and javelin. It leaves soldiers in the thick of a fight alone.
-- **With the workers:** cheers on a group of miners every 22 seconds (they move 40% faster for 10 seconds), brings an Architect materials for a free trap every 75 seconds (45 with Supply Wagon; the Architect lays a random trap ahead of the line on its own), and restores worked-out gold deposits on your half (it's the only prospector now: right-click a deposit with it, or press N, to send it to one).
-- **Two Quartermasters:** the first stays with the troops, the second with the workers. A lone one works with the miners until the troops need it, then stays with them until there's nothing left to do. A sign over his head shows what he's doing (a bandage, tools with a ring that fills as he refits, a net, a horn, a crate or a pick).
+- **Always busy, in this order:** restock Gladiators with a new net and javelin; refit veterans on the spot for free, soldiers and workers alike (one at a time, 1.2 seconds each; a miner stops work while it's kitted out); patch up the wounded (20 hp a bandage every second, 30 with Healing Salves); restore worked-out gold deposits on your half (it's the only prospector: right-click a deposit with it, or press N); bring an Architect materials for a free trap every 60 seconds (35 with Supply Wagon; the Architect lays a random trap ahead of the line on its own); and cheer the miners on. It re-thinks every second, so something more urgent always comes first, and with nothing to do it makes the rounds between the miners and the army. It leaves soldiers in the thick of a fight alone.
+- **Cheering:** every miner within earshot is fired up for 30 seconds: it walks 50% faster and mines, pans and prays twice as fast. The Quartermaster tops them up before it wears off, so one Quartermaster keeps a group of miners going nearly all the time.
+- **Two Quartermasters:** the first looks after the troops (restocking, refits, healing), the second the workers (refits, deposits, materials, cheering); each lends a hand with the other's work when it has nothing of its own. A sign over his head shows what he's doing (a bandage, tools with a ring that fills as he refits, a net, a horn, a crate or a pick).
 - **Upgrades:** Healing Salves, Supply Wagon.
 
 ## Gladiator (Barracks, every clan)
@@ -226,7 +227,7 @@ A rider under big flame-membraned da Vinci wings, trained in the Ranged group (h
 175 gold + 75 mana, hotkey `0`. It never attacks; it raises the dead.
 - **Raising:** every 6 seconds (4 with Quick Rites), for 5 mana, a zombie claws its way up beside it, up to 6 at a time (8 with Bigger Horde, 10 with Endless Horde). Zombies don't count toward your population. A skull badge over it shows the pack and its souls.
 - **Zombies:** 60 hp, slow (Spearton pace), weak claws. Arrows, bolts and other shots do half damage to them, but holy light burns them: an enemy Healing Pool does five times its healing to them as damage (enough to wipe out a pack), and a Cleric with nobody to heal smites the nearest zombie for three times its heal. An enemy a zombie kills gets up as another zombie while there's room in the pack (giants and flyers don't).
-- **Leading:** zombies can't be selected; they stay around their Necromancer and fall on anything that comes near the pack, or on whatever you order the Necromancer to attack. If the Necromancer dies, its zombies just lurch off to attack the enemy.
+- **Leading:** zombies can't be selected and never march in formation. While their side holds, they mill about in front of the Necromancer and claw anything that comes near them; once their side attacks they just run forward, attacking whatever they meet on the way to the enemy statue (or whatever you order the Necromancer to attack), and the Necromancer marches up behind them. On a retreat they come back. If the Necromancer dies, its zombies just lurch off to attack the enemy. Nothing heals zombies or buffs them (no auras, Hope, shields, inspiration or home ground).
 - **Souls (a snowball):** every kill the pack makes gives the Necromancer a soul (up to 25): one more zombie in the pack for every 4 souls (up to 5 more), and its zombies rise 3% stronger and 2% faster per soul. You get a warning when an enemy horde grows; the computer answers with Clerics, Healing Pools and Fireballs, and goes for the Necromancer.
 - **Upgrades:** Bigger Horde, Endless Horde, Grave Dirt (zombies +50% health), Quick Rites.
 

@@ -32,10 +32,12 @@ const ARCHER_XS = [520, 498, 476, 454];   // castle archer spots on the rampart,
 const CASTLE_REACH_PAD = 60;
 const TITHE_GOLD = [0, 1, 2.5, 4];   // statue income per second: none / Offerings / Golden Idol / Gilded Statue (Mercenary)
 const JAVELIN = { range: 300, dmg: 30 };   // a Gladiator's javelin (one, refilled by garrisoning or a Quartermaster)
-// Quartermasters: heal (hp per bandage, every healTime, within healReach) and refit troops (refitTime
-// per veteran, free); cheer miners within cheerR to hurry (speed cheerMul) for cheerTime, every
-// cheerCd; bring an architect materials for a free trap every materialsCd; keep safe from enemies.
-const QM = { heal: 14, healSalves: 22, healTime: 1.2, healReach: 60, refitTime: 2, cheerR: 140, cheerTime: 10, cheerMul: 1.4, cheerCd: 22, materialsCd: 75, materialsWagon: 45, safe: 170 };
+// Quartermasters: heal (hp per bandage, every healTime) and refit soldiers and workers (refitTime a
+// unit, free; a miner pauses for it); cheer miners within cheerR: for cheerTime they walk cheerSpeed
+// times as fast and mine, pan and pray cheerWork times as fast, and a Quartermaster tops them up when
+// fewer than cheerTopUp seconds are left; bring an Architect materials for a free trap every
+// materialsCd (materialsWagon with Supply Wagon); keep out of reach of enemies within safe.
+const QM = { heal: 20, healSalves: 30, healTime: 1, refitTime: 1.2, cheerR: 160, cheerTime: 30, cheerTopUp: 8, cheerSpeed: 1.5, cheerWork: 2, materialsCd: 60, materialsWagon: 35, safe: 140 };
 // Gladiators: the net pins its target for netTime (it reaches netRange); every kill (up to maxKills: a snowball)
 // adds killHp and killDmg; with fewer than aloneN friends within aloneR, alonePer more damage each.
 const GLADIATOR = { netRange: 150, netTime: 3, netTimeWeighted: 5, killHp: 15, killDmg: 0.04, maxKills: 25, aloneR: 160, aloneN: 5, alonePer: 0.08, manica: 0.2 };

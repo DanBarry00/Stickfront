@@ -987,8 +987,8 @@ function unitJob(u, me) {
   if (u.type === 'quartermaster' && (u.order.type === 'stance' || u.order.type === 'replenish')) {
     if (u.order.type === 'replenish' || (u.qmJob && u.qmJob.kind === 'prospect')) return 'Restoring a gold deposit';
     const j = u.qmJob;
-    if (j) return { heal: 'Patching up a soldier', refit: 'Refitting a veteran', gear: 'Bringing a new net and javelin', cheer: 'Cheering on the miners', materials: 'Bringing an Architect materials' }[j.kind];
-    return u.qmRole === 'troops' ? 'With the troops' : 'With the workers';
+    if (j) return { heal: 'Patching up a soldier', refit: j.t && isWorker(j.t) ? 'Refitting a worker' : 'Refitting a veteran', gear: 'Bringing a new net and javelin', cheer: 'Cheering on the miners', materials: 'Bringing an Architect materials' }[j.kind];
+    return { troops: 'Making the rounds (troops)', workers: 'Making the rounds (workers)' }[u.qmRole] || 'Making the rounds';
   }
   if (u.type === 'necromancer' && u.order.type === 'stance') return `Leading ${zombiesOf(u).length}/${hordeSize(me, u)} zombies (${u.souls || 0} souls)`;
   if (u.rampart >= 0) return 'Manning the rampart';
