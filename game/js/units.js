@@ -318,7 +318,7 @@ function unitSpeed(u) {
   if (u.slow) s *= 0.45;
   if (u.tarT > 0) s *= 1 - TRAP.tar.slow;   // wading through tar
   if (u.jumpT > 0) s *= 1.5;
-  if (u.cheerT > 0) s *= QM.cheerMul;   // cheered on by a Quartermaster
+  if (u.cheerT > 0) s *= QM.cheerSpeed;   // cheered on by a Quartermaster
   if (u.netT > 0) return 0;   // caught in a Gladiator's net
   s *= spellSpeed(u);
   // marching in formation: keep pace with the group unless catching up
@@ -376,7 +376,7 @@ function startSwing(u, kind, target) {
   u.hitDone = false;
   u.swingKind = kind;
   u.swingTarget = target;
-  let dur = u.mineTime;
+  let dur = u.mineTime / (u.cheerT > 0 ? QM.cheerWork : 1);   // a cheered miner digs twice as fast
   if (kind === 'attack' || kind === 'shoot' || kind === 'heal') dur = atkTimeOf(u);
   if (kind === 'cast') {
     // spellcasting: a fixed 0.7s wind-up that doesn't reset the staff attack timer
@@ -972,6 +972,7 @@ function updateFighter(u, dt) {
 function updateMiner(u, dt) {
   const team = G.teams[u.team], o = u.order;
   u.retaliateT -= dt;
+  if (u.qmHoldT > 0 && u.swing < 0) { u.qmHoldT -= dt; return; }   // standing still while a Quartermaster refits it
   if (o.type === 'refit') return doRefit(u, dt);
   if (handleBlocked(u, dt)) return;
   if (o.type === 'attack') {
@@ -1053,7 +1054,7 @@ function doPan(u, team, dt) {
   }
   u.facing = u.panSlot % 2 ? -team.dir : team.dir;
   u.panning = true;
-  u.panT += (dt * u.panMul) / PAN_TICK;
+  u.panT += (dt * u.panMul * (u.cheerT > 0 ? QM.cheerWork : 1)) / PAN_TICK;
   while (u.panT >= 1) {
     u.panT -= 1;
     const g = team.upgrades.castle.sifter ? SIFTER_GOLD : 1;   // the Sifter catches more of the gold
@@ -1124,7 +1125,7 @@ function doMana(u, team, dt) {
   u.praying = true;
   if (u.pray < 0) u.pray = 0;
   const prev = u.pray;
-  u.pray += dt / PRAY_TIME;
+  u.pray += (dt * (u.cheerT > 0 ? QM.cheerWork : 1)) / PRAY_TIME;
   if (Math.floor(prev + 0.5) < Math.floor(u.pray + 0.5)) {
     const amt = Math.round(MANA_PER_PRAYER * u.manaMul * (clanOf(team).prayer || 1));   // Mercenaries pray poorly, the Arcane Circle well
     team.mana = Math.min(MAX_MANA, team.mana + amt);
@@ -1238,7 +1239,7 @@ function damage(t, amt, src, aoe) {
   if (t.ward) amt = Math.max(1, Math.round(amt * (1 - MAGE_AURA.ward)));   // a Cleric's ward nearby
   if (t.hope || t.fear) amt = Math.max(1, Math.round(amt * (1 - (t.hope ? HOPE.dmg : 0) + (t.fear ? HOPE.dmg : 0))));   // Hope and Fear
   if (t.type === 'zombie' && src && (src.castle || isRanged(src))) amt = Math.max(1, Math.round(amt * NECRO.rangedMul));   // arrows pass through rotten flesh
-  const home = homeGround(t);   // defenders fight better near their own castle
+  const home = t.type === 'zombie' ? 0 : homeGround(t);   // defenders fight better near their own castle (the dead don't care)
   if (home) amt = Math.max(1, Math.round(amt * (1 - home)));
   if (t.type === 'golem' && src && src.type === 'warlock') amt = Math.max(1, Math.round(amt * GOLEM.spellMul));   // golems shrug off Warlock magic
   // archers are the giant-killers: extra damage, and a chance to send it into a confused rage
@@ -1248,7 +1249,7 @@ function damage(t, amt, src, aoe) {
     confuseGiant(t, GIANT_CONFUSE.chance);
   }
   // Parry: a ninja turns aside one blow every few seconds, stunning a melee attacker
-  if (t.perks.parry && t.parryCd <= 0 && src && !aoe) {
+  if (t.perks.parry && t.parryCd <= 0 && src && !aoe && !isGiant(src)) {   // (nobody parries a giant's club)
     t.parryCd = PARRY_CD;
     floatText(t.x, t.y - 70, 'Parry!', '#d8e4f0');
     spawnBurst(t.x + t.facing * 10, t.y - 40, 6, { color: '#e8eef4', speed: 120, up: 20, g: 200, life: 0.3, size: 1.6 });
@@ -1371,6 +1372,7 @@ function updateBuffs() {
     const reach = m.perks.hope || m.perks.fear ? m.range : 0;
     for (const o of alive) {
       if (o.inside || isWorker(o) || Math.abs(o.y - m.y) > 70) continue;
+      if (o.type === 'zombie' && o.team === m.team) continue;   // the dead take no heart (but feel Fear like anyone)
       const dx = Math.abs(o.x - m.x);
       if (o.team === m.team) {
         if (dx <= MAGE_AURA.r) { if (m.type === 'cleric') o.ward = true; else o.fury = true; }
@@ -1395,7 +1397,7 @@ function updateBuffs() {
   // everyone nearby gets a first stack before anyone gets a second.
   for (const L of alive) {
     if (L.type !== 'spear' || !L.perks.inspire || L.inside) continue;
-    const near = alive.filter(o => o !== L && o.team === L.team && o.type !== 'miner' && o.insp < 3 && Math.abs(o.x - L.x) < 160);
+    const near = alive.filter(o => o !== L && o.team === L.team && o.type !== 'miner' && o.type !== 'zombie' && o.insp < 3 && Math.abs(o.x - L.x) < 160);
     // stable order (distance in coarse steps, then id) so stacks don't hop between units
     near.sort((a, b) => a.insp - b.insp || Math.round(Math.abs(a.x - L.x) / 40) - Math.round(Math.abs(b.x - L.x) / 40) || a.id - b.id);
     for (const o of near.slice(0, 8)) o.insp++;

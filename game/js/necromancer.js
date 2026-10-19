@@ -3,7 +3,8 @@
 // and lead them: the pack stays around its master and falls on whatever comes near. A zombie's
 // victim rises as another zombie, if there's room in the pack (it counts like any other). Every kill
 // the pack makes feeds its master a soul: more souls mean a bigger pack, stronger zombies and faster
-// raising, so a Necromancer left alone snowballs. If it dies, its zombies just attack.
+// raising, so a Necromancer left alone snowballs. Zombies charge ahead once their side attacks, and
+// if their master dies they just attack.
 
 const hordeSize = (team, m) => NECRO.max + (team.upgrades.necromancer.horde ? 2 : 0) + (team.upgrades.necromancer.horde2 ? 2 : 0) +
   (m ? Math.min(NECRO.maxExtra, Math.floor((m.souls || 0) / NECRO.soulsPerSlot)) : 0);
@@ -45,15 +46,12 @@ function updateNecromancer(u, dt) {
   if (u.swing >= 0) return;
   if (o.type === 'refit') return doRefit(u, dt);
   if (handleBlocked(u, dt)) return;
-  // keep out of reach: back away from anything that gets close
-  const foe = G.units.find(e => e.team !== u.team && !e.dead && !e.inside && !isWorker(e) && Math.abs(e.x - u.x) < 80 && Math.abs(e.y - u.y) < 60);
-  if (foe && !u.inside) { moveTo(u, u.x - team.dir * 60, u.y, dt); return; }
   if (o.type === 'move') { if (moveTo(u, o.x, o.y, dt)) u.order = { type: 'hold', x: o.x, y: o.y }; return; }
   if (o.type === 'hold') { if (u.swing < 0) moveTo(u, o.x, o.y, dt); return; }
   if (o.type === 'attack') {
-    // point the pack at the target, from a safe distance behind it
+    // point the pack at the target and follow it in
     if (!isValidTarget(o.target)) { u.order = { type: 'hold', x: u.x, y: u.y }; return; }
-    moveTo(u, o.target.x - team.dir * 160, u.y, dt);
+    moveTo(u, o.target.x - team.dir * 120, u.y, dt);
     return;
   }
   if (o.type === 'group') return necroKeepRank(u, dt);
@@ -64,47 +62,53 @@ function updateNecromancer(u, dt) {
     if (moveTo(u, s.x, s.y, dt)) u.facing = team.dir;
     return;
   }
-  // attack: follow the army a little behind its front (or creep toward the enemy behind the pack)
+  // attack: march forward just behind the front of the army and its pack, stopping short of the
+  // enemy castle archers' reach
   let lead = null;
   for (const a of G.units) {
-    if (a.team !== u.team || a.dead || a.inside || isWorker(a) || a.type === 'necromancer' || a.type === 'zombie' || isRanged(a)) continue;
+    if (a.team !== u.team || a.dead || a.inside || isWorker(a) || a.type === 'necromancer' || isRanged(a)) continue;
     if (!lead || team.dir * (a.x - lead.x) > 0) lead = a;
   }
-  const front = lead ? lead.x : u.x + team.dir * 60;
-  const es = G.teams[1 - u.team].statue;
-  const stop = es.dead ? Infinity : team.dir * (es.x - front);
-  moveTo(u, stop < 200 ? u.x : front - team.dir * 110, u.slotY, dt);
+  const enemy = G.teams[1 - u.team], stopX = enemy.edge(castleArcherStats(enemy).reach + 40);
+  let tx = lead ? lead.x - team.dir * 90 : u.x + team.dir * 80;
+  if (team.dir * (tx - stopX) > 0) tx = stopX;
+  if (moveTo(u, tx, u.slotY, dt)) u.facing = team.dir;
 }
 
 function necroKeepRank(u, dt) {
   if (u.groupSlot) keepRank(u, u.order.g, dt);
 }
 
-// A zombie: shamble along with its master and fall on anything that comes near the pack; with its
-// master gone, lurch off toward the enemy statue, attacking whatever it meets.
+// Is the Necromancer's side on the attack (so its pack charges)?
+function necroAttacking(m) {
+  const team = G.teams[m.team], o = m.order;
+  if (o.type === 'attack') return true;
+  if (o.type === 'group') return o.g.mode !== 'retreat';
+  return o.type === 'stance' && (m.ownStance || team.stance) === 'attack';
+}
+
+// A zombie never marches in formation. While its master holds back, it mills about in front of it
+// and falls on any enemy that comes near it; once its side attacks (or its master falls) it just
+// runs forward, attacking whatever it meets on the way to the enemy statue. On a retreat it comes back.
 function updateZombie(u, dt) {
   if (u.riseT > 0) { u.riseT -= dt; return; }
   if (u.swing >= 0) return;
   if (handleBlocked(u, dt)) return;
-  const team = G.teams[u.team], es = G.teams[1 - u.team].statue, m = u.necro;
-  if (!m || m.dead) {
-    const t = nearestEnemy(u, u.aggro);
+  const team = G.teams[u.team], es = G.teams[1 - u.team].statue, m = u.necro && !u.necro.dead ? u.necro : null;
+  const retreating = m && ((m.order.type === 'group' && m.order.g.mode === 'retreat') || m.order.type === 'garrison' || (m.order.type === 'stance' && (m.ownStance || team.stance) === 'garrison'));
+  if (!retreating && (!m || necroAttacking(m))) {
+    const ordered = m && m.order.type === 'attack' && isValidTarget(m.order.target) && canTarget(u, m.order.target) ? m.order.target : null;
+    const t = ordered || nearestEnemy(u, u.aggro);
     if (t) return engage(u, t, dt);
     if (!es.dead) return engage(u, es, dt);
     return;
   }
-  // the master's chosen target, else whatever threatens the pack
-  const ordered = m.order.type === 'attack' && isValidTarget(m.order.target) ? m.order.target : null;
-  if (ordered && canTarget(u, ordered)) return engage(u, ordered, dt);
-  let best = null, bd = 1e9;
-  for (const e of G.units) {
-    if (e.team === u.team || !canTarget(u, e) || isFlying(e)) continue;
-    if (Math.abs(e.x - m.x) > NECRO.leash + 90) continue;
-    const d = Math.abs(e.x - u.x) + Math.abs(e.y - u.y) * 0.5;
-    if (d < bd) { bd = d; best = e; }
+  if (!retreating) {
+    // holding: anything that comes near this zombie gets clawed (it won't wander off far)
+    const t = nearestEnemy(u, u.aggro);
+    if (t && team.dir * (t.x - m.x) < 500) return engage(u, t, dt);
+    if (!es.dead && Math.abs(es.x - u.x) < u.range + es.halfW + 10) return engage(u, es, dt);
   }
-  if (best) return engage(u, best, dt);
-  if (!es.dead && Math.abs(es.x - u.x) < u.range + es.halfW + 10) return engage(u, es, dt);
   // mill about in front of the master
   const k = u.zi || 0, ahead = 40 + (k % 3) * 28, row = Math.floor(k / 3);
   const tx = (m.inside ? team.gateX + team.dir * 40 : m.x) + team.dir * ahead + Math.sin(RT * 0.7 + u.seed) * 6;
