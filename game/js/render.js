@@ -176,7 +176,7 @@ function drawDecals(ctx, x0, x1) {
 
 // Units standing on a wall are drawn lifted onto its top.
 function drawUnit(ctx, u) {
-  const lift = unitLift(u);   // up on a trench, in a tower or on the walkway
+  const lift = unitLift(u);   // up on a trench, or in a tower
   if (!lift) return drawUnitBody(ctx, u);
   ctx.save();
   ctx.translate(0, -lift);

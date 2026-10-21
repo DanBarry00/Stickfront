@@ -159,7 +159,7 @@ function issueCommand(wx, wy) {
       else if (me.id === 0) toast(towerCrew(tw).length >= towerSlots(tw) ? 'That tower is full' : 'Clear the tower first');
       return;
     }
-    if (tw.team === 0 && archs.length && (tw.progress < 1 || tw.hp < tw.max)) {
+    if (canMend(me, tw) && archs.length && (tw.progress < 1 || tw.hp < tw.max)) {
       for (const u of archs) setOrder(u, { type: 'build', wall: tw });
       marker(tw.x, tw.y, '#c9b27a');
       return;
@@ -334,6 +334,14 @@ function cycleMinerDefault() {
 
 // ---------------------------------------------------------------- spells
 
+// Necromancers: zombies charge as soon as they rise (on), or guard their master until the attack (off).
+function toggleZombieCharge() {
+  const necros = liveSel().filter(u => u.type === 'necromancer');
+  const on = !necros.every(u => u.zombieCharge);
+  for (const u of necros) u.zombieCharge = on;
+  toast(on ? 'Zombies will charge the enemy as soon as they rise' : 'Zombies will guard the Necromancer until you attack');
+}
+
 function toggleAutoCast() {
   const m = mageSel();
   if (!m.length) return;
@@ -405,6 +413,7 @@ const ICONS = {
   refit: '<path d="M4 18h16M7 18v-4h10v4M9 14V9h6v5M12 9V4" stroke-width="2"/>',
   stars: '<path d="M12 2l2.2 7.8L22 12l-7.8 2.2L12 22l-2.2-7.8L2 12l7.8-2.2z" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="2" fill="#120d0a" stroke="none"/>',
   auto: '<circle cx="12" cy="12" r="8" stroke-width="2"/><path d="M12 7v5l3 3" stroke-width="2"/><path d="M19 4l-2 3M5 4l2 3" stroke-width="1.6"/>',
+  zcharge: '<circle cx="9" cy="9" r="5" stroke-width="1.8"/><path d="M7 14v3h4v-3" stroke-width="1.6"/><path d="M14 12h7M18 9l3 3-3 3" stroke-width="2"/>',
 };
 
 const COMMANDS = [
@@ -421,7 +430,7 @@ const COMMANDS = [
   { id: 'pan', label: 'Pan', key: '⇧Q', show: s => s.miner && s.mil, run: () => minerSel().forEach(u => setOrder(u, { type: 'pan' })) },
   { id: 'wall', label: 'Dig trench', key: 'B', show: s => s.build, run: () => startPlacing('wall') },
   { id: 'reinforce', label: 'Palisade', key: 'J', show: s => s.fort, run: () => startPlacing('reinforce') },
-  { id: 'repair', label: 'Repair', key: 'Y', show: s => s.arch, run: () => { const w = repairStructures(G.teams[0], archSel()); if (w) G.markers.push({ x: w.x, y: w.isTower ? w.y : LANE_BOT, t: 0, color: '#c9b27a' }); else toast('None of your trenches or towers need repair'); } },
+  { id: 'repair', label: 'Repair', key: 'Y', show: s => s.arch, run: () => { const w = repairStructures(G.teams[0], archSel(), true); if (w) G.markers.push({ x: w.x, y: w.isTower ? w.y : LANE_BOT, t: 0, color: '#c9b27a' }); else toast('Nothing to repair or rebuild'); } },
   { id: 'tar', label: s => `Tar pit (${trapCost(G.teams[0], 'tar')})`, key: '⇧B', show: s => s.arch, run: () => startPlacing('tar'), cd: 'tar' },
   { id: 'landmine', label: s => `Mine (${trapCost(G.teams[0], 'mine')})`, key: '⇧N', show: s => s.arch, run: () => startPlacing('mine'), cd: 'mine' },
   { id: 'tower', label: `Archer tower (${TOWER.cost})`, key: '⇧Y', show: s => s.arch, run: () => startPlacing('tower') },
@@ -429,6 +438,7 @@ const COMMANDS = [
   { id: 'salt', label: 'Salt mine', key: 'RMB', show: s => s.sab, run: () => { UI.placing = 'salt'; } },
   { id: 'refit', label: 'Refit', key: 'R', show: () => true, run: refitSelected },
   { id: 'auto', label: 'Auto-cast', key: 'L', show: s => s.mage, run: toggleAutoCast, on: () => mageSel().every(u => u.auto) },
+  { id: 'zcharge', label: 'Zombies charge', key: 'L', show: s => s.necro, run: toggleZombieCharge, on: () => liveSel().filter(u => u.type === 'necromancer').every(u => u.zombieCharge) },
   { id: 'stars', label: s => `Weapon: ${STAR_MODE_NAMES[s.stars]}`, key: 'M', show: s => !!s.stars, run: cycleStarMode, on: () => starSelection().every(u => u.starMode === 'ranged') },
 ];
 
@@ -461,6 +471,7 @@ function selectionCaps() {
     mage: mageSel().length > 0,
     stars: starSelection().length ? starSelection()[0].starMode : null,
     sab: liveSel().some(u => u.type === 'saboteur'),
+    necro: liveSel().some(u => u.type === 'necromancer'),
     canGarrison: liveSel().some(u => !isGiant(u)),   // giants are too big for the castle
     minersOnly: liveSel().length > 0 && liveSel().every(u => u.type === 'miner'),
     spells: Object.keys(SPELLS).filter(k => mageSel().some(u => u.type === SPELLS[k].owner && u.perks[SPELLS[k].perk])),
@@ -601,7 +612,7 @@ function initInput() {
       case 'KeyG': UI.placing = 'flag'; break;
       case 'KeyC': runCommand('advance'); break;
       case 'KeyK': runCommand('manwall'); break;
-      case 'KeyL': runCommand('auto'); break;
+      case 'KeyL': runCommand(mageSel().length ? 'auto' : 'zcharge'); break;
       case 'KeyM': runCommand('stars'); break;
       case 'Digit7': case 'Digit8': spellHotkey(e.code, e.shiftKey); break;
       case 'KeyI': runCommand('mine'); break;
@@ -715,10 +726,11 @@ const CMD_TIPS = {
   tar: `Lay a hidden tar pit: the first enemy on foot to step on it springs a pool of tar that slows everyone wading through it for ${TRAP.tar.poolTime}s. Arcane Circle tar burns too. Not past the middle; ${TRAP.lineMax} to a line across the lane.`,
   landmine: `Bury a hidden mine: the first enemy on foot to step on it blows up everyone nearby (${TRAP.mine.dmg} damage at the centre, more for the Arcane Circle). Ninjas, saboteurs and flyers don't set traps off.`,
   tower: `Raise an archer tower (${TOWER.cost} gold). Right-click it with an archer to post them: +${TOWER.range} range, and arrows hurt them less. If melee troops wreck it, the archer dies in the collapse.`,
-  repair: 'Send the selected architects to mend your most damaged trench or tower.',
+  repair: 'Send the selected architects to mend your most damaged trench or tower (the Monolith’s tower too, while no one else holds it). With nothing damaged, they rebuild the nearest ruin (right-click a ruin to pick one).',
   reinforce: `Raise a sharpened log palisade on a finished trench (${WALL_COST} gold, +${WALL_HP2} hp).`,
   replenish: 'Quartermasters: restore a gold deposit, even an exhausted one (they do it on their own too).',
   refit: `Walk back to their building and take every upgrade they're missing (${REFIT_COST} gold and ${REFIT_TIME}s each).`,
+  zcharge: 'When on, this Necromancer’s zombies charge the enemy as soon as they rise, attacking whatever they meet on the way to the enemy statue. When off, they guard the Necromancer and only charge once your side attacks.',
   auto: `When on, mages cast their spells on their own and answer enemy spells with the opposite one. They keep ${SPELL_RESERVE} mana in reserve. You can still force any spell yourself.`,
   salt: `Click a gold deposit (or right-click it): the saboteurs sneak over and salt it. For ${SABOTEUR.saltDur}s enemy miners keep only half the gold they dig there.`,
   stars: 'Switch the selected ninjas between Auto (stars against Kestrels and giants, or when badly wounded; blade otherwise), Blade only and Stars only. The ambush blow only works with the blade.',
@@ -991,7 +1003,7 @@ function unitJob(u, me) {
     return { troops: 'Making the rounds (troops)', workers: 'Making the rounds (workers)' }[u.qmRole] || 'Making the rounds';
   }
   if (u.type === 'necromancer' && u.order.type === 'stance') return `Leading ${zombiesOf(u).length}/${hordeSize(me, u)} zombies (${u.souls || 0} souls)`;
-  if (u.rampart >= 0) return 'Manning the rampart';
+  if (u.rampart >= 0) return 'Shooting from the gate';
   if (u.netT > 0) return 'Caught in a net!';
   if (u.order.type === 'tower') return u.onTower ? 'Posted in a tower' : 'Climbing into a tower';
   if (u.shieldWall) return u.type === 'golem' ? 'Hunkered down' : 'Shield wall';
@@ -1083,8 +1095,9 @@ function updateHUD(dt) {
   if (mode !== UI.cardMode) buildCard(mode);
   if (UI.panel) {
     const card = $('card'), active = panelTypes(UI.panel).filter(t => me.research[t]).map(t => upgradeDef(t, me.research[t].key).name);
-    card.querySelector('.rs').textContent = active.length ? `Researching ${active.join(', ')}` : 'Idle';
     const studying = canTrain(me, 'architect') && G.units.some(u => u.team === 0 && !u.dead && u.type === 'architect');
+    const noArch = panelTypes(UI.panel).includes('castle') && !hasArchitect(me);
+    card.querySelector('.rs').textContent = noArch ? (me.research.castle ? `${upgradeDef('castle', me.research.castle.key).name} waits for an Architect` : 'Castle upgrades need an Architect') : active.length ? `Researching ${active.join(', ')}` : 'Idle';
     card.querySelectorAll('.ubtn').forEach(b => {
       const type = b.dataset.type, r = me.research[type];
       const chain = b.dataset.chain.split(',').map(k => upgradeDef(type, k));
@@ -1106,7 +1119,7 @@ function updateHUD(dt) {
       b.classList.toggle('done', done);
       b.classList.toggle('active', !!active);
       b.classList.toggle('poor', !done && !active && (me.gold < p.gold || me.mana < p.mana));
-      b.classList.toggle('blocked', !done && !active && (!!r || (d.requires && !me.upgrades[type][d.requires])));
+      b.classList.toggle('blocked', !done && !active && (!!r || (d.requires && !me.upgrades[type][d.requires]) || (type === 'castle' && !hasArchitect(me))));
       b.querySelector('.prog i').style.width = active ? ((r.t / d.time) * 100).toFixed(1) + '%' : '0%';
       // the architects' study book: shown while you have an Architect, lit on the upgrade they study
       const book = b.querySelector('.study');
@@ -1239,6 +1252,25 @@ function clanInfoHTML(key) {
 
 // The skirmish setup: both clans (or random), opponent difficulty, map options and the seed.
 // The map in the background is a live preview of the chosen seed and options.
+// The main menu: Tutorial and Campaign are still being built; Skirmish opens the battle setup.
+function showMainMenu() {
+  document.body.className = 'title';
+  $('debug').classList.add('hidden');
+  const soon = (id, label, desc) => `<button id="${id}" class="mode" disabled><b>${label}</b><span>${desc}</span><i class="tag">Under construction</i></button>`;
+  $('overlay').innerHTML = `
+    <div class="card menu">
+      <h1>STICKFRONT</h1>
+      <p class="sub">a stick war</p>
+      <div class="modes">
+        ${soon('btnTutorial', 'Tutorial', 'Learn to mine, train, and hold the line')}
+        ${soon('btnCampaign', 'Campaign', 'Lead your clan from battle to battle')}
+        <button id="btnSkirmish" class="mode play"><b>Skirmish</b><span>One battle against the computer, your clans and map</span></button>
+      </div>
+    </div>`;
+  $('overlay').classList.remove('hidden');
+  $('btnSkirmish').onclick = () => showTitle();
+}
+
 function showTitle() {
   document.body.className = 'title';
   $('debug').classList.add('hidden');
@@ -1266,7 +1298,7 @@ function showTitle() {
         <div class="maptheme">${th.name} · ${G.mines.length} gold deposits</div>
         <div class="maplayout">${mapLayoutText()}</div>
       </div>
-      <div class="row"><button id="btnStart" class="big">Begin Battle</button></div>
+      <div class="row"><button id="btnMenu" data-tip="Back to the main menu">Back</button><button id="btnStart" class="big">Begin Battle</button></div>
       <p class="hint">Destroy the enemy statue, then kill the giant that bursts out of it, to win. Press <kbd>H</kbd> in game for controls.</p>
     </div>`;
   $('overlay').classList.remove('hidden');
@@ -1283,6 +1315,7 @@ function showTitle() {
   };
   // the battle uses fresh clans: random picks are decided now
   $('btnStart').onclick = () => { newGame(G.seed); startBattle(); };
+  $('btnMenu').onclick = () => showMainMenu();
 }
 
 function startBattle() {

@@ -96,7 +96,7 @@ function updateZombie(u, dt) {
   if (handleBlocked(u, dt)) return;
   const team = G.teams[u.team], es = G.teams[1 - u.team].statue, m = u.necro && !u.necro.dead ? u.necro : null;
   const retreating = m && ((m.order.type === 'group' && m.order.g.mode === 'retreat') || m.order.type === 'garrison' || (m.order.type === 'stance' && (m.ownStance || team.stance) === 'garrison'));
-  if (!retreating && (!m || necroAttacking(m))) {
+  if (!retreating && (!m || m.zombieCharge || necroAttacking(m))) {
     const ordered = m && m.order.type === 'attack' && isValidTarget(m.order.target) && canTarget(u, m.order.target) ? m.order.target : null;
     const t = ordered || nearestEnemy(u, u.aggro);
     if (t) return engage(u, t, dt);

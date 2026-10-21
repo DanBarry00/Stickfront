@@ -2814,48 +2814,6 @@ function drawSpearHall(ctx, x, base, st, hover) {
 }
 
 
-// The flyers' launch perch on the rampart, where Kestrels and Firebirds take off: a timber frame
-// with a plank jutting out over the battlements, a winch for hauling the wings up, and a windsock
-// in the side's colour.
-function drawLaunchPerch(ctx, x, base, st) {
-  const wood = '#5e4128', dark = '#24180d', top = base - 46;
-  ctx.save();
-  ctx.lineCap = 'round';
-  // frame: two posts and a brace
-  ctx.strokeStyle = dark;
-  ctx.lineWidth = 4.5;
-  ctx.beginPath();
-  ctx.moveTo(x - 14, base); ctx.lineTo(x - 12, top);
-  ctx.moveTo(x + 10, base); ctx.lineTo(x + 9, top);
-  ctx.stroke();
-  ctx.strokeStyle = wood;
-  ctx.lineWidth = 3;
-  ctx.stroke();
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = shade(wood, -0.15);
-  ctx.beginPath(); ctx.moveTo(x - 13, base - 4); ctx.lineTo(x + 9, top + 12); ctx.moveTo(x + 10, base - 4); ctx.lineTo(x - 12, top + 12); ctx.stroke();
-  // the launch plank, jutting out toward the field
-  ctx.fillStyle = '#4a3420';
-  ctx.beginPath(); ctx.moveTo(x - 18, top); ctx.lineTo(x + 38, top - 3); ctx.lineTo(x + 38, top + 2); ctx.lineTo(x - 18, top + 5); ctx.closePath(); ctx.fill();
-  ctx.strokeStyle = dark; ctx.lineWidth = 1; ctx.stroke();
-  ctx.strokeStyle = 'rgba(16,10,5,0.6)';
-  ctx.beginPath(); for (let px = x - 10; px < x + 36; px += 9) { ctx.moveTo(px, top - 1); ctx.lineTo(px, top + 4); } ctx.stroke();
-  // a winch drum and rope
-  ctx.fillStyle = '#3a2814';
-  ctx.beginPath(); ctx.arc(x - 2, top + 20, 4.5, 0, TAU); ctx.fill();
-  ctx.strokeStyle = '#a89870'; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(x - 2, top + 16); ctx.lineTo(x + 24, top - 1); ctx.stroke();
-  // windsock
-  ctx.strokeStyle = dark; ctx.lineWidth = 1.4;
-  ctx.beginPath(); ctx.moveTo(x - 12, top); ctx.lineTo(x - 12, top - 22); ctx.stroke();
-  const flap = Math.sin(RT * 3 + x) * 2;
-  ctx.fillStyle = shade(st.accent, -0.1);
-  ctx.beginPath(); ctx.moveTo(x - 12, top - 22); ctx.lineTo(x + 4, top - 20 + flap); ctx.lineTo(x + 3, top - 15 + flap); ctx.lineTo(x - 12, top - 15); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = 'rgba(255,255,255,0.35)';
-  ctx.fillRect(x - 6, top - 21 + flap * 0.4, 2.5, 6);
-  weather(ctx, x - 18, top - 2, 56, base - top + 2, 61, 0.6);
-  ctx.restore();
-}
 // The Mage Tower: a round stone tower under a slate cone, one window for each of the mages it
 // trains: the Cleric's candlelit arch, the Warlock's violet rose window and the Necromancer's
 // green-lit skull niche over the door.
@@ -3449,8 +3407,6 @@ function drawCastle(ctx, team, hoverKey) {
     ctx.fillRect(x, ceilTop - 14, 14, 14);
     ctx.strokeRect(x, ceilTop - 14, 14, 14);
   }
-  // the flyers' launch perch on the rampart
-  drawLaunchPerch(ctx, KESTREL_PERCH_X, ceilTop, st);
 
   // hanging banners inside the hall
   for (const bx of [146, 266, 386]) drawBanner(ctx, bx, ceilBot, 22, 46, c.banner, st);

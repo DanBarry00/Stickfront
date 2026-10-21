@@ -40,7 +40,7 @@ function makeTeam(id, map, clanKey) {
     musterX: null,            // where newly trained soldiers gather; null = follow the stance
     minerDefault: 'mine',     // what newly trained miners go do: 'mine' | 'pray' | 'pan'
     panSlots: new Array(PAN_SLOTS).fill(null),
-    rampart: new Array(RAMPART_LINE_XS.length).fill(null),   // garrisoned archers manning the walkway
+    rampart: new Array(RAMPART_LINE_XS.length).fill(null),   // garrisoned archers shooting from the gate
     queues: Object.fromEntries(TRAIN_GROUPS.map(g => [g.key, []])),   // per training group: [{ type, t }]
     upgrades: perType(() => ({}), [...RESEARCH_TYPES, 'zombie']),   // (zombies have no upgrades of their own)
     research: perType(() => null, [...RESEARCH_TYPES, 'zombie']),
@@ -132,8 +132,8 @@ function spawnUnit(team, type, x, y) {
   const u = new Unit(type, team.id, x, y === undefined ? rnd(LANE_TOP + 10, LANE_BOT - 10) : y, fromDoor ? team.upgrades[type] : null);
   if (fromDoor) {
     u.slotY = rnd(LANE_TOP + 10, LANE_BOT - 10);
-    // Kestrels and Firebirds launch off the rampart and glide down
-    if (type === 'flyer' || type === 'firebird') u.alt = LANE_TOP - WALL_TOP + 20;
+    // Kestrels and Firebirds take off from the Range, low under the castle ceiling
+    if (type === 'flyer' || type === 'firebird') u.alt = 4;
     if (type === 'miner') {
       // the small mine / pray / pan toggle decides where fresh miners head
       if (team.minerDefault === 'pray') u.order = { type: 'mana' };
@@ -212,6 +212,7 @@ function startResearch(team, type, key) {
   if (upgradeLocked(team, type, key)) return say(`The ${clanOf(team).name} can't research ${def.name}`);
   if (def.requires && !team.upgrades[type][def.requires]) return say(`Requires ${upgradeDef(type, def.requires).name}`);
   if (team.research[type]) return say(`The ${buildingName(type)} is already researching`);
+  if (type === 'castle' && !hasArchitect(team)) return say('Castle upgrades need an Architect: train one first');
   const price = upgradePrice(team, type, def);   // after the architects' savings
   if (team.gold < price.gold) return say('Not enough gold');
   if (team.mana < price.mana) return say('Not enough mana');
@@ -220,6 +221,9 @@ function startResearch(team, type, key) {
   team.research[type] = { key, t: 0, paid: price };
   return true;
 }
+
+// Castle upgrades are the architects' work: they need one alive to start, and pause while there's none.
+const hasArchitect = team => G.units.some(u => u.team === team.id && !u.dead && u.type === 'architect');
 
 function cancelResearch(team, type) {
   const r = team.research[type];
@@ -235,6 +239,8 @@ function updateResearch(team, dt) {
   for (const type of RESEARCH_TYPES) {
     const r = team.research[type];
     if (!r) continue;
+    if (type === 'castle' && !hasArchitect(team)) { r.waiting = true; continue; }
+    r.waiting = false;
     r.t += dt;
     const def = upgradeDef(type, r.key);
     if (r.t < def.time) continue;
@@ -398,6 +404,7 @@ function updateCastle(team, dt) {
 
 // The Shrine: soldiers near it (miners don't count) pull its allegiance their way while no enemy
 // soldier contests it. A captured shrine first has to be neutralised before it can change hands.
+// While the Monolith tower's neutral archers still stand, nobody can take it.
 const shrineHolders = (s, team) => G.units.filter(u => u.team === team && !u.dead && !u.inside && !isWorker(u) && Math.abs(u.x - s.x) < SHRINE.radius).length;
 function updateShrine(dt) {
   const s = G.shrine;
@@ -405,7 +412,10 @@ function updateShrine(dt) {
   s.pulse = Math.max(0, s.pulse - dt);
   const n0 = shrineHolders(s, 0), n1 = shrineHolders(s, 1);
   s.contest = n0 > 0 && n1 > 0;
-  if (!s.contest && (n0 || n1)) {
+  const guarded = G.units.some(u => u.team === NEUTRAL && !u.dead);
+  if (guarded && (n0 || n1) && !s.guardWarned && n0) { s.guardWarned = true; toast('The Monolith’s archers still hold it: bring them down to take it', 'warn'); }
+  s.guarded = guarded;
+  if (!guarded && !s.contest && (n0 || n1)) {
     const dir = n0 ? 1 : -1, n = Math.max(n0, n1);
     const before = s.cap;
     s.cap = clamp(s.cap + (dir * Math.min(3, n)) / SHRINE.capTime * dt, -1, 1);

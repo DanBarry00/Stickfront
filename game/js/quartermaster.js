@@ -26,7 +26,7 @@ function qmJobs(team) {
   for (const t of G.units) {
     if (t.team !== team.id || t.dead || t.inside || t.type === 'zombie' || t.type === 'quartermaster' || t.onTower || t.rampart >= 0) continue;
     if (inMelee(t)) continue;
-    if (t.type === 'gladiator' && (!t.javelin || !t.net)) jobs.push({ kind: 'gear', t, troops: true });
+    if (t.type === 'gladiator' && (!t.javelin || !t.net) && G.time >= (t.gearReadyT || 0)) jobs.push({ kind: 'gear', t, troops: true });
     if (missingUpgrades(t).length) jobs.push({ kind: 'refit', t, troops: !isWorker(t) });
     if (!isWorker(t) && t.hp < t.maxHp * 0.85) jobs.push({ kind: 'heal', t, troops: true });
   }
@@ -114,6 +114,7 @@ function updateQuartermaster(u, dt) {
   if (j.kind === 'gear') {
     t.javelin = 1;
     t.net = 1;
+    t.gearReadyT = G.time + QM.gearCd;   // the next set has to wait
     if (t.team === 0) floatText(t.x, t.y - 84, 'New net and javelin', '#d8c48a');
     u.qmJob = null;
   } else if (j.kind === 'refit') {

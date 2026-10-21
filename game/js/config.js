@@ -25,7 +25,7 @@ const DEFENSE = { homeMax: 0.2, regen: 6, regenR: 900, regenDelay: 15, rallyAt: 
 const STATUE_X = 800;        // distance of each statue from its world edge
 const GATE_X = 560;          // castle front wall (gate) distance from world edge
 const BUILD_X = { sword: 95, spear: 215, archer: 335, miner: 455 };   // building centers inside the castle
-const RAMPART_LINE_XS = [430, 408, 386, 364, 342, 320];   // garrisoned archers line up along the walkway here, one row only
+const RAMPART_LINE_XS = [540, 524, 508, 492];   // up to 4 garrisoned archers line up just inside the gate and shoot out of it
 const ARCHER_XS = [520, 498, 476, 454];   // castle archer spots on the rampart, shoulder to shoulder from the front (extra ones are castle upgrades; the 4th is for clans with 4 slots)
 // Castle archers cover the ground out to just past where an enemy archer with the same bow
 // upgrades has to stand to shoot the statue: statue + its half-width + archer range + this margin.
@@ -37,7 +37,7 @@ const JAVELIN = { range: 300, dmg: 30 };   // a Gladiator's javelin (one, refill
 // times as fast and mine, pan and pray cheerWork times as fast, and a Quartermaster tops them up when
 // fewer than cheerTopUp seconds are left; bring an Architect materials for a free trap every
 // materialsCd (materialsWagon with Supply Wagon); keep out of reach of enemies within safe.
-const QM = { heal: 20, healSalves: 30, healTime: 1, refitTime: 1.2, cheerR: 160, cheerTime: 30, cheerTopUp: 8, cheerSpeed: 1.5, cheerWork: 2, materialsCd: 60, materialsWagon: 35, safe: 140 };
+const QM = { heal: 20, healSalves: 30, healTime: 1, refitTime: 1.2, cheerR: 160, cheerTime: 30, cheerTopUp: 8, cheerSpeed: 1.5, cheerWork: 2, materialsCd: 60, materialsWagon: 35, safe: 140, gearCd: 25 };   // gearCd: seconds before a Quartermaster can re-arm the same Gladiator
 // Gladiators: the net pins its target for netTime (it reaches netRange); every kill (up to maxKills: a snowball)
 // adds killHp and killDmg; with fewer than aloneN friends within aloneR, alonePer more damage each.
 const GLADIATOR = { netRange: 150, netTime: 3, netTimeWeighted: 5, killHp: 15, killDmg: 0.04, maxKills: 25, aloneR: 160, aloneN: 5, alonePer: 0.08, manica: 0.2 };
@@ -103,7 +103,7 @@ const towerY = () => LANE_TOP + 3;                        // towers stand at the
 const REBUILD = 0.3;
 // Idle architects (or ones in the castle, at garrisonMul the pace) study: every time seconds of
 // study knocks step off the price of a random upgrade, down to at most max off.
-const ARCH_RESEARCH = { time: 30, step: 0.1, max: 0.4, garrisonMul: 1.5 };
+const ARCH_RESEARCH = { time: 30, step: 0.1, max: 0.4, garrisonMul: 1.5, mana: 0.5 };   // mana: per second, each architect studying at the statue
 
 const BURN_DPS = 4;          // Flaming Arrows damage over time
 const BURN_TIME = 3;
@@ -121,7 +121,7 @@ const UNIT_TYPES = {
   architect: {
     key: 'architect', name: 'Architect', cost: 175, time: 5, hp: 80, speed: 70, pop: 1,
     dmg: 6, range: 26, atkTime: 1, aggro: 0, hotkey: '`', code: 'Backquote',
-    desc: 'Builds and repairs: digs trenches (with Earthworks), lays hidden traps, raises archer towers, and mends any of your structures. Left idle (or in the castle) it studies, making random upgrades cheaper.',
+    desc: 'Builds and repairs: digs trenches (with Earthworks), lays hidden traps, raises archer towers, repairs and rebuilds trenches and towers (the Monolith’s too). Left idle (or in the castle) it studies, making random upgrades cheaper, and makes a little mana at the statue. Castle upgrades need one.',
   },
   sword: {
     key: 'sword', name: 'Swordwrath', cost: 125, time: 3.5, hp: 140, speed: 100, pop: 1,
@@ -246,13 +246,14 @@ const isWorker = u => u.type === 'miner' || u.type === 'architect' || u.type ===
 const isRanged = u => u.type === 'archer' || u.type === 'warlock' || u.type === 'ballista' || u.type === 'beastmaster' || isFlying(u) || (u.type === 'ninja' && !!u.starRanged);
 const trainCode = def => def.code || 'Digit' + def.hotkey;
 // One building per class inside the castle (the Giant Pit stands outside the gate). Units walk out
-// of their class's building; Kestrels and Firebirds launch off the rampart above the Range.
+// of their class's building; Kestrels and Firebirds take off from the Range and fly low under the
+// castle ceiling until they clear the gate.
 const GIANT_PIT_X = 655;
 const CLASS_X = { infantry: BUILD_X.sword, mages: BUILD_X.spear, ranged: BUILD_X.archer, workers: BUILD_X.miner, giants: GIANT_PIT_X };
-const KESTREL_PERCH_X = 270;   // where flyers launch from the rampart (clear of the castle archers and the rampart line)
+const CASTLE_FLY_ALT = 30;     // flyers skim low inside their own castle, under the ceiling
 const DOOR_X = {};
 for (const g of TRAIN_GROUPS) for (const t of g.types) DOOR_X[t] = CLASS_X[g.key];
-Object.assign(DOOR_X, { flyer: KESTREL_PERCH_X, firebird: KESTREL_PERCH_X, ballista: 500, zombie: CLASS_X.mages });   // ballistas roll out by the gate
+Object.assign(DOOR_X, { ballista: 500, zombie: CLASS_X.mages });   // ballistas roll out by the gate
 
 // Ninjas
 const NINJA_AMBUSH = 3;           // damage multiplier of the first blow of a fight (or out of stealth)
