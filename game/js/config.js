@@ -45,6 +45,9 @@ const GLADIATOR = { netRange: 150, netTime: 3, netTimeWeighted: 5, killHp: 15, k
 // Quick Rites) for mana; zombies stay within leash of it, and take rangedMul of projectile damage.
 const NECRO = { max: 6, summonCd: 6, rites: 4, mana: 5, leash: 170, rangedMul: 0.5, graveHp: 1.5,
   souls: 25, soulsPerSlot: 4, maxExtra: 5, soulPower: 0.03, soulHaste: 0.02 };   // souls: each kill by its zombies (up to souls) grows the pack by one per soulsPerSlot, and its zombies' power and summoning speed
+// Hulks (Hulking Dead): every `every`th zombie a Necromancer raises is a hulking brute: hp and dmg
+// multipliers, drawn at `scale`, walking at `speed` of a zombie's pace.
+const HULK = { every: 4, hp: 3.2, dmg: 2, scale: 1.25, speed: 0.55 };
 // The undead and holy light: an enemy Healing Pool burns zombies for poolMul times its healing, and a
 // Cleric with nobody to heal smites the nearest enemy zombie for smiteMul times its heal.
 const UNDEAD = { poolMul: 5, smiteMul: 3 };
@@ -216,12 +219,12 @@ UNIT_TYPES.gladiator = {
 UNIT_TYPES.necromancer = {
   key: 'necromancer', name: 'Necromancer', cost: 175, mana: 75, time: 7, hp: 85, speed: 70, pop: 1,
   dmg: 0, range: 240, atkTime: 1.4, aggro: 300, hotkey: '0', code: 'Digit0',
-  desc: 'Raises zombies (up to 6, more with upgrades; they don\'t count toward your population) and leads them. Zombies are slow, weak fodder that take half damage from arrows and other shots, and an enemy a zombie kills rises as another. If the Necromancer falls, its zombies just attack.',
+  desc: 'Raises zombies (up to 6, more with upgrades; they don\'t count toward your population) and leads them. Zombies are fast, weak fodder that take half damage from arrows and other shots, and an enemy a zombie kills rises as another. If the Necromancer falls, its zombies just attack.',
 };
 UNIT_TYPES.zombie = {
-  key: 'zombie', name: 'Zombie', cost: 0, time: 0, hp: 60, speed: 70, pop: 0,
+  key: 'zombie', name: 'Zombie', cost: 0, time: 0, hp: 60, speed: 108, pop: 0,
   dmg: 8, range: 28, atkTime: 1.1, aggro: 240, summoned: true,
-  desc: 'Raised by a Necromancer. Weak and slow, but it takes half damage from arrows and other shots, and whoever it kills rises as another zombie.',
+  desc: 'Raised by a Necromancer. Weak, but it runs at its prey, takes half damage from arrows and other shots, and whoever it kills rises as another zombie.',
 };
 const UNIT_ORDER = ['miner', 'architect', 'quartermaster', 'sword', 'archer', 'spear', 'gladiator', 'cleric', 'warlock', 'necromancer', 'giant', 'ninja', 'flyer', 'ballista', 'golem', 'beastmaster', 'saboteur', 'firebird'];
 // Training groups: each group trains one unit at a time from a shared queue (so a Swordwrath
@@ -243,7 +246,7 @@ const isFlying = u => (u.type === 'flyer' && !u.grounded) || u.type === 'firebir
 // Ninjas count as ranged while throwing stars (u.starRanged is decided each frame).
 // Workers (miners and architects) don't fight: they're left out of armies, formations and army strength.
 const isWorker = u => u.type === 'miner' || u.type === 'architect' || u.type === 'quartermaster';
-const isRanged = u => u.type === 'archer' || u.type === 'warlock' || u.type === 'ballista' || u.type === 'beastmaster' || isFlying(u) || (u.type === 'ninja' && !!u.starRanged);
+const isRanged = u => u.type === 'medusa' || u.type === 'archer' || u.type === 'warlock' || u.type === 'ballista' || u.type === 'beastmaster' || isFlying(u) || (u.type === 'ninja' && !!u.starRanged);
 const trainCode = def => def.code || 'Digit' + def.hotkey;
 // One building per class inside the castle (the Giant Pit stands outside the gate). Units walk out
 // of their class's building; Kestrels and Firebirds take off from the Range and fly low under the
@@ -461,6 +464,7 @@ const UPGRADES = {
     { key: 'horde2', name: 'Endless Horde', cost: 300, mana: 125, time: 35, requires: 'horde', desc: `Each Necromancer keeps up to ${NECRO.max + 4} zombies.` },
     { key: 'grave', name: 'Grave Dirt', cost: 175, mana: 75, time: 25, desc: `Zombies rise with ${Math.round((NECRO.graveHp - 1) * 100)}% more health.` },
     { key: 'rites', name: 'Quick Rites', cost: 175, mana: 75, time: 25, desc: `A zombie rises every ${NECRO.rites}s instead of every ${NECRO.summonCd}s.` },
+    { key: 'hulk', name: 'Hulking Dead', cost: 250, mana: 100, time: 35, desc: `Every ${HULK.every}th zombie a Necromancer raises is a Hulk: a huge, slow brute with ${HULK.hp}× health and double damage.` },
   ],
   zombie: [],
   giant: [

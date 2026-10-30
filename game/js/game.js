@@ -96,8 +96,8 @@ function spawnClanArmy(t) {
 }
 
 // clans: [player, enemy] clan keys; by default taken from the setup (random ones decided now).
-function newGame(seed, clans) {
-  const map = generateMap(seed, { monolith: SETUP.monolith, gold: SETUP.gold });
+function newGame(seed, clans, mapOpts) {
+  const map = generateMap(seed, { monolith: SETUP.monolith, gold: SETUP.gold, ...mapOpts });
   clans = clans || [resolveClan(SETUP.clan), resolveClan(SETUP.enemy)];
   G = {
     map, seed,
@@ -665,7 +665,10 @@ function destroyStatue(s) {
   }
   // the battle isn't over yet: the giant sealed inside the statue breaks free
   logEvent(s.team === 0 ? 'Your statue fell' : 'Enemy statue destroyed', 1 - s.team);
-  if (!G.over) releaseStatueGiant(s);
+  if (G.over) return;
+  // (in the tutorial's early lessons there's no giant inside: the statue falling ends the battle)
+  if (G.lesson && !G.lesson.L.statueGiant) { G.over = { winner: 1 - s.team }; G.overT = 0; return; }
+  releaseStatueGiant(s);
 }
 
 // ---------------------------------------------------------------- weather
@@ -707,6 +710,7 @@ function update(dt) {
   if (!G.over) {
     G.ai.update(dt);
     if (G.autopilot) G.autopilot.update(dt);
+    if (G.lesson) updateLesson(dt);
   }
   updateShrine(dt);
   for (const m of G.mines) if (m.saltT > 0) m.saltT -= dt;   // salt wears off
@@ -727,7 +731,7 @@ function update(dt) {
   updateProjectiles(dt);
   updateSpellWorld(dt);
   updateParticles(dt);
-  G.units = G.units.filter(u => !(u.dead && u.deathT > 9));
+  G.units = G.units.filter(u => !(u.dead && u.deathT > (u.petrified ? PETRIFIED_TIME + 3 : 9)));   // (Medusa's stone victims stand a while)
   G.walls = G.walls.filter(w => !w.dead || w.ruin);   // ruins stay until rebuilt
   G.towers = G.towers.filter(t => !t.dead || t.ruin);
   G.selection = G.selection.filter(u => !u.dead);

@@ -1162,6 +1162,7 @@ function drawMinimap() {
   c.fillRect(0, 0, w, h);
   const gy = h * 0.6, lh = h * 0.32;
   for (const t of G.teams) {
+    if (t.noCastle) continue;   // (a campaign field with no castle on that side)
     const col = TEAM_STYLE[t.id].ui;
     c.fillStyle = shade(t.castle.stone, -0.3);
     c.fillRect(t.id === 0 ? 0 : w - (GATE_X + 14) * k, gy - 16, (GATE_X + 14) * k + 1, 16);
@@ -1231,8 +1232,8 @@ function togglePause() {
 
 function initPauseMenu() {
   $('pmResume').onclick = togglePause;
-  $('pmRestart').onclick = () => { $('pauseMenu').classList.add('hidden'); newGame(G.seed, G.clans); startBattle(); };
-  $('pmNew').onclick = () => { $('pauseMenu').classList.add('hidden'); newGame(randomSeed()); showTitle(); };
+  $('pmRestart').onclick = () => { $('pauseMenu').classList.add('hidden'); if (G.lesson) return G.lesson.campaign ? startCampaignLevel(G.lesson.key) : startLesson(G.lesson.key); newGame(G.seed, G.clans); startBattle(); };
+  $('pmNew').onclick = () => { $('pauseMenu').classList.add('hidden'); if (G.lesson) { const camp = G.lesson.campaign; G.paused = false; newGame(randomSeed()); return camp ? showCampaignMap() : showTutorialMenu(); } newGame(randomSeed()); showTitle(); };
   $('pmHelp').onclick = toggleHelp;
 }
 
@@ -1254,24 +1255,29 @@ function clanInfoHTML(key) {
 // The map in the background is a live preview of the chosen seed and options.
 // The main menu: Tutorial and Campaign are still being built; Skirmish opens the battle setup.
 function showMainMenu() {
+  G.lesson = null;
+  hideLessonBox();
   document.body.className = 'title';
   $('debug').classList.add('hidden');
-  const soon = (id, label, desc) => `<button id="${id}" class="mode" disabled><b>${label}</b><span>${desc}</span><i class="tag">Under construction</i></button>`;
   $('overlay').innerHTML = `
     <div class="card menu">
       <h1>STICKFRONT</h1>
       <p class="sub">a stick war</p>
       <div class="modes">
-        ${soon('btnTutorial', 'Tutorial', 'Learn to mine, train, and hold the line')}
-        ${soon('btnCampaign', 'Campaign', 'Lead your clan from battle to battle')}
+        <button id="btnTutorial" class="mode"><b>Tutorial</b><span>Learn each unit in battles of its own, unlocking your army as you go</span></button>
+        <button id="btnCampaign" class="mode"><b>Campaign</b><span>March against the Horde, a monster army, battle by battle across the map</span></button>
         <button id="btnSkirmish" class="mode play"><b>Skirmish</b><span>One battle against the computer, your clans and map</span></button>
       </div>
     </div>`;
   $('overlay').classList.remove('hidden');
   $('btnSkirmish').onclick = () => showTitle();
+  $('btnTutorial').onclick = () => showTutorialMenu();
+  $('btnCampaign').onclick = () => showCampaignMap();
 }
 
 function showTitle() {
+  G.lesson = null;
+  hideLessonBox();
   document.body.className = 'title';
   $('debug').classList.add('hidden');
   const th = G.map.theme;
@@ -1341,6 +1347,7 @@ function showEnd() {
   G.state = 'over';
   UI.placing = null;
   $('debug').classList.add('hidden');
+  if (G.lesson) return showLessonEnd(won, `${mins}:${secs}`);
   $('overlay').innerHTML = `
     <div class="card wide ${won ? 'win' : 'lose'}">
       <h1>${won ? 'VICTORY' : 'DEFEAT'}</h1>
@@ -1355,6 +1362,32 @@ function showEnd() {
   wireEndCharts();
   $('btnAgain').onclick = () => { newGame(G.seed, G.clans); startBattle(); };
   $('btnNew').onclick = () => { newGame(randomSeed()); showTitle(); };
+}
+
+// The end of a tutorial lesson: what it unlocked, and on to the next one (or try again).
+function showLessonEnd(won, time) {
+  hideLessonBox();
+  const L = G.lesson.L, { msg, next } = lessonEndHTML(won);
+  const giant = L.statueGiant;
+  $('overlay').innerHTML = `
+    <div class="card wide ${won ? 'win' : 'lose'}">
+      <h1>${won ? 'VICTORY' : 'DEFEAT'}</h1>
+      <p class="sub">${L.name} · ${won ? (giant ? 'The enemy statue and the giant within it have fallen.' : 'The enemy statue has fallen.') : (giant ? 'Your statue lies in ruins and its giant is slain.' : 'Your statue has fallen.')} · ${time}</p>
+      ${msg}
+      ${endScreenHTML(won)}
+      <div class="row">
+        ${won && next ? `<button id="btnNextLesson" class="big">Next: ${next.name}</button>` : ''}
+        <button id="btnRetry" class="${won ? '' : 'big'}">${won ? 'Play again' : 'Try again'}</button>
+        <button id="btnTutMenu">Tutorial menu</button>
+      </div>
+    </div>`;
+  $('overlay').classList.remove('hidden');
+  wireEndCharts();
+  const key = G.lesson.key, camp = G.lesson.campaign;
+  if (camp) $('btnTutMenu').textContent = 'Campaign map';
+  if ($('btnNextLesson')) $('btnNextLesson').onclick = () => (camp ? showCampaignBriefing(next.key) : showBriefing(next.key));
+  $('btnRetry').onclick = () => (camp ? startCampaignLevel(key) : startLesson(key));
+  $('btnTutMenu').onclick = () => { newGame(randomSeed()); camp ? showCampaignMap() : showTutorialMenu(); };
 }
 
 function randomSeed() {

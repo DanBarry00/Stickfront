@@ -400,6 +400,7 @@ function startSwing(u, kind, target) {
 
 function onSwingHit(u) {
   const t = u.swingTarget;
+  if (u.type === 'medusa') return medusaGaze(u, t);   // her gaze turns its target to stone
   if (u.swingKind === 'attack') {
     // a vanished ninja caught at close quarters is struck (and shaken out of hiding) all the same
     if (t && t.stealth && !t.dead && !t.inside && inReach(u, t, 12)) t.stealth = false;
@@ -606,7 +607,7 @@ function shooterToCharge(u, postX) {
 const PELT_REACT = 1.2;      // seconds of standing there being hit before reacting
 const PELT_CHASE = 520;      // how far it will go after the shooter
 function reactToFire(u, dt) {
-  if (u.dead || isWorker(u) || isGiant(u) || u.type === 'zombie' || u.type === 'necromancer' || u.team === NEUTRAL) return;
+  if (u.dead || isWorker(u) || isGiant(u) || u.type === 'zombie' || u.type === 'necromancer' || u.team === NEUTRAL || u.boss) return;   // (campaign bosses keep to their commander's plan)
   if (u.inside || u.onTower || u.onWall || u.rampart >= 0 || u.order.type === 'refit' || u.order.react) { u.peltT = 0; return; }
   const f = u.lastAttacker;
   if (u.retaliateT <= 0 || !isValidTarget(f) || f.isStructure || f.castle || u.swing >= 0 || u.moving) { u.peltT = 0; return; }
@@ -1251,6 +1252,7 @@ function damage(t, amt, src, aoe) {
   amt = Math.max(1, Math.round(amt));
   if (t.isStructure) {
     if (t.dead) return;
+    if (t.sealed) { t.flash = 0.1; return; }   // (a campaign statue warded until its level's goal allows)
     if (src && src.type === 'ballista') amt = Math.round(amt * BALLISTA.structureMul);   // siege bolts wreck trenches and statues
     if (src && src.type === 'saboteur' && t.isWall) amt = Math.round(amt * (src.perks.sappers ? SABOTEUR.trenchMulSappers : SABOTEUR.trenchMul));   // saboteurs undermine trenches
     t.hp -= amt;
@@ -1515,6 +1517,7 @@ function updateUnit(u, dt) {
   else if (u.type === 'necromancer') updateNecromancer(u, dt);
   else if (u.type === 'zombie') updateZombie(u, dt);
   else if (isGiant(u)) updateGiant(u, dt);
+  else if (u.type === 'medusa') updateMedusa(u, dt);   // the campaign's last boss (campaign.js)
   else if (isMage(u) && updateMageCasting(u, dt)) { /* busy casting or walking to cast */ }
   else if (u.type === 'cleric') updateCleric(u, dt);
   else updateFighter(u, dt);

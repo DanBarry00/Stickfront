@@ -129,7 +129,8 @@ function weightedPick(r, items) {
 // 'random' is decided by the seed, so a seed always gives the same map for the same options.
 function generateMap(seed, opts = {}) {
   const r = makeRng(seed);
-  const theme = gritTheme(r.pick(THEMES));
+  const rolled = r.pick(THEMES);
+  const theme = gritTheme(opts.theme || rolled);   // (the campaign brings its own grim skies)
   const map = { seed, theme, name: `${r.pick(MAP_PRE)} ${r.pick(MAP_SUF)}` };
 
   // Layout comes from its own stream so it doesn't disturb the scenery a seed produces.

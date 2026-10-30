@@ -15,8 +15,45 @@ The installer takes the `main` branch (set `$Branch` near the top of the file to
 ## Run it
 Use the desktop shortcut, or double-click **`Play Stickfront.bat`** in the game folder (it does the same update check). It opens the game in its own Microsoft Edge app window, or your default browser if Edge isn't installed. With a plain copy of the files (no Git), it skips the update check and just starts the game.
 
-## Starting a skirmish
-The main menu offers **Tutorial** and **Campaign** (both under construction for now) and **Skirmish**, a single battle against the computer. The Skirmish setup screen lets you choose **your clan** and the **enemy clan** (or **Random** for either; random clans are revealed when the battle begins, and both sides can draw the same clan), the opponent's **difficulty**, whether there is a **Monolith**, how much **gold** the deposits hold, and the map **seed**. The map behind the menu is a live preview of your choices. Your settings are remembered. Restart and Rematch keep the same clans and map.
+## Starting a game
+The main menu offers **Tutorial**, **Campaign** and **Skirmish**, a single battle against the computer. The Skirmish setup screen lets you choose **your clan** and the **enemy clan** (or **Random** for either; random clans are revealed when the battle begins, and both sides can draw the same clan), the opponent's **difficulty**, whether there is a **Monolith**, how much **gold** the deposits hold, and the map **seed**. The map behind the menu is a live preview of your choices. Your settings are remembered. Restart and Rematch keep the same clans and map.
+
+### Tutorial
+
+A ladder of lessons, each a battle against a simple scripted opponent built around one kind of unit. You start with only miners and Swordwrath. Winning a lesson unlocks the next one, and usually the enemy's unit for you. Each lesson opens with a briefing (your units, the enemy's units, what beats what) and a lesson box at the top of the screen steps through tips as you play (it moves on when you've done what it asks; ‹ › flip through it, ▴ folds it, ✕ closes it down to a small tab that reopens it).
+
+| # | Lesson | The enemy | You learn | Win to unlock |
+|---|---|---|---|---|
+| 1 | First Blood | Miners and Swordwrath, like you | Mining, training, the defend line, attacking, Advance | upgrades |
+| 2 | Arrow Rain | Only archers, in a firing line | Upgrades; charging archers | Archer |
+| 3 | The Phalanx | Spearton shield walls and lone Gladiators | Archers behind a line; focusing a Gladiator | Spearton, Gladiator |
+| 4 | Hold the Line | Five timed waves (you get an Architect and a Quartermaster) | Trenches, tar pits, mines, towers, repairs, the Quartermaster | Architect, Quartermaster |
+| 5 | Night Raid | Ninja raiders hunting your miners | Guarding miners, Siege mode | Ninja |
+| 6 | Holy and Unholy | A line with Clerics and Warlocks behind it | Killing the mages first | Cleric, Warlock |
+| 7 | The Horde | Necromancers whose zombies charge as they rise | Holy light against the undead; killing the Necromancer | Necromancer |
+| 8 | Wings | Kestrels hunting your miners | What hits flyers | Kestrel |
+| 9 | Titans | Giants behind a Swordwrath screen | Kiting giants, not clumping | Giant |
+| 10 | Total War | The Normal computer, every unit | The full game | the clan trials |
+
+Until Total War there's no giant inside the statues: destroying the enemy statue wins. Lessons have no Monolith and a fixed map each. After Total War come the **clan trials**: the Base Clan against each of the other eight clans on Normal. Progress is saved in the browser; **Restart this map** in the pause menu replays the lesson, and **New game** goes back to the tutorial menu.
+
+### Campaign
+
+A road of battles across a map against **the Horde**, a monster army: every enemy unit is drawn as a fiend, with dark crimson hide, curled bone horns, glowing eyes and bone spikes (Ghouls, Bone Archers, Hellguard, Blood Priests, Hexers, Liches, Shades, Bat Riders, Abominations...). You play the Order with every unit and upgrade. Each battle has its own rules and grim skies, the levels get harder as the road goes on, and winning one opens the next on the map. There is one difficulty for now, and statues are called totems.
+
+| # | Battle | Goal | What's different |
+|---|---|---|---|
+| 1 | The Border Watch | Destroy the totem | A first clash with Ghouls and Bone Archers |
+| 2 | Plague Village | Survive 8 rounds | There's no enemy castle, only the dead: each round more zombies come running in from off-screen to the east (starting a little closer each round), with golem-sized Hulks from round 4. A round comes 14 seconds after the last is cleared (or after 55 seconds at most) |
+| 3 | The Bone Wall | Destroy the totem | The Horde is dug in behind two palisaded trenches manned by Hellguard, with two archer towers and hidden traps |
+| 4 | Wings of Night | Destroy the totem | Bat Riders hunt your miners in packs of three |
+| 5 | The Colossus | Kill the boss in 7:00 | A huge hunkered golem (5,500 hp) guarded by Hellguard. Hunkered it shrugs off most damage; when your melee crowds it, it stands up to smash them and is exposed. Every Blood Priest near it heals it 9 hp a second, and more arrive every 50 seconds: kill the priests first |
+| 6 | Necropolis | Destroy the totem | Liches whose zombies charge as they rise, Hexers and Hellguard |
+| 7 | Titanfall | Destroy the totem | Six timed waves of Abominations march out of the gate. The totem is warded until the last wave is out and its Abominations are dead |
+| 8 | Blood Moon | Totem, then its giant | The Horde at full strength: the Hard computer with every unit, tougher fiends, and a giant inside its totem |
+| 9 | The Abyss | Slay Medusa, then win the giants' duel | Medusa, queen of the Horde (9,000 hp, armoured). Her gaze is slow (every 3.4 s, reach 300) but turns whatever it falls on to stone, whatever its health, and it always picks the costliest unit in reach. Priests can't heal her wounds. She slithers closer to your castle every 20 seconds, zombies claw up around her and guards join her. Both totems are warded until she dies; then both break at once, **both giants break free**, the Horde's last reserves (an Abomination among them) pour out, and **whoever kills the other side's giant first wins** |
+
+Victims of Medusa's gaze stand as grey stone statues for a while before they crumble. The lesson box shows the battle's live status (rounds, timers, the bosses' health) above its tips. Progress is saved in the browser.
 
 ## Clans
 Each clan sets your starting gold, mana and army, which upgrades are already researched, which units and upgrades you can't use, some price changes and a few general buffs. The Base Clan is the standard game; every other clan is meant to be stronger overall, with a weakness to play around. Units your clan can't train are left off the training bar, and upgrades it can't research are left out of the building panels. Definitions live in `game/js/clans.js`.
@@ -53,7 +90,7 @@ Every unit trains in its class's building, which also holds all of that class's 
 | Kestrel | 175 | Archery Range | Flies over the battle with a small crossbow. Only ranged attacks can hit it |
 | Cleric | 175 + 60 mana | Mage Tower | Heals the most wounded nearby ally for 20, and each heal briefly quickens and blesses it. Never attacks. Inspires: troops nearby take 15% less damage |
 | Warlock | 175 + 60 mana | Mage Tower | Ranged bolt for 20 damage that briefly slows and weakens its target. Empowers: troops nearby deal 15% more damage |
-| Necromancer | 175 + 75 mana | Mage Tower | Raises and leads up to 6 zombies (weak, slow, half damage from shots; whoever they kill rises as one). Never attacks itself |
+| Necromancer | 175 + 75 mana | Mage Tower | Raises and leads up to 6 zombies (weak but fast, half damage from shots; whoever they kill rises as one). Never attacks itself |
 | Giant | 450 + 120 mana | Giant Pit | 900 hp, heavy club with splash (4 population). Can't be commanded directly |
 | Ballista | 250 + 50 mana | Archery Range (Defense Clan only) | Long-range siege engine that wrecks trenches and statues; helpless up close (2 population). Needs an Architect alive to build |
 | Spirit Golem | 150 + 250 mana | Golem Forge (Arcane Circle only) | Commandable 700 hp tank; Hunker Down to soak damage and draw attacks; half damage from Warlock magic (3 population) |
@@ -236,10 +273,10 @@ A rider under big flame-membraned da Vinci wings, trained in the Ranged group (h
 ## Necromancer (Mage Tower, every clan)
 175 gold + 75 mana, hotkey `0`. It never attacks; it raises the dead.
 - **Raising:** every 6 seconds (4 with Quick Rites), for 5 mana, a zombie claws its way up beside it, up to 6 at a time (8 with Bigger Horde, 10 with Endless Horde). Zombies don't count toward your population. A skull badge over it shows the pack and its souls.
-- **Zombies:** 60 hp, slow (Spearton pace), weak claws. Arrows, bolts and other shots do half damage to them, but holy light burns them: an enemy Healing Pool does five times its healing to them as damage (enough to wipe out a pack), and a Cleric with nobody to heal smites the nearest zombie for three times its heal. An enemy a zombie kills gets up as another zombie while there's room in the pack (giants and flyers don't).
+- **Zombies:** 60 hp, weak claws, and fast: they run at their prey. Arrows, bolts and other shots do half damage to them, but holy light burns them: an enemy Healing Pool does five times its healing to them as damage (enough to wipe out a pack), and a Cleric with nobody to heal smites the nearest zombie for three times its heal. An enemy a zombie kills gets up as another zombie while there's room in the pack (giants and flyers don't).
 - **Leading:** zombies can't be selected and never march in formation. While their side holds, they mill about in front of the Necromancer and claw anything that comes near them; once their side attacks they just run forward, attacking whatever they meet on the way to the enemy statue (or whatever you order the Necromancer to attack), and the Necromancer marches up behind them. With **Zombies charge** (`L`, with a Necromancer selected) turned on, its zombies charge as soon as they rise, whatever your side is doing. On a retreat they come back. If the Necromancer dies, its zombies just lurch off to attack the enemy. Nothing heals zombies or buffs them (no auras, Hope, shields, inspiration or home ground).
 - **Souls (a snowball):** every kill the pack makes gives the Necromancer a soul (up to 25): one more zombie in the pack for every 4 souls (up to 5 more), and its zombies rise 3% stronger and 2% faster per soul. You get a warning when an enemy horde grows; the computer answers with Clerics, Healing Pools and Fireballs, and goes for the Necromancer.
-- **Upgrades:** Bigger Horde, Endless Horde, Grave Dirt (zombies +50% health), Quick Rites.
+- **Upgrades:** Bigger Horde, Endless Horde, Grave Dirt (zombies +50% health), Quick Rites, and **Hulking Dead**: every fourth zombie a Necromancer raises is a **Hulk**, a huge, slow brute that looks like a golem of rotten flesh, with 3.2× health and double damage.
 
 ## Defences
 - **Trenches** (Earthworks, Workers' Lodge): Architects dig a ditch across the lane and pile an earth rampart behind it, with sharpened stakes facing the enemy. Enemies on foot can't pass until they hack it down (Kestrels fly over). 100 gold each, up to 3. **Palisade** adds a row of pointed logs along the top: taller, +800 hp. Architects can **repair** a damaged trench or tower for free (the Monolith's tower too, while no one else holds it): right-click it with them, or press **Y** to send them to the most damaged one. With nothing damaged, **Y** rebuilds the nearest ruin. Stakes get knocked out and the earth slumps as a trench takes damage.
@@ -309,6 +346,8 @@ A rider under big flame-membraned da Vinci wings, trained in the Ranged group (h
 - `game.js`: game state, training queues, research, trenches, castle archers, the Monolith, projectiles
 - `giants.js`: giant obedience, targeting, splash, knockback and the statue giant
 - `build.js`: the Architect: traps, archer towers, ruins and rebuilding, repairs and upgrade research (random or the one you pick)
+- `tutorial.js`: the tutorial's lessons, their scripted opponents (LessonAI), the lesson box and the tutorial menus
+- `campaign.js`: the campaign's levels against the Horde, their commanders (CampaignAI: zombie rounds, the Colossus, Medusa's lair, reinforcements), Medusa herself (her gaze and petrification), the campaign map and briefings
 - `quartermaster.js`, `gladiator.js`, `necromancer.js`: the Quartermaster's jobs, the Gladiator's throws and glory, and the Necromancer and its zombies
 - `ai.js`: the computer opponents (Easy, Normal, Hard, Very Hard)
 - `clans.js`: the clans (starting armies, free and locked upgrades, prices, buffs) and the helpers the game uses to apply them

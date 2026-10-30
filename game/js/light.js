@@ -43,6 +43,7 @@ function collectLights(x0, x1) {
   const out = [], near = (x, r) => x + r > x0 && x - r < x1;
   const add = (x, y, r, col, a, seed = 0) => { if (near(x, r)) out.push({ x, y, r: r * flicker(seed), col, a }); };
   for (const t of G.teams) {
+    if (t.noCastle) continue;   // (a campaign field with no castle on that side)
     for (const l of KEEP_LIGHTS) add(t.edge(l.x), l.y, l.r, l.col, l.a, l.flick + t.id * 11);
     // the statue's crystal (a dimmer, colder glow once it's broken)
     const s = t.statue, c = hexRgb(TEAM_STYLE[t.id].crystal);
@@ -99,6 +100,7 @@ function drawLighting(ctx, vw) {
   // indoors: the keeps are gloomy
   g.fillStyle = 'rgba(8,6,10,0.16)';
   for (const t of G.teams) {
+    if (t.noCastle) continue;
     const a = t.edge(-80), b = t.edge(GATE_X - 14);
     g.fillRect(Math.min(a, b), WALL_TOP + 14, Math.abs(b - a), LANE_BOT + 16 - WALL_TOP - 14);
   }

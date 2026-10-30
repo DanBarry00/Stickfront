@@ -98,6 +98,12 @@ function updateGiant(u, dt) {
     return;
   }
 
+  // ordered to attack on its own (Shift+E, or a wave sent at the enemy): it goes, whatever the army does
+  if (u.ownStance === 'attack' && o.type === 'stance') {
+    if (t) return engage(u, t, dt);
+    if (!es.dead) return engage(u, es, dt);
+  }
+
   // follow the troops around it, staying at the front of them. A marching formation's front is its
   // spear line, on defence the defend line; otherwise the foremost troops. Beastmasters drive their giants from behind, so they
   // never count as the front: with only them around, the giant leads and they follow it.

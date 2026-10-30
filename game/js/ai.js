@@ -92,7 +92,7 @@ const AI_RESEARCH = [
   ['ninja', 'parry'], ['ninja', 'vital'], ['flyer', 'winch'], ['ninja', 'focus'], ['flyer', 'feather'],
   ['sword', 'greatsword'], ['archer', 'longbow'], ['archer', 'broadheads'], ['flyer', 'hawkeye'], ['flyer', 'scope2'],
   ['flyer', 'barbs2'], ['archer', 'steady'], ['castle', 'levy2'],
-  ['quartermaster', 'salves'], ['gladiator', 'manica'], ['necromancer', 'horde'], ['necromancer', 'rites'], ['gladiator', 'nets'], ['quartermaster', 'wagon'], ['necromancer', 'grave'], ['gladiator', 'fame'], ['necromancer', 'horde2'],
+  ['quartermaster', 'salves'], ['gladiator', 'manica'], ['necromancer', 'horde'], ['necromancer', 'rites'], ['necromancer', 'hulk'], ['gladiator', 'nets'], ['quartermaster', 'wagon'], ['necromancer', 'grave'], ['gladiator', 'fame'], ['necromancer', 'horde2'],
   ['architect', 'traps2'], ['architect', 'tower2'], ['architect', 'tower3'],
   ['ballista', 'torsion'], ['ballista', 'ironbolt'], ['ballista', 'mantlet'], ['golem', 'plating'], ['golem', 'core'], ['beastmaster', 'stones'], ['beastmaster', 'lore'], ['saboteur', 'sappers'], ['saboteur', 'brine'], ['firebird', 'pitch'], ['firebird', 'fuse'],
   ['cleric', 'big'], ['warlock', 'pool'], ['cleric', 'hope'], ['warlock', 'fear'], ['cleric', 'focus2'],

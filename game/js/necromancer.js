@@ -29,7 +29,23 @@ function raiseZombie(teamId, x, y, necro) {
   z.hp = z.maxHp;
   z.dmg *= power;
   z.riseT = 0.8;   // clawing its way up out of the ground
+  // Hulking Dead: every few raised by a Necromancer comes up a Hulk
+  if (necro && team.upgrades.necromancer.hulk) {
+    necro.raised = (necro.raised || 0) + 1;
+    if (necro.raised % HULK.every === 0) makeHulk(z);
+  }
   spawnBurst(z.x, z.y - 2, 10, { color: shade(G.map.theme.ground[0], 0.05), speed: 70, up: 60, g: 400, life: 0.7, size: 2.4 });
+  return z;
+}
+
+// A Hulk: a zombie swollen into a slow, hulking brute (drawn like a golem of rotten flesh).
+function makeHulk(z) {
+  z.brute = true;
+  z.maxHp = Math.round(z.maxHp * HULK.hp);
+  z.hp = z.maxHp;
+  z.dmg *= HULK.dmg;
+  z.scale = HULK.scale;
+  z.speedMul *= HULK.speed;
   return z;
 }
 

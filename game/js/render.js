@@ -186,8 +186,8 @@ function drawUnit(ctx, u) {
 
 function drawUnitBody(ctx, u) {
   const dying = u.dead;
-  const fall = dying ? Math.min(1, u.deathT / 0.35) : 0;
-  const alpha = dying ? clamp(1 - (u.deathT - 6) / 3, 0, 1) : 1;
+  const fall = dying && !u.petrified ? Math.min(1, u.deathT / 0.35) : 0;   // (turned to stone, it stays standing)
+  const alpha = dying ? clamp(1 - (u.deathT - (u.petrified ? PETRIFIED_TIME : 6)) / 3, 0, 1) : 1;
   ctx.fillStyle = `rgba(0,0,0,${0.28 * alpha})`;
   ellipse(ctx, u.x, u.y + 1, 12 * u.scale, 3.5);
   ctx.fill();
@@ -221,6 +221,19 @@ function drawUnitInAir(ctx, u, dying, fall, alpha, lift) {
   }
   // a vanished ninja is a faint shimmer (your own are a little easier to see)
   if (u.stealth && !dying) alpha *= u.team === 0 ? 0.35 : 0.18;
+  // Medusa winding up her gaze: a thin green thread to her victim, brightening until it strikes
+  if (u.type === 'medusa' && !dying && u.swing >= 0 && u.swingTarget && !u.swingTarget.dead) {
+    const t = u.swingTarget, k = Math.min(1, u.swing / 0.8);
+    ctx.strokeStyle = `rgba(150,255,120,${0.15 + 0.45 * k})`;
+    ctx.lineWidth = 1 + k * 1.5;
+    ctx.setLineDash([4, 6]);
+    ctx.beginPath();
+    ctx.moveTo(u.x + u.facing * 18 * u.scale, u.y - 96 * u.scale);
+    ctx.lineTo(t.x, targetAimY(t));
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  if (u.petrified) ctx.filter = 'grayscale(1) brightness(1.9) contrast(0.6)';   // turned to stone
   drawStickman(ctx, {
     x: u.x, y: u.y, facing: u.facing, scale: u.scale, team: u.team, type: u.type,
     walk: u.walk, moving: u.moving && !dying, swing: dying ? -1 : u.swing, carry: u.carry, carryCap: u.carryCap,
@@ -229,8 +242,10 @@ function drawUnitInAir(ctx, u, dying, fall, alpha, lift) {
     flash: u.lastStand > 0 ? (Math.sin(RT * 30) > 0 ? 1 : 0) : u.flash,
     wall: u.shieldWall, arch: u.type === 'archer' ? archPose(u, dying) : null, cast: u.swingKind === 'cast' || u.swingKind === 'summon',
     chains: isGiant(u) ? giantChains(u) : 0, stone: u.isStatueGiant ? G.teams[u.team].statue.stone : null, guard: u.guardT > 0, invuln: u.invulnT > 0,
+    petrified: !!u.petrified, brute: !!u.brute,
     starRanged: u.starRanged, grounded: u.grounded, aimFa: u.aimFa, pace: u.pace, salting: u.salting, laying: u.laying, javelin: !!(u.type === 'gladiator' && u.javelin), net: !!(u.type === 'gladiator' && u.net), netT: u.netT, kills: u.kills || 0, rise: u.riseT > 0 ? u.riseT : 0,
   });
+  ctx.filter = 'none';
   if (dying) return;
   drawBuffsOver(ctx, u);
   if (u.netT > 0) drawNetOver(ctx, u.x, u.y, u.scale, Math.min(1, u.netT));   // pinned under a Gladiator's net
@@ -462,6 +477,17 @@ function drawParticles(ctx) {
       ctx.beginPath();
       ctx.arc(p.x, p.y, p.size, 0, TAU);
       ctx.fill();
+    } else if (p.kind === 'beam') {
+      // Medusa's gaze: a bolt of green light from her eyes to her victim
+      ctx.globalAlpha = a;
+      for (const [w, col] of [[9, 'rgba(120,255,110,0.25)'], [3.5, 'rgba(170,255,150,0.8)'], [1.2, '#f0fff0']]) {
+        ctx.strokeStyle = col;
+        ctx.lineWidth = w * (0.5 + a * 0.5);
+        ctx.beginPath();
+        ctx.moveTo(p.x, p.y);
+        ctx.lineTo(p.x2, p.y2);
+        ctx.stroke();
+      }
     } else if (p.kind === 'stuck') {
       ctx.globalAlpha = Math.min(1, p.life);
       ctx.strokeStyle = '#3a2a1a';
@@ -716,14 +742,14 @@ function render(ctx) {
   drawGround(ctx, map, x0, x1);
   for (const p of map.props) if (!p.front && inView(p.x)) drawProp(ctx, p, map.theme);
   for (const t of G.teams) {
-    if (inView(t.gateX, 500)) drawCastle(ctx, t, t.id === 0 ? UI.hoverBuilding : null);
+    if (inView(t.gateX, 500) && !t.noCastle) drawCastle(ctx, t, t.id === 0 ? UI.hoverBuilding : null);
   }
   drawDecals(ctx, x0, x1);
   drawPools(ctx, x0, x1);
   for (const p of G.tarPools) if (inView(p.x)) drawTarPool(ctx, p);
   for (const tr of G.traps) if (inView(tr.x)) drawTrap(ctx, tr);
   drawRanges(ctx);
-  for (const t of G.teams) if (inView(t.statue.x, 200)) drawStatue(ctx, t.statue);
+  for (const t of G.teams) if (inView(t.statue.x, 200) && !t.noCastle) drawStatue(ctx, t.statue);
   if (G.shrine && inView(G.shrine.x, 200)) drawShrine(ctx, G.shrine);
 
   // depth-sorted mines, wall segments and units
