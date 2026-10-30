@@ -92,7 +92,7 @@ const AI_RESEARCH = [
   ['ninja', 'parry'], ['ninja', 'vital'], ['flyer', 'winch'], ['ninja', 'focus'], ['flyer', 'feather'],
   ['sword', 'greatsword'], ['archer', 'longbow'], ['archer', 'broadheads'], ['flyer', 'hawkeye'], ['flyer', 'scope2'],
   ['flyer', 'barbs2'], ['archer', 'steady'], ['castle', 'levy2'],
-  ['quartermaster', 'salves'], ['gladiator', 'manica'], ['necromancer', 'horde'], ['necromancer', 'rites'], ['gladiator', 'nets'], ['quartermaster', 'wagon'], ['necromancer', 'grave'], ['gladiator', 'fame'], ['necromancer', 'horde2'],
+  ['quartermaster', 'salves'], ['gladiator', 'manica'], ['necromancer', 'horde'], ['necromancer', 'rites'], ['necromancer', 'hulk'], ['gladiator', 'nets'], ['quartermaster', 'wagon'], ['necromancer', 'grave'], ['gladiator', 'fame'], ['necromancer', 'horde2'],
   ['architect', 'traps2'], ['architect', 'tower2'], ['architect', 'tower3'],
   ['ballista', 'torsion'], ['ballista', 'ironbolt'], ['ballista', 'mantlet'], ['golem', 'plating'], ['golem', 'core'], ['beastmaster', 'stones'], ['beastmaster', 'lore'], ['saboteur', 'sappers'], ['saboteur', 'brine'], ['firebird', 'pitch'], ['firebird', 'fuse'],
   ['cleric', 'big'], ['warlock', 'pool'], ['cleric', 'hope'], ['warlock', 'fear'], ['cleric', 'focus2'],
@@ -408,6 +408,7 @@ class SmartAI {
       if (this.cfg.research === 'basic' && (d.requires || ['giant', 'cleric', 'warlock', 'castle'].includes(type))) continue;
       if (d.requires && !team.upgrades[type][d.requires]) continue;
       if (team.research[type]) continue;
+      if (type === 'castle' && !hasArchitect(team)) continue;   // castle upgrades need an architect
       // no point researching for ninjas, Kestrels or ballistas it hasn't built
       if (['ninja', 'flyer', 'ballista', 'golem', 'beastmaster', 'saboteur', 'firebird', 'architect', 'quartermaster', 'gladiator', 'necromancer'].includes(type) && !G.units.some(u => u.team === this.id && !u.dead && u.type === type)) continue;
       return { type, d };
@@ -596,9 +597,9 @@ class SmartAI {
     this.lastStatueHp = team.statue.hp;
 
     // the enemy statue is down and its giant is loose: lure it out from under the castle archers
-    const sg = G.teams[foe].statueGiant;
-    if (sg && !sg.dead) {
-      this.lureGiant(team, foe, army, sg);
+    // their statue is down: all in for the kill
+    if (G.teams[foe].statue.dead) {
+      this.finishGiant(team, foe, army);
       this.unitTactics(team, mine, army, foe);
       return;
     }
@@ -612,6 +613,8 @@ class SmartAI {
     const nextKey = this.phase.next(this, this.phaseState(size, ours, theirs));
     if (nextKey && nextKey !== this.phaseKey) this.setPhase(nextKey);
     const cc = this.cfg, how = this.phase.attack;
+    // a push that has their statue below 40% keeps going unless it's being crushed
+    const es = G.teams[foe].statue, statueLow = !es.dead && es.hp < es.max * 0.4;
     let readyToAttack = false;
     if (how === 'all') {
       // all in: go as soon as there's a handful of troops and the odds aren't hopeless
@@ -636,7 +639,7 @@ class SmartAI {
       // march out in step (Advance) and stay in it: the line fights what reaches it and keeps its shape
       if (cc.formations || cc.advance) formGroup(team, army.filter(u => !u.aiHealing), 'advance');   // the wounded stay in to heal
       else setStance(team, 'attack');
-    } else if (this.mode === 'attack' && (ours < theirs * cc.lose || this.pushBroken(team, foe, fort))) {
+    } else if (this.mode === 'attack' && (statueLow ? ours < theirs * 0.35 : (ours < theirs * cc.lose || this.pushBroken(team, foe, fort)))) {
       // losing the push: fall back together and regroup, and try again after a while (an all-in
       // style comes straight back once it has regrouped)
       this.mode = 'fallback';
@@ -767,19 +770,23 @@ class SmartAI {
     this.probe.until = G.time + rnd(40, 60);
   }
 
-  // The enemy statue has fallen and its giant is loose. Fighting it under the castle archers throws
-  // the army away, so hold a line just out of their reach until it comes out, then fall on it.
-  lureGiant(team, foe, army, sg) {
-    const enemy = G.teams[foe];
-    const line = enemy.edge(castleArcherStats(enemy).reach + 90);
-    const out = team.dir * (sg.x - line) < 0 || !enemy.archers.length;   // it's in the open
-    if (this.mode !== 'lure') { this.mode = 'lure'; this.raid = []; }
-    if (out) { if (team.stance !== 'attack') setStance(team, 'attack'); return; }
-    const spot = musterClamp(team, line - team.dir * 30);
-    if (team.stance !== 'defend' || team.musterX === null || Math.abs(team.musterX - spot) > 20) {
-      setStance(team, 'defend');
-      team.musterX = spot;
+  // The enemy statue has fallen and its giant is loose: the game is there to be won. Everything goes
+  // in with our giants to finish it: no holding a line, no siege halt, no falling back, and every
+  // new recruit joins the attack.
+  finishGiant(team, foe, army) {
+    if (this.mode !== 'finish') {
+      this.mode = 'finish';
+      this.raid = [];
+      this.probe = null;
+      team.musterX = null;
+      setStance(team, 'attack');
     }
+    if (team.stance !== 'attack') setStance(team, 'attack');
+    for (const u of army) {
+      const o = u.order;
+      if (o.type === 'hold' || o.type === 'move' || o.type === 'garrison' || (o.type === 'group' && o.g.mode === 'retreat')) setOrder(u, { type: 'stance' });
+    }
+    for (const g of this.lines()) { g.mode = 'attack'; g.storming = true; g.halt = false; }
   }
 
   // Architects: one or two once the army is under way. They mend damaged trenches and towers, keep
@@ -794,7 +801,7 @@ class SmartAI {
     const idle = archs.filter(u => u.order.type === 'stance' || u.order.type === 'hold');
     if (!idle.length || this.mode === 'turtle' || team.minersIn) return;
     // mend what's damaged first
-    if ([...G.walls, ...G.towers].some(w => w.team === this.id && !w.dead && w.progress >= 1 && w.hp < w.max * 0.7)) {
+    if ([...G.walls, ...G.towers].some(w => canMend(team, w) && !w.dead && w.progress >= 1 && w.hp < w.max * 0.7)) {
       repairStructures(team, [idle.shift()]);
       if (!idle.length) return;
     }

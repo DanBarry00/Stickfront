@@ -5,6 +5,55 @@
 const NO_PERKS = {};
 const CLOTH = ['#3a2e22', '#3a1512', '#3a3a34'];   // (the third: the Monolith tower's neutral archers)
 
+// The campaign's monster faction: the enemy side's units drawn as fiends: dark crimson hide, curled
+// bone horns, glowing eyes and bone spikes down the back. (G.monsterTeam names the side.)
+const MONSTER = { skin: '#2a0c12', bone: '#cbbd9a', boneDark: '#8a7c60', eye: '#ff6a2a', robe: '#3a0a10', robeDark: '#1a0306', rune: '#ff4a26' };
+const isMonster = team => typeof G !== 'undefined' && !!G && G.monsterTeam === team;
+
+// Curled horns and a pair of glowing eyes on a head of radius r at (hx, hy), facing f.
+function drawMonsterHead(ctx, hx, hy, f, r = 7, eyes = true) {
+  ctx.save();
+  ctx.lineCap = 'round';
+  for (const [col, w] of [[MONSTER.boneDark, r * 0.42], [MONSTER.bone, r * 0.26]]) {
+    ctx.strokeStyle = col;
+    ctx.lineWidth = w;
+    ctx.beginPath();
+    ctx.moveTo(hx + r * 0.35 * f, hy - r * 0.75);
+    ctx.quadraticCurveTo(hx + r * 1.25 * f, hy - r * 1.35, hx + r * 0.6 * f, hy - r * 2.05);
+    ctx.moveTo(hx - r * 0.5 * f, hy - r * 0.7);
+    ctx.quadraticCurveTo(hx - r * 0.35 * f, hy - r * 1.8, hx - r * 1.15 * f, hy - r * 1.95);
+    ctx.stroke();
+  }
+  if (eyes) {
+    const ex = hx + r * 0.5 * f, ey = hy - r * 0.12;
+    const g = ctx.createRadialGradient(ex, ey, 0.5, ex, ey, r * 1.1);
+    g.addColorStop(0, 'rgba(255,110,40,0.55)');
+    g.addColorStop(1, 'rgba(255,60,20,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(ex - r * 1.1, ey - r * 1.1, r * 2.2, r * 2.2);
+    ctx.fillStyle = '#ffd090';
+    ctx.beginPath();
+    ctx.arc(ex, ey, r * 0.17, 0, TAU);
+    ctx.arc(ex - r * 0.42 * f, ey - r * 0.05, r * 0.14, 0, TAU);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+// Bone spikes jutting back from a spine running from the hip (0, hipY) up to the shoulders (sx, sy).
+function drawMonsterSpikes(ctx, sx, sy, hipY, f) {
+  ctx.fillStyle = MONSTER.bone;
+  for (const k of [0.3, 0.55, 0.8]) {
+    const x = sx * k, y = hipY + (sy - hipY) * k, len = 5 + k * 2;
+    ctx.beginPath();
+    ctx.moveTo(x - 1.2 * f, y - 1.6);
+    ctx.lineTo(x - len * f, y - len * 0.55);
+    ctx.lineTo(x - 0.8 * f, y + 1.8);
+    ctx.closePath();
+    ctx.fill();
+  }
+}
+
 function polar(x, y, ang, len, f) {
   return [x + Math.cos(ang) * len * f, y + Math.sin(ang) * len];
 }
@@ -30,9 +79,10 @@ function drawMage(ctx, o) {
   ctx.scale(o.scale, o.scale);
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-  const col = o.flash > 0 ? '#6e1510' : st.body;
-  const robe = o.flash > 0 ? '#6e1510' : cleric ? '#a39a80' : necro ? '#1e2219' : '#2a1c2c';
-  const robeDark = cleric ? '#766d58' : necro ? '#0b0d09' : '#150c16';
+  const mon = isMonster(o.team);
+  const col = o.flash > 0 ? '#6e1510' : mon ? MONSTER.skin : st.body;
+  const robe = o.flash > 0 ? '#6e1510' : mon ? (cleric ? '#5a1418' : MONSTER.robe) : cleric ? '#a39a80' : necro ? '#1e2219' : '#2a1c2c';   // the fiends' priests wear blood red
+  const robeDark = mon ? MONSTER.robeDark : cleric ? '#766d58' : necro ? '#0b0d09' : '#150c16';
   const trim = cleric ? shade(st.accent, -0.1) : necro ? shade(st.accent, -0.45) : o.team === 0 ? '#6a4a8a' : '#8a2030';
   const orbCol = cleric ? '#fff0b8' : necro ? '#7dff8a' : '#b04dff';
   const t = RT + o.seed, ph = o.walk, mv = o.moving, s = o.swing;
@@ -115,6 +165,7 @@ function drawMage(ctx, o) {
   ctx.beginPath();
   ctx.arc(hx + 3 * f, hy - 0.5, 1.2, 0, TAU);
   ctx.fill();
+  if (mon) drawMonsterHead(ctx, hx, hy - 1.5, f, 7.5);   // horns through the hood
 
   // staff with its orb
   const [tx, ty] = polar(hx2, hy2, staffAng, P.focus ? 32 : 30, f);
@@ -191,7 +242,8 @@ function drawGiant(ctx, o) {
   ctx.scale(o.scale, o.scale);
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-  const skin = o.flash > 0 ? '#6e1510' : stone || st.body;
+  const mon = isMonster(o.team) && !stone;
+  const skin = o.flash > 0 ? '#6e1510' : stone || (mon ? MONSTER.skin : st.body);
   const ol = stone ? shade(stone, -0.6) : null;
   const t = RT + o.seed, ph = o.walk, mv = o.moving, s = o.swing;
   const drag = mv && s < 0;
@@ -314,6 +366,7 @@ function drawGiant(ctx, o) {
   }
   ctx.fillStyle = stone ? st.crystal : o.team === 1 ? st.accent2 : '#e8dcc0';
   ctx.fillRect(hx + 3 * f - 0.8, hy - 1.4, 1.7, 1.2);   // a pale, beady eye under the brow
+  if (mon) drawMonsterHead(ctx, hx, hy, f, 7.5);
   if (P.blinders && !stone) {
     ctx.fillStyle = '#3a2a1a';
     ctx.fillRect(hx + 4.5 * f - (f > 0 ? 0 : 2.5), hy - 4.5, 2.5, 5.5);
@@ -506,7 +559,8 @@ function drawFlyer(ctx, o) {
   ctx.scale(o.scale, o.scale);
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-  const col = o.flash > 0 ? '#6e1510' : st.body, t = RT + o.seed, fire = o.type === 'firebird';
+  const mon = isMonster(o.team);
+  const col = o.flash > 0 ? '#6e1510' : mon ? MONSTER.skin : st.body, t = RT + o.seed, fire = o.type === 'firebird';
   const sway = Math.sin(t * 2.2) * 1.5;
 
   // da Vinci wings, beating slowly: the far one behind, the near one over the pilot
@@ -553,6 +607,7 @@ function drawFlyer(ctx, o) {
   ctx.arc(head[0], head[1], 7, 0, TAU);
   ctx.fill();
   drawGear(ctx, 'goggles', head[0], head[1], f, st, t, o.team);
+  if (mon) drawMonsterHead(ctx, head[0], head[1], f, 7, false);
 
   // crossbow in the front hand, aimed down at the target
   const shooting = o.swing >= 0;
@@ -627,6 +682,161 @@ function drawCrossbow(ctx, x, y, ang, f, P, loaded) {
   }
 }
 
+// Medusa, queen of the Horde: a serpent's coiled tail under a woman's body, a crown of bone and gold,
+// a mane of writhing snakes and eyes that burn green. Winding up her gaze she raises a clawed hand
+// and her eyes flare (o.swing); the strike itself is drawn as a beam (see drawParticles).
+function drawMedusa(ctx, o) {
+  const st = TEAM_STYLE[o.team], f = o.facing, t = RT + o.seed, s = o.swing;
+  ctx.save();
+  ctx.translate(o.x, o.y - (o.lift || 0));
+  if (o.alpha !== undefined) ctx.globalAlpha *= o.alpha;
+  ctx.scale(o.scale, o.scale);
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  const scale = o.flash > 0 ? '#6e1510' : '#3c2a1c', scaleHi = '#6a5a2c', belly = '#a8925a';
+  const skin = o.flash > 0 ? '#6e1510' : '#6e7c5a', skinDark = '#3e4a32';
+  const glare = s >= 0 ? Math.min(1, s / 0.8) : 0;
+  const sway = Math.sin(t * 1.6) * 2, slither = o.moving ? Math.sin((o.walk || 0) * 1.4) * 4 : Math.sin(t * 1.1) * 1.5;
+
+  // ---- the serpent body: a coil on the ground, the tail flicking behind, rising into the waist
+  const tail = [[-70 * f, -3 + Math.sin(t * 2.4) * 3], [-52 * f, 4], [-24 * f, -2 + slither], [6 * f, 1], [16 * f, -16], [6 * f, -38 + sway * 0.3]];
+  const path = () => {
+    ctx.beginPath();
+    ctx.moveTo(tail[0][0], tail[0][1]);
+    ctx.quadraticCurveTo(tail[1][0], tail[1][1], tail[2][0], tail[2][1]);
+    ctx.quadraticCurveTo(tail[3][0], tail[3][1] + 4, tail[4][0], tail[4][1]);
+    ctx.quadraticCurveTo(tail[4][0] + 4 * f, tail[4][1] - 12, tail[5][0], tail[5][1]);
+  };
+  for (const [col, w] of [['#140c08', 19], [scale, 16], [belly, 6]]) {
+    ctx.strokeStyle = col;
+    ctx.lineWidth = w;
+    path();
+    ctx.stroke();
+  }
+  // a row of glinting scales along the back
+  ctx.fillStyle = scaleHi;
+  for (let i = 0; i < 9; i++) {
+    const k = i / 8, x = lerp(tail[0][0], tail[3][0], k), y = lerp(tail[0][1], tail[3][1], k) - 6 - Math.sin(k * Math.PI) * 4;
+    ctx.beginPath();
+    ctx.arc(x, y, 1.6, 0, TAU);
+    ctx.fill();
+  }
+
+  // ---- torso, leaning toward her prey as she glares
+  const waist = tail[5], lean = 4 + glare * 5;
+  const sh = [waist[0] + lean * f, waist[1] - 34];
+  const head = [sh[0] + 4 * f, sh[1] - 13 + sway * 0.4];
+  ctx.strokeStyle = '#140c08';
+  ctx.lineWidth = 10;
+  ctx.beginPath();
+  ctx.moveTo(waist[0], waist[1]);
+  ctx.lineTo(sh[0], sh[1]);
+  ctx.stroke();
+  ctx.strokeStyle = skin;
+  ctx.lineWidth = 7.5;
+  ctx.stroke();
+  // a girdle of bone and red cloth at the waist, in her side's colour
+  ctx.fillStyle = shade(st.accent, -0.25);
+  ctx.beginPath();
+  ctx.moveTo(waist[0] - 7, waist[1] + 3);
+  ctx.lineTo(waist[0] + 7, waist[1] + 3);
+  ctx.lineTo(waist[0] + 5 * f, waist[1] - 6);
+  ctx.lineTo(waist[0] - 5 * f, waist[1] - 6);
+  ctx.closePath();
+  ctx.fill();
+
+  // ---- arms: the far one resting on the coil, the near one rising to point her gaze
+  ctx.strokeStyle = skin;
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(sh[0], sh[1] + 2);
+  ctx.lineTo(sh[0] - 10 * f, sh[1] + 16);
+  ctx.lineTo(sh[0] - 6 * f, sh[1] + 30);
+  ctx.stroke();
+  const reach = glare > 0 ? -0.6 - glare * 0.5 : 0.9 + Math.sin(t * 1.3) * 0.1;
+  const el = polar(sh[0], sh[1] + 2, reach + 0.3, 13, f), hand = polar(el[0], el[1], reach - 0.2, 13, f);
+  ctx.beginPath();
+  ctx.moveTo(sh[0], sh[1] + 2);
+  ctx.lineTo(el[0], el[1]);
+  ctx.lineTo(hand[0], hand[1]);
+  ctx.stroke();
+  ctx.strokeStyle = skinDark;   // clawed fingers
+  ctx.lineWidth = 1.4;
+  for (const d of [-0.5, 0, 0.5]) {
+    const c = polar(hand[0], hand[1], reach - 0.2 + d, 5, f);
+    ctx.beginPath();
+    ctx.moveTo(hand[0], hand[1]);
+    ctx.lineTo(c[0], c[1]);
+    ctx.stroke();
+  }
+  if (glare > 0) {
+    const g = ctx.createRadialGradient(hand[0], hand[1], 1, hand[0], hand[1], 10 + glare * 6);
+    g.addColorStop(0, `rgba(170,255,140,${0.6 * glare})`);
+    g.addColorStop(1, 'rgba(120,255,100,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(hand[0] - 18, hand[1] - 18, 36, 36);
+  }
+
+  // ---- the snakes of her hair, writhing (drawn behind the face)
+  for (let i = 0; i < 9; i++) {
+    const a = -Math.PI * 0.95 + (i / 8) * Math.PI * 1.15, len = 13 + (i % 3) * 3;
+    const wig = Math.sin(t * 4 + i * 1.7) * 3.5;
+    const bx = head[0] + Math.cos(a) * 6 * f, by = head[1] + Math.sin(a) * 6;
+    const mx = head[0] + Math.cos(a) * (len * 0.6) * f + wig * f, my = head[1] + Math.sin(a) * len * 0.6 - wig * 0.4;
+    const ex = head[0] + Math.cos(a + Math.sin(t * 3 + i) * 0.25) * len * f, ey = head[1] + Math.sin(a) * len - 2;
+    for (const [col, w] of [['#101a0a', 3.6], [i % 2 ? '#4e7a34' : '#3a6428', 2.2]]) {
+      ctx.strokeStyle = col;
+      ctx.lineWidth = w;
+      ctx.beginPath();
+      ctx.moveTo(bx, by);
+      ctx.quadraticCurveTo(mx, my, ex, ey);
+      ctx.stroke();
+    }
+    ctx.fillStyle = '#2e4a1e';
+    ctx.beginPath();
+    ctx.ellipse(ex, ey, 2.4, 1.6, a, 0, TAU);
+    ctx.fill();
+    ctx.fillStyle = '#e8ff7a';
+    ctx.fillRect(ex - 0.5, ey - 0.6, 1, 1);
+  }
+
+  // ---- the face, the crown and the eyes
+  ctx.fillStyle = skin;
+  ctx.strokeStyle = '#140c08';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(head[0], head[1], 8, 0, TAU);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#d8ac2c';   // a crown of gold set with bone spikes
+  ctx.beginPath();
+  ctx.moveTo(head[0] - 7, head[1] - 5);
+  for (let i = 0; i <= 4; i++) {
+    const x = head[0] - 7 + i * 3.5;
+    ctx.lineTo(x, head[1] - (i % 2 ? 8 : 13));
+    ctx.lineTo(x + 1.75, head[1] - 6);
+  }
+  ctx.lineTo(head[0] + 7, head[1] - 5);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = st.accent2;
+  ctx.beginPath();
+  ctx.arc(head[0], head[1] - 8.5, 1.4, 0, TAU);
+  ctx.fill();
+  const eye = [head[0] + 4 * f, head[1] - 0.5];
+  const glow = ctx.createRadialGradient(eye[0], eye[1], 0.5, eye[0], eye[1], 9 + glare * 10);
+  glow.addColorStop(0, `rgba(170,255,130,${0.55 + glare * 0.45})`);
+  glow.addColorStop(1, 'rgba(110,255,90,0)');
+  ctx.fillStyle = glow;
+  ctx.fillRect(eye[0] - 20, eye[1] - 20, 40, 40);
+  ctx.fillStyle = glare > 0.5 ? '#ffffff' : '#c8ff9a';
+  ctx.beginPath();
+  ctx.arc(eye[0], eye[1], 1.4, 0, TAU);
+  ctx.arc(eye[0] - 3 * f, eye[1] - 0.2, 1.2, 0, TAU);
+  ctx.fill();
+  ctx.restore();
+}
+
 // Spirit Golem: rune-bound stone in the shape of a great gorilla, all one piece: a massive humped
 // chest and shoulders over narrow hips, a heavy head hung low and forward, short bowed legs and
 // long thick arms it knuckle-walks on. It rocks with each slow stride (its legs and knuckles keep
@@ -643,8 +853,9 @@ function drawGolem(ctx, o) {
   ctx.scale(o.scale * 1.2, o.scale * 1.2);   // a big brute of a thing
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
-  const stone = o.flash > 0 ? '#7a3a30' : o.team === 0 ? '#8c8678' : '#6c6268';
-  const dark = shade(stone, -0.55), light = shade(stone, 0.2), rune = st.crystal, t = RT + o.seed;
+  const hulk = o.type === 'zombie';   // a Hulk: rotten grey-green flesh and a sickly glow instead of stone and runes
+  const stone = o.flash > 0 ? '#7a3a30' : hulk ? '#5c6650' : o.team === 0 ? '#8c8678' : '#6c6268';
+  const dark = shade(stone, -0.55), light = shade(stone, 0.2), rune = hulk ? '#b8ff6a' : isMonster(o.team) ? MONSTER.rune : st.crystal, t = RT + o.seed;
   const hunker = !!o.wall, walking = o.moving && !hunker, ph = o.walk || 0;
   const glow = hunker ? 0.95 : 0.55 + 0.15 * Math.sin(t * 2.5);
   const X = x => x * f;
@@ -1100,7 +1311,8 @@ function drawStickman(ctx, o) {
   if (o.type === 'cleric' || o.type === 'warlock' || o.type === 'necromancer') return drawMage(ctx, o);
   if ((o.type === 'flyer' && !o.grounded) || o.type === 'firebird') return drawFlyer(ctx, o);
   if (o.type === 'ballista') return drawBallista(ctx, o);
-  if (o.type === 'golem') return drawGolem(ctx, o);
+  if (o.type === 'golem' || (o.type === 'zombie' && o.brute)) return drawGolem(ctx, o);   // (a Hulk: a golem of rotten flesh)
+  if (o.type === 'medusa') return drawMedusa(ctx, o);
   const st = TEAM_STYLE[o.team], f = o.facing, P = o.perks || NO_PERKS;
   const isZom = o.type === 'zombie';
   ctx.save();
@@ -1115,7 +1327,8 @@ function drawStickman(ctx, o) {
   if (o.fall) ctx.rotate(-f * o.fall * 1.5);
   if (o.alpha !== undefined) ctx.globalAlpha *= o.alpha;
   ctx.scale(o.scale, o.scale);
-  const col = o.flash > 0 ? '#6e1510' : isZom ? mixHex(st.body, '#5e6e52', 0.5) : st.body;   // zombies have a sickly grey-green cast
+  const mon = isMonster(o.team);
+  const col = o.flash > 0 ? '#6e1510' : isZom ? mixHex(mon ? MONSTER.skin : st.body, '#5e6e52', 0.5) : mon ? MONSTER.skin : st.body;   // zombies have a sickly grey-green cast
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
 
@@ -1128,7 +1341,7 @@ function drawStickman(ctx, o) {
   const panning = !!o.panning || (isSab && !!o.salting) || ((isArch || isQm) && !!o.laying);   // hunched over: a saboteur salting a deposit, an architect laying a trap, a quartermaster tending someone
   const kneel = praying || panning;
   const wall = isSpear && o.wall;
-  const run = (isSword || isNinja || isSab || isGlad || isQm) && o.moving && !(o.pace < 0.8);   // in a slow formation they walk
+  const run = (isSword || isNinja || isSab || isGlad || isQm || isZom) && o.moving && !(o.pace < 0.8);   // (zombies run at their prey)   // in a slow formation they walk
   const walk = o.moving && !run;
 
   // ---- hips and legs
@@ -1401,6 +1614,7 @@ function drawStickman(ctx, o) {
   const gear = unitGear(o.type, o.team, P);
   if ((isSword || isSpear) && P.helm) drawHelmet(ctx, hx, hy, f, o.team === 1, isSpear ? shade(st.accent, -0.2) : null);
   else drawGear(ctx, gear, hx, hy, f, st, t, o.team);
+  if (mon) { drawMonsterSpikes(ctx, sx, sy, hipY, f); drawMonsterHead(ctx, hx, hy, f, 7); }
   if (isSword && P.rage) {   // Adrenaline: red war paint across the eyes
     ctx.strokeStyle = '#a3241a';
     ctx.lineWidth = 1.6;
@@ -2814,48 +3028,6 @@ function drawSpearHall(ctx, x, base, st, hover) {
 }
 
 
-// The flyers' launch perch on the rampart, where Kestrels and Firebirds take off: a timber frame
-// with a plank jutting out over the battlements, a winch for hauling the wings up, and a windsock
-// in the side's colour.
-function drawLaunchPerch(ctx, x, base, st) {
-  const wood = '#5e4128', dark = '#24180d', top = base - 46;
-  ctx.save();
-  ctx.lineCap = 'round';
-  // frame: two posts and a brace
-  ctx.strokeStyle = dark;
-  ctx.lineWidth = 4.5;
-  ctx.beginPath();
-  ctx.moveTo(x - 14, base); ctx.lineTo(x - 12, top);
-  ctx.moveTo(x + 10, base); ctx.lineTo(x + 9, top);
-  ctx.stroke();
-  ctx.strokeStyle = wood;
-  ctx.lineWidth = 3;
-  ctx.stroke();
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = shade(wood, -0.15);
-  ctx.beginPath(); ctx.moveTo(x - 13, base - 4); ctx.lineTo(x + 9, top + 12); ctx.moveTo(x + 10, base - 4); ctx.lineTo(x - 12, top + 12); ctx.stroke();
-  // the launch plank, jutting out toward the field
-  ctx.fillStyle = '#4a3420';
-  ctx.beginPath(); ctx.moveTo(x - 18, top); ctx.lineTo(x + 38, top - 3); ctx.lineTo(x + 38, top + 2); ctx.lineTo(x - 18, top + 5); ctx.closePath(); ctx.fill();
-  ctx.strokeStyle = dark; ctx.lineWidth = 1; ctx.stroke();
-  ctx.strokeStyle = 'rgba(16,10,5,0.6)';
-  ctx.beginPath(); for (let px = x - 10; px < x + 36; px += 9) { ctx.moveTo(px, top - 1); ctx.lineTo(px, top + 4); } ctx.stroke();
-  // a winch drum and rope
-  ctx.fillStyle = '#3a2814';
-  ctx.beginPath(); ctx.arc(x - 2, top + 20, 4.5, 0, TAU); ctx.fill();
-  ctx.strokeStyle = '#a89870'; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(x - 2, top + 16); ctx.lineTo(x + 24, top - 1); ctx.stroke();
-  // windsock
-  ctx.strokeStyle = dark; ctx.lineWidth = 1.4;
-  ctx.beginPath(); ctx.moveTo(x - 12, top); ctx.lineTo(x - 12, top - 22); ctx.stroke();
-  const flap = Math.sin(RT * 3 + x) * 2;
-  ctx.fillStyle = shade(st.accent, -0.1);
-  ctx.beginPath(); ctx.moveTo(x - 12, top - 22); ctx.lineTo(x + 4, top - 20 + flap); ctx.lineTo(x + 3, top - 15 + flap); ctx.lineTo(x - 12, top - 15); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = 'rgba(255,255,255,0.35)';
-  ctx.fillRect(x - 6, top - 21 + flap * 0.4, 2.5, 6);
-  weather(ctx, x - 18, top - 2, 56, base - top + 2, 61, 0.6);
-  ctx.restore();
-}
 // The Mage Tower: a round stone tower under a slate cone, one window for each of the mages it
 // trains: the Cleric's candlelit arch, the Warlock's violet rose window and the Necromancer's
 // green-lit skull niche over the door.
@@ -3449,8 +3621,6 @@ function drawCastle(ctx, team, hoverKey) {
     ctx.fillRect(x, ceilTop - 14, 14, 14);
     ctx.strokeRect(x, ceilTop - 14, 14, 14);
   }
-  // the flyers' launch perch on the rampart
-  drawLaunchPerch(ctx, KESTREL_PERCH_X, ceilTop, st);
 
   // hanging banners inside the hall
   for (const bx of [146, 266, 386]) drawBanner(ctx, bx, ceilBot, 22, 46, c.banner, st);
@@ -5025,6 +5195,15 @@ function drawUpgradeIcon(cv, type, key) {
       c.beginPath(); c.moveTo(20, 8); c.lineTo(17, 16); c.lineTo(22, 22); c.lineTo(19, 30); c.stroke();
       c.fillStyle = '#4a3a24'; c.beginPath(); c.ellipse(20, 35, 17, 4, 0, 0, TAU); c.fill();
       c.fillStyle = 'rgba(130,255,150,0.7)'; for (const [x, y] of [[8, 30], [33, 31], [26, 33]]) { c.beginPath(); c.arc(x, y, 1.2, 0, TAU); c.fill(); }
+      break;
+    case 'hulk':
+      // a hulking, hunched zombie: rotten bulk and a sickly glowing eye
+      c.fillStyle = '#5c6650'; c.strokeStyle = dark; c.lineWidth = 1.4;
+      c.beginPath(); c.moveTo(8, 36); c.quadraticCurveTo(6, 16, 20, 12); c.quadraticCurveTo(34, 12, 33, 26); c.lineTo(31, 36); c.closePath(); c.fill(); c.stroke();
+      c.beginPath(); c.arc(27, 15, 6, 0, TAU); c.fill(); c.stroke();
+      c.strokeStyle = '#3a4230'; c.lineWidth = 3; c.beginPath(); c.moveTo(30, 24); c.lineTo(35, 33); c.stroke();
+      c.fillStyle = '#b8ff6a'; c.beginPath(); c.arc(29.5, 14.5, 1.4, 0, TAU); c.fill();
+      c.strokeStyle = '#2a3020'; c.lineWidth = 1; c.beginPath(); c.moveTo(14, 20); c.lineTo(18, 24); c.moveTo(12, 28); c.lineTo(17, 27); c.stroke();
       break;
     case 'rites':
       // a ritual circle with a candle at each point

@@ -325,7 +325,7 @@ const rebuildCost = s => (s.mid ? TOWER.mid.rebuild : Math.round((s.isTower ? TO
 function rebuildStructure(team, s, builders) {
   const say = msg => { if (team.id === 0) toast(msg); return null; };
   if (!s || !s.ruin) return null;
-  if (s.team !== team.id && !(s.mid && s.team === -1)) return say('That ruin isn\'t yours to rebuild');
+  if (!canMend(team, s)) return say('That ruin isn\'t yours to rebuild');
   if (!builders.length) return say('Select architects to rebuild it');
   const cost = rebuildCost(s);
   if (team.gold < cost) return say(`Rebuilding costs ${cost} gold`);
@@ -350,10 +350,21 @@ function rebuildStructure(team, s, builders) {
   return s;
 }
 
+// A side's architects mend their own trenches and towers, and the Monolith's tower while no one
+// else (enemy or neutral archers) holds it.
+const canMend = (team, s) => s.team === team.id || (s.mid && [-1, team.id].includes(towerHolder(s)));
+
 // Send builders to the most damaged of the team's finished structures (trenches and towers).
-function repairStructures(team, builders) {
-  const hurt = [...G.walls, ...G.towers].filter(w => w.team === team.id && !w.dead && w.progress >= 1 && w.hp < w.max);
-  if (!hurt.length) return null;
+// With nothing damaged, they rebuild the nearest ruin they can afford instead.
+function repairStructures(team, builders, rebuild) {
+  const hurt = [...G.walls, ...G.towers].filter(w => canMend(team, w) && !w.dead && w.progress >= 1 && w.hp < w.max);
+  if (!hurt.length) {
+    if (!rebuild || !builders.length) return null;
+    const ruins = [...G.walls, ...G.towers].filter(s => s.ruin && canMend(team, s));
+    if (!ruins.length) return null;
+    const x = builders[0].x, s = ruins.sort((a, b) => Math.abs(a.x - x) - Math.abs(b.x - x))[0];
+    return rebuildStructure(team, s, builders);
+  }
   const w = hurt.sort((a, b) => a.hp / a.max - b.hp / b.max)[0];
   for (const u of builders) setOrder(u, { type: 'build', wall: w });
   return w;
@@ -398,13 +409,21 @@ function upgradePrice(team, type, def) {
   return { gold: Math.round(def.cost * (1 - d)), mana: Math.round((def.mana || 0) * (1 - d)), off: d };
 }
 
-// Idle architects (standing by with nothing to build, or in the castle) slowly find savings.
+// Idle architects (standing by with nothing to build, or in the castle) slowly find savings. Those
+// studying out at the statue also bring in a little mana.
 function updateStudy(team, dt) {
-  let rate = 0;
+  let rate = 0, atStatue = 0;
   for (const u of G.units) {
     if (u.team !== team.id || u.dead || u.type !== 'architect') continue;
     if (u.inside) rate += ARCH_RESEARCH.garrisonMul;
-    else if ((u.order.type === 'stance' || u.order.type === 'hold') && !u.moving) rate += 1;
+    else if ((u.order.type === 'stance' || u.order.type === 'hold') && !u.moving) {
+      rate += 1;
+      if (Math.abs(u.x - team.statue.x) < 120) atStatue++;
+    }
+  }
+  if (atStatue) {
+    const m = Math.min(atStatue * ARCH_RESEARCH.mana * dt, MAX_MANA - team.mana);
+    if (m > 0) { team.mana += m; G.stats[team.id].mana += m; }
   }
   if (!rate) return;
   team.studyT = (team.studyT || 0) + rate * dt;

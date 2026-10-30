@@ -9,7 +9,7 @@
   window.addEventListener('resize', resize);
   initInput();
   buildHUD();
-  showTitle();
+  showMainMenu();
 
   let last = performance.now();
   function frame(now) {

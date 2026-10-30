@@ -65,7 +65,7 @@ class Unit {
     this.blockT = 0;
     this.shieldWall = false;
     this.onWall = null;
-    this.rampart = -1;   // walkway spot of a garrisoned archer manning the rampart (-1: none)
+    this.rampart = -1;   // gate spot of a garrisoned archer shooting from the gate (-1: none)
     this.insp = 0;       // inspiration stacks from spearton leaders (0..3)
     this.drillN = 0;     // allies nearby counted by sword military training (0..5)
     this.refitT = 0;
@@ -400,6 +400,7 @@ function startSwing(u, kind, target) {
 
 function onSwingHit(u) {
   const t = u.swingTarget;
+  if (u.type === 'medusa') return medusaGaze(u, t);   // her gaze turns its target to stone
   if (u.swingKind === 'attack') {
     // a vanished ninja caught at close quarters is struck (and shaken out of hiding) all the same
     if (t && t.stealth && !t.dead && !t.inside && inReach(u, t, 12)) t.stealth = false;
@@ -439,7 +440,7 @@ function onSwingHit(u) {
   } else if (u.swingKind === 'shoot') {
     if (isValidTarget(t)) {
       const aim = u.facing === 1 ? u.aimFa : Math.PI - u.aimFa;
-      const lift = unitLift(u) + (u.alt || 0);   // (up on a trench, in a tower or on the walkway)
+      const lift = unitLift(u) + (u.alt || 0);   // (up on a trench, or in a tower)
       const c = rollCrit(u, u.dmg * dmgMult(u));
       const kind = u.type === 'ninja' ? 'star' : u.type === 'flyer' ? 'bolt' : u.type === 'ballista' ? 'ballista' : u.type === 'beastmaster' ? 'stone' : u.type === 'firebird' ? 'pot' : 'arrow';
       const muzzle = u.type === 'ballista' ? 44 : u.type === 'beastmaster' ? 60 : 46;   // low stock; a sling whirled overhead
@@ -606,7 +607,7 @@ function shooterToCharge(u, postX) {
 const PELT_REACT = 1.2;      // seconds of standing there being hit before reacting
 const PELT_CHASE = 520;      // how far it will go after the shooter
 function reactToFire(u, dt) {
-  if (u.dead || isWorker(u) || isGiant(u) || u.type === 'zombie' || u.type === 'necromancer' || u.team === NEUTRAL) return;
+  if (u.dead || isWorker(u) || isGiant(u) || u.type === 'zombie' || u.type === 'necromancer' || u.team === NEUTRAL || u.boss) return;   // (campaign bosses keep to their commander's plan)
   if (u.inside || u.onTower || u.onWall || u.rampart >= 0 || u.order.type === 'refit' || u.order.react) { u.peltT = 0; return; }
   const f = u.lastAttacker;
   if (u.retaliateT <= 0 || !isValidTarget(f) || f.isStructure || f.castle || u.swing >= 0 || u.moving) { u.peltT = 0; return; }
@@ -664,10 +665,9 @@ function goGarrison(u, dt) {
   if (moveTo(u, u.garX, u.garY, dt)) u.facing = G.teams[u.team].dir;
 }
 
-// A garrisoned archer climbs onto the walkway behind the castle archers (one row of them, while
-// there's room) and keeps shooting from there; the rest wait inside. Up there it's out of reach,
-// like the castle archers.
-const RAMPART_Y = LANE_TOP + 4;   // (it stands at this lane depth, drawn lifted onto the walkway)
+// Up to four garrisoned archers line up on the floor just inside the gate (a staggered row, front
+// to back) and keep shooting out of it; the rest wait inside. Inside the gate they're out of reach.
+const rampartY = i => LANE_TOP + 14 + i * 16;
 function manRampart(u, team, dt) {
   if (u.rampart < 0) {
     const i = team.rampart.indexOf(null);
@@ -675,8 +675,8 @@ function manRampart(u, team, dt) {
     team.rampart[i] = u;
     u.rampart = i;
   }
-  u.x = team.edge(RAMPART_LINE_XS[u.rampart]);
-  u.y = RAMPART_Y;
+  const x = team.edge(RAMPART_LINE_XS[u.rampart]), y = rampartY(u.rampart);
+  if (Math.abs(u.x - x) > 3 || Math.abs(u.y - y) > 3) { if (u.swing < 0) moveTo(u, x, y, dt); return; }   // walk to the spot
   u.facing = team.dir;
   if (u.swing >= 0 || u.atkCd > 0) return;
   const t = nearestEnemy(u, u.range);
@@ -691,11 +691,10 @@ function leaveRampart(u) {
   const team = G.teams[u.team];
   if (team.rampart[u.rampart] === u) team.rampart[u.rampart] = null;
   u.rampart = -1;
-  u.y = u.garY;   // back down the ladder
 }
 
-// How high above its lane spot a unit is drawn: on a trench, in a tower or up on the walkway.
-const unitLift = u => (u.dead ? 0 : u.onWall ? wallHeight(u.onWall) : u.onTower ? towerH(u.onTower) : u.rampart >= 0 ? RAMPART_Y - (WALL_TOP - 8) : 0);
+// How high above its lane spot a unit is drawn: on a trench or in a tower.
+const unitLift = u => (u.dead ? 0 : u.onWall ? wallHeight(u.onWall) : u.onTower ? towerH(u.onTower) : 0);
 
 // Upgrades this unit's type has unlocked that the unit itself doesn't have yet.
 function missingUpgrades(u) {
@@ -1253,6 +1252,7 @@ function damage(t, amt, src, aoe) {
   amt = Math.max(1, Math.round(amt));
   if (t.isStructure) {
     if (t.dead) return;
+    if (t.sealed) { t.flash = 0.1; return; }   // (a campaign statue warded until its level's goal allows)
     if (src && src.type === 'ballista') amt = Math.round(amt * BALLISTA.structureMul);   // siege bolts wreck trenches and statues
     if (src && src.type === 'saboteur' && t.isWall) amt = Math.round(amt * (src.perks.sappers ? SABOTEUR.trenchMulSappers : SABOTEUR.trenchMul));   // saboteurs undermine trenches
     t.hp -= amt;
@@ -1492,8 +1492,9 @@ function updateUnit(u, dt) {
     u.parryCd -= dt;
     updateNinjaMode(u);
   } else if (u.type === 'flyer' || u.type === 'firebird') {
-    // climb to cruising height (or glide down after Feather Fall)
-    const want = isFlying(u) ? FLY_ALT + Math.sin(RT * 1.7 + u.seed) * 4 : 0;
+    // climb to cruising height (or glide down after Feather Fall); inside their own castle they skim low
+    const home = Math.abs(u.x - G.teams[u.team].edge(0)) < GATE_X - 20;
+    const want = isFlying(u) ? (home ? CASTLE_FLY_ALT : FLY_ALT) + Math.sin(RT * 1.7 + u.seed) * 4 : 0;
     u.alt += (want - u.alt) * Math.min(1, dt * (u.grounded ? 3 : 2));
     if (u.grounded && u.alt < 0.5) u.alt = 0;
   }
@@ -1516,6 +1517,7 @@ function updateUnit(u, dt) {
   else if (u.type === 'necromancer') updateNecromancer(u, dt);
   else if (u.type === 'zombie') updateZombie(u, dt);
   else if (isGiant(u)) updateGiant(u, dt);
+  else if (u.type === 'medusa') updateMedusa(u, dt);   // the campaign's last boss (campaign.js)
   else if (isMage(u) && updateMageCasting(u, dt)) { /* busy casting or walking to cast */ }
   else if (u.type === 'cleric') updateCleric(u, dt);
   else updateFighter(u, dt);

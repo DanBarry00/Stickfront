@@ -16,7 +16,7 @@ function updateGladiatorGear(u) {
     for (const e of G.units) {
       if (e.team === u.team || e.dead || e.inside || e.stealth || isWorker(e)) continue;
       const d = Math.abs(e.x - u.x) + Math.abs(e.y - u.y) * 0.5, fly = isFlying(e);
-      if (!fly && d < 110) continue;   // too close to bother: the sword will do
+      if (d > JAVELIN.range || (!fly && d < 110)) continue;   // out of reach, or too close to bother (the sword will do)
       if ((fly && !air) || (fly === air && d < bd)) { best = e; bd = d; air = fly; }
     }
     if (best && (air || bd < JAVELIN.range * 0.8)) {

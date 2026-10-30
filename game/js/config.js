@@ -25,7 +25,7 @@ const DEFENSE = { homeMax: 0.2, regen: 6, regenR: 900, regenDelay: 15, rallyAt: 
 const STATUE_X = 800;        // distance of each statue from its world edge
 const GATE_X = 560;          // castle front wall (gate) distance from world edge
 const BUILD_X = { sword: 95, spear: 215, archer: 335, miner: 455 };   // building centers inside the castle
-const RAMPART_LINE_XS = [430, 408, 386, 364, 342, 320];   // garrisoned archers line up along the walkway here, one row only
+const RAMPART_LINE_XS = [540, 524, 508, 492];   // up to 4 garrisoned archers line up just inside the gate and shoot out of it
 const ARCHER_XS = [520, 498, 476, 454];   // castle archer spots on the rampart, shoulder to shoulder from the front (extra ones are castle upgrades; the 4th is for clans with 4 slots)
 // Castle archers cover the ground out to just past where an enemy archer with the same bow
 // upgrades has to stand to shoot the statue: statue + its half-width + archer range + this margin.
@@ -37,7 +37,7 @@ const JAVELIN = { range: 300, dmg: 30 };   // a Gladiator's javelin (one, refill
 // times as fast and mine, pan and pray cheerWork times as fast, and a Quartermaster tops them up when
 // fewer than cheerTopUp seconds are left; bring an Architect materials for a free trap every
 // materialsCd (materialsWagon with Supply Wagon); keep out of reach of enemies within safe.
-const QM = { heal: 20, healSalves: 30, healTime: 1, refitTime: 1.2, cheerR: 160, cheerTime: 30, cheerTopUp: 8, cheerSpeed: 1.5, cheerWork: 2, materialsCd: 60, materialsWagon: 35, safe: 140 };
+const QM = { heal: 20, healSalves: 30, healTime: 1, refitTime: 1.2, cheerR: 160, cheerTime: 30, cheerTopUp: 8, cheerSpeed: 1.5, cheerWork: 2, materialsCd: 60, materialsWagon: 35, safe: 140, gearCd: 25 };   // gearCd: seconds before a Quartermaster can re-arm the same Gladiator
 // Gladiators: the net pins its target for netTime (it reaches netRange); every kill (up to maxKills: a snowball)
 // adds killHp and killDmg; with fewer than aloneN friends within aloneR, alonePer more damage each.
 const GLADIATOR = { netRange: 150, netTime: 3, netTimeWeighted: 5, killHp: 15, killDmg: 0.04, maxKills: 25, aloneR: 160, aloneN: 5, alonePer: 0.08, manica: 0.2 };
@@ -45,6 +45,9 @@ const GLADIATOR = { netRange: 150, netTime: 3, netTimeWeighted: 5, killHp: 15, k
 // Quick Rites) for mana; zombies stay within leash of it, and take rangedMul of projectile damage.
 const NECRO = { max: 6, summonCd: 6, rites: 4, mana: 5, leash: 170, rangedMul: 0.5, graveHp: 1.5,
   souls: 25, soulsPerSlot: 4, maxExtra: 5, soulPower: 0.03, soulHaste: 0.02 };   // souls: each kill by its zombies (up to souls) grows the pack by one per soulsPerSlot, and its zombies' power and summoning speed
+// Hulks (Hulking Dead): every `every`th zombie a Necromancer raises is a hulking brute: hp and dmg
+// multipliers, drawn at `scale`, walking at `speed` of a zombie's pace.
+const HULK = { every: 4, hp: 3.2, dmg: 2, scale: 1.25, speed: 0.55 };
 // The undead and holy light: an enemy Healing Pool burns zombies for poolMul times its healing, and a
 // Cleric with nobody to heal smites the nearest enemy zombie for smiteMul times its heal.
 const UNDEAD = { poolMul: 5, smiteMul: 3 };
@@ -103,7 +106,7 @@ const towerY = () => LANE_TOP + 3;                        // towers stand at the
 const REBUILD = 0.3;
 // Idle architects (or ones in the castle, at garrisonMul the pace) study: every time seconds of
 // study knocks step off the price of a random upgrade, down to at most max off.
-const ARCH_RESEARCH = { time: 30, step: 0.1, max: 0.4, garrisonMul: 1.5 };
+const ARCH_RESEARCH = { time: 30, step: 0.1, max: 0.4, garrisonMul: 1.5, mana: 0.5 };   // mana: per second, each architect studying at the statue
 
 const BURN_DPS = 4;          // Flaming Arrows damage over time
 const BURN_TIME = 3;
@@ -121,7 +124,7 @@ const UNIT_TYPES = {
   architect: {
     key: 'architect', name: 'Architect', cost: 175, time: 5, hp: 80, speed: 70, pop: 1,
     dmg: 6, range: 26, atkTime: 1, aggro: 0, hotkey: '`', code: 'Backquote',
-    desc: 'Builds and repairs: digs trenches (with Earthworks), lays hidden traps, raises archer towers, and mends any of your structures. Left idle (or in the castle) it studies, making random upgrades cheaper.',
+    desc: 'Builds and repairs: digs trenches (with Earthworks), lays hidden traps, raises archer towers, repairs and rebuilds trenches and towers (the Monolith’s too). Left idle (or in the castle) it studies, making random upgrades cheaper, and makes a little mana at the statue. Castle upgrades need one.',
   },
   sword: {
     key: 'sword', name: 'Swordwrath', cost: 125, time: 3.5, hp: 140, speed: 100, pop: 1,
@@ -216,12 +219,12 @@ UNIT_TYPES.gladiator = {
 UNIT_TYPES.necromancer = {
   key: 'necromancer', name: 'Necromancer', cost: 175, mana: 75, time: 7, hp: 85, speed: 70, pop: 1,
   dmg: 0, range: 240, atkTime: 1.4, aggro: 300, hotkey: '0', code: 'Digit0',
-  desc: 'Raises zombies (up to 6, more with upgrades; they don\'t count toward your population) and leads them. Zombies are slow, weak fodder that take half damage from arrows and other shots, and an enemy a zombie kills rises as another. If the Necromancer falls, its zombies just attack.',
+  desc: 'Raises zombies (up to 6, more with upgrades; they don\'t count toward your population) and leads them. Zombies are fast, weak fodder that take half damage from arrows and other shots, and an enemy a zombie kills rises as another. If the Necromancer falls, its zombies just attack.',
 };
 UNIT_TYPES.zombie = {
-  key: 'zombie', name: 'Zombie', cost: 0, time: 0, hp: 60, speed: 70, pop: 0,
+  key: 'zombie', name: 'Zombie', cost: 0, time: 0, hp: 60, speed: 108, pop: 0,
   dmg: 8, range: 28, atkTime: 1.1, aggro: 240, summoned: true,
-  desc: 'Raised by a Necromancer. Weak and slow, but it takes half damage from arrows and other shots, and whoever it kills rises as another zombie.',
+  desc: 'Raised by a Necromancer. Weak, but it runs at its prey, takes half damage from arrows and other shots, and whoever it kills rises as another zombie.',
 };
 const UNIT_ORDER = ['miner', 'architect', 'quartermaster', 'sword', 'archer', 'spear', 'gladiator', 'cleric', 'warlock', 'necromancer', 'giant', 'ninja', 'flyer', 'ballista', 'golem', 'beastmaster', 'saboteur', 'firebird'];
 // Training groups: each group trains one unit at a time from a shared queue (so a Swordwrath
@@ -243,16 +246,17 @@ const isFlying = u => (u.type === 'flyer' && !u.grounded) || u.type === 'firebir
 // Ninjas count as ranged while throwing stars (u.starRanged is decided each frame).
 // Workers (miners and architects) don't fight: they're left out of armies, formations and army strength.
 const isWorker = u => u.type === 'miner' || u.type === 'architect' || u.type === 'quartermaster';
-const isRanged = u => u.type === 'archer' || u.type === 'warlock' || u.type === 'ballista' || u.type === 'beastmaster' || isFlying(u) || (u.type === 'ninja' && !!u.starRanged);
+const isRanged = u => u.type === 'medusa' || u.type === 'archer' || u.type === 'warlock' || u.type === 'ballista' || u.type === 'beastmaster' || isFlying(u) || (u.type === 'ninja' && !!u.starRanged);
 const trainCode = def => def.code || 'Digit' + def.hotkey;
 // One building per class inside the castle (the Giant Pit stands outside the gate). Units walk out
-// of their class's building; Kestrels and Firebirds launch off the rampart above the Range.
+// of their class's building; Kestrels and Firebirds take off from the Range and fly low under the
+// castle ceiling until they clear the gate.
 const GIANT_PIT_X = 655;
 const CLASS_X = { infantry: BUILD_X.sword, mages: BUILD_X.spear, ranged: BUILD_X.archer, workers: BUILD_X.miner, giants: GIANT_PIT_X };
-const KESTREL_PERCH_X = 270;   // where flyers launch from the rampart (clear of the castle archers and the rampart line)
+const CASTLE_FLY_ALT = 30;     // flyers skim low inside their own castle, under the ceiling
 const DOOR_X = {};
 for (const g of TRAIN_GROUPS) for (const t of g.types) DOOR_X[t] = CLASS_X[g.key];
-Object.assign(DOOR_X, { flyer: KESTREL_PERCH_X, firebird: KESTREL_PERCH_X, ballista: 500, zombie: CLASS_X.mages });   // ballistas roll out by the gate
+Object.assign(DOOR_X, { ballista: 500, zombie: CLASS_X.mages });   // ballistas roll out by the gate
 
 // Ninjas
 const NINJA_AMBUSH = 3;           // damage multiplier of the first blow of a fight (or out of stealth)
@@ -460,6 +464,7 @@ const UPGRADES = {
     { key: 'horde2', name: 'Endless Horde', cost: 300, mana: 125, time: 35, requires: 'horde', desc: `Each Necromancer keeps up to ${NECRO.max + 4} zombies.` },
     { key: 'grave', name: 'Grave Dirt', cost: 175, mana: 75, time: 25, desc: `Zombies rise with ${Math.round((NECRO.graveHp - 1) * 100)}% more health.` },
     { key: 'rites', name: 'Quick Rites', cost: 175, mana: 75, time: 25, desc: `A zombie rises every ${NECRO.rites}s instead of every ${NECRO.summonCd}s.` },
+    { key: 'hulk', name: 'Hulking Dead', cost: 250, mana: 100, time: 35, desc: `Every ${HULK.every}th zombie a Necromancer raises is a Hulk: a huge, slow brute with ${HULK.hp}× health and double damage.` },
   ],
   zombie: [],
   giant: [
