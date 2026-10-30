@@ -513,6 +513,7 @@ function updateMedusa(u, dt) {
 // The gaze lands: a beam of green light, and its victim is stone (structures just take a blow).
 function medusaGaze(u, t) {
   if (!isValidTarget(t)) return;
+  sfx('gaze', u.x);
   G.particles.push({ kind: 'beam', x: u.x + u.facing * 18 * u.scale, y: u.y - 96 * u.scale, x2: t.x, y2: targetAimY(t), vx: 0, vy: 0, life: 0.5, max: 0.5 });
   if (t.isStructure) { damage(t, u.dmg, u); return; }
   petrify(t, u);

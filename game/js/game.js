@@ -194,6 +194,7 @@ function updateQueues(team, dt) {
     if (q[0].t >= UNIT_TYPES[q[0].type].time) {
       const { type } = q.shift();
       spawnUnit(team, type);
+      if (team.id === 0) sfx('trained');
       G.stats[team.id].trained++;
     }
   }
@@ -529,6 +530,7 @@ function updateCastleArcher(team, a, dt, garrisoned) {
       const aim = a.f === 1 ? a.fa : Math.PI - a.fa;
       team.castleSrc.pierceHalf = S.pierceHalf;
       fireArrow(team.id, a.x + Math.cos(aim) * 14, a.y - 48 + Math.sin(aim) * 14, a.target, S.dmg, team.castleSrc, S.fire);
+      sfx('bow', a.x, 0.8);
     }
     a.phase = 'release';
   } else a.phase = 'idle';
@@ -543,6 +545,7 @@ function updateArchers(team, dt) {
 // A Firebird's fire pot bursts where it lands: every enemy on the ground nearby takes the hit and
 // starts burning; trenches and the statue take half.
 function potBlast(p) {
+  sfx('boom', p.x, 0.55);
   const src = p.src && !p.src.dead ? p.src : null, r = p.radius || FIREBIRD.radius;
   const x = p.x, y = p.target && !p.target.isStructure ? p.target.y : (LANE_TOP + LANE_BOT) / 2;   // ground level where it lands
   for (const e of G.units.slice()) {
@@ -606,6 +609,7 @@ function updateProjectiles(dt) {
           t.arrowHurt = (t.arrowHurt || 0) + amt;
         }
         damage(t, amt, src);
+        if (p.kind !== 'stone') sfx('arrowHit', t.x, 0.7);
         if (p.crit) showCrit(t);
         if (p.fire && !t.isStructure && !t.dead) { t.burnT = BURN_TIME; t.burnSrc = src; }
         if (p.kind === 'star' && isGiant(t) && !t.dead) confuseGiant(t, STAR.confuse);   // stars disorient giants
@@ -658,6 +662,7 @@ function updateParticles(dt) {
 }
 
 function destroyStatue(s) {
+  sfx('statueFall', s.x);
   s.hp = 0;
   s.dead = true;
   for (let i = 0; i < 6; i++) {

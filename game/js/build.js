@@ -132,6 +132,7 @@ function trapSource(trap) {
 
 function springTrap(trap) {
   trap.dead = true;
+  sfx(trap.kind === 'tar' ? 'splash' : 'boom', trap.x);
   if (trap.kind === 'tar') {
     G.tarPools.push({ team: trap.team, x: trap.x, y: trap.y, r: TRAP.tar.poolR, t: 0, dur: TRAP.tar.poolTime, magic: trap.magic });
     spawnBurst(trap.x, trap.y - 4, 12, { color: '#1a1410', speed: 90, up: 70, g: 500, life: 0.7, size: 3 });
@@ -290,6 +291,7 @@ function updateNeutralArcher(u) {
 // A tower falls. Brought down by melee troops, the archers inside go down with it (the Monolith's
 // neutral archers fall with their tower however it comes down).
 function destroyTower(tw, src) {
+  sfx('crumble', tw.x);
   tw.dead = true;
   tw.ruin = true;   // the wreck stays, to be rebuilt cheaply
   tw.hp = 0;

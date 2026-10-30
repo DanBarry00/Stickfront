@@ -417,6 +417,7 @@ function onSwingHit(u) {
       }
       const c = rollCrit(u, amt);
       damage(t, c.amt, u);
+      sfxMelee(u, t);
       if (c.crit) showCrit(t);
       if (isGiant(u)) giantImpact(u, t, amt);
       // a spear thrust runs on into a second enemy lined up behind the first
@@ -434,9 +435,9 @@ function onSwingHit(u) {
     releaseSpell(u, t);
   } else if (u.swingKind === 'heal') {
     if (t && !t.dead && t.team !== u.team) smiteUndead(u, t);   // holy light on an enemy zombie
-    else if (t && !t.dead) healUnit(t, u.dmg * rnd(0.85, 1.15) * dmgMult(u), u);
+    else if (t && !t.dead) { healUnit(t, u.dmg * rnd(0.85, 1.15) * dmgMult(u), u); sfx('heal', t.x, 0.8); }
   } else if (u.swingKind === 'shoot' && u.type === 'warlock') {
-    if (isValidTarget(t)) fireBolt(u, t, u.dmg * rnd(0.85, 1.15) * dmgMult(u));
+    if (isValidTarget(t)) { fireBolt(u, t, u.dmg * rnd(0.85, 1.15) * dmgMult(u)); sfx('zap', u.x); }
   } else if (u.swingKind === 'shoot') {
     if (isValidTarget(t)) {
       const aim = u.facing === 1 ? u.aimFa : Math.PI - u.aimFa;
@@ -448,10 +449,12 @@ function onSwingHit(u) {
       const pot = u.type === 'firebird' ? { radius: u.perks.pitch ? FIREBIRD.radiusPitch : FIREBIRD.radius, burn: u.perks.pitch ? FIREBIRD.burnPitch : FIREBIRD.burn } : {};
       const sx = u.type === 'firebird' ? u.x : u.x + Math.cos(aim) * 14 * u.scale, sy = u.type === 'firebird' ? u.y - lift - 30 : u.y - lift - muzzle * u.scale + Math.sin(aim) * 14;
       fireArrow(u.team, sx, sy, t, c.amt, u, u.fire, { kind, crit: c.crit, ...pot });
+      if (kind !== 'pot') sfxShot(u, kind);
     }
   } else if (u.swingKind === 'gold') {
     const m = u.mine;
     if (m && m.gold > 0) {
+      sfx('pick', u.x, 0.7);
       const take = Math.min(u.goldPerSwing, m.gold, u.carryCap - u.carry);
       m.gold -= take;
       // a deposit salted by the enemy yields only part of what is dug (the rest is spoiled)
@@ -469,6 +472,7 @@ function onSwingHit(u) {
     }
   } else if (u.swingKind === 'build') {
     buildHit(u, t);
+    sfx('build', u.x);
   }
 }
 
@@ -1141,7 +1145,7 @@ function deposit(u, team, dt) {
   if (moveTo(u, team.statue.x + team.dir * 72, clamp(u.slotY, LANE_TOP, LANE_TOP + 50), dt)) {
     team.gold += u.carry;
     G.stats[u.team].gold += u.carry;
-    if (u.team === 0) floatText(u.x, u.y - 78, `+${u.carry}`, '#e0bf5a');
+    if (u.team === 0) { floatText(u.x, u.y - 78, `+${u.carry}`, '#e0bf5a'); sfx('coin', u.x, 0.8); }
     u.carry = 0;
   }
 }
@@ -1358,6 +1362,7 @@ function fallUnit(u, src) {
 }
 
 function killUnit(u, src) {
+  sfx(u.petrified ? 'stone' : 'death', u.x, u.type === 'zombie' ? 0.6 : 1);
   u.dead = true;
   u.deathT = 0;
   u.hp = 0;
@@ -1394,6 +1399,7 @@ function killUnit(u, src) {
 }
 
 function destroyWall(w) {
+  sfx('crumble', w.x);
   w.dead = true;
   w.ruin = true;   // the earthworks stay, slumped, to be dug out again cheaply
   w.hp = 0;

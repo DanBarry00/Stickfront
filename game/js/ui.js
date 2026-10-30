@@ -33,6 +33,7 @@ function toWorld(cx, cy) {
 function toast(msg, kind) {
   // while an AI plays your side, its routine "not enough gold" chatter stays quiet
   if (G && G.autopilot && !kind) return;
+  if (kind === 'warn') sfx('horn');
   const el = $('toast');
   el.textContent = msg;
   el.className = 'show ' + (kind || '');
@@ -1235,6 +1236,8 @@ function initPauseMenu() {
   $('pmRestart').onclick = () => { $('pauseMenu').classList.add('hidden'); if (G.lesson) return G.lesson.campaign ? startCampaignLevel(G.lesson.key) : startLesson(G.lesson.key); newGame(G.seed, G.clans); startBattle(); };
   $('pmNew').onclick = () => { $('pauseMenu').classList.add('hidden'); if (G.lesson) { const camp = G.lesson.campaign; G.paused = false; newGame(randomSeed()); return camp ? showCampaignMap() : showTutorialMenu(); } newGame(randomSeed()); showTitle(); };
   $('pmHelp').onclick = toggleHelp;
+  $('pmVol').innerHTML = volumeHTML();
+  wireVolume($('pmVol'));
 }
 
 function toggleHelp() {
@@ -1268,9 +1271,11 @@ function showMainMenu() {
         <button id="btnCampaign" class="mode"><b>Campaign</b><span>March against the Horde, a monster army, battle by battle across the map</span></button>
         <button id="btnSkirmish" class="mode play"><b>Skirmish</b><span>One battle against the computer, your clans and map</span></button>
       </div>
+      <div class="menuvol">${volumeHTML()}</div>
     </div>`;
   $('overlay').classList.remove('hidden');
   $('btnSkirmish').onclick = () => showTitle();
+  wireVolume($('overlay'));
   $('btnTutorial').onclick = () => showTutorialMenu();
   $('btnCampaign').onclick = () => showCampaignMap();
 }

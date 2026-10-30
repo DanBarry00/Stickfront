@@ -2,6 +2,9 @@
 
 A Stick War 2–style side-scrolling battle game. It's a test build with randomly generated maps (each with its own lane depth, gold layout and sometimes a Monolith to fight over), nine clans to choose from, a castle you can garrison, statues with health and mana, gold mines, miners, seven soldier types plus giants (including vanishing ninjas and flying Kestrels), tiered upgrades, and a computer opponent with four difficulty levels.
 
+## Play in your browser
+No install: **https://danbarry00.github.io/Stickfront/** (GitHub Pages, published from `main`). The root `index.html` just sends you on to `game/index.html`. Progress and settings are saved in your browser.
+
 ## Install (Windows)
 Download **[StickfrontSetup.bat](https://github.com/DanBarry00/Stickfront/raw/main/installer/StickfrontSetup.bat)** and double-click it. The setup wizard:
 1. checks for Git, and offers to install it (with winget) if it's missing,
@@ -303,6 +306,13 @@ A rider under big flame-membraned da Vinci wings, trained in the Ranged group (h
 - The statue earns no passive gold until you buy the **Statue Offerings** / **Golden Idol** castle upgrades.
 - **Castle upgrades need an Architect:** you can't start one without a living Architect, and one under way pauses while you have none.
 
+## Sound
+Everything is synthesized in the browser with the Web Audio API: there are no sound files. Sound starts with your first click or key press (browsers require one).
+- **Units and actions:** sword clashes, claws, giant and golem thuds, bows, crossbows, stars, slings, arrow hits, Warlock bolts, healing chimes, spells, blasts (mines, Fireballs, fire pots), tar splashes, deaths, Medusa's gaze and stone, trenches and towers crumbling, statues falling, picks on rock, gold handed in, architects' mallets, a soft cue when a unit of yours is trained, and a horn with warnings. Sounds are louder near the middle of the screen, fade out past its edges and pan left or right, and each kind is rate-limited so a big battle stays readable.
+- **Ambience:** every 9 to 20 seconds a breeze drifts through or birds chirp (only the breeze on snowy and ember-lit maps).
+- **Drums:** a quick war-drum beat while either side attacks, a slow one while a line advances in formation, and silence otherwise (and while paused).
+- **Volume:** the slider on the main menu and in the pause menu (saved in your browser).
+
 ## Controls
 - **Training** is on the bottom-left, as small icon buttons staggered over two rows in five colour-coded groups, one per building: **Workers** (Miner, Architect, Quartermaster), **Infantry** (Swordwrath, Spearton, Gladiator, Ninja), **Ranged** (Archer, Kestrel), **Mages** (Cleric, Warlock, Necromancer) and **Giants**. Each group trains **one unit at a time** from a shared queue, in the order you click: a Spearton queued behind a Swordwrath waits for it. Click to train, right-click to cancel one (refunded). The small ⚒ in each button's corner opens its building's upgrades (every unit of the class, a row each), and the castle button at the end opens castle upgrades. Clicking a building in the castle does the same.
 - **Moving:** right-click the ground to move the selected units there. It's an attack-move: troops stop to fight any enemy in range on the way, then carry on. Ninjas and saboteurs move straight there instead, so they can slip past and pick their own targets (right-click an enemy to attack it directly).
@@ -346,6 +356,7 @@ A rider under big flame-membraned da Vinci wings, trained in the Ranged group (h
 - `game.js`: game state, training queues, research, trenches, castle archers, the Monolith, projectiles
 - `giants.js`: giant obedience, targeting, splash, knockback and the statue giant
 - `build.js`: the Architect: traps, archer towers, ruins and rebuilding, repairs and upgrade research (random or the one you pick)
+- `audio.js`: the synthesized sound: unit and action sounds, ambience, war drums and the volume slider
 - `tutorial.js`: the tutorial's lessons, their scripted opponents (LessonAI), the lesson box and the tutorial menus
 - `campaign.js`: the campaign's levels against the Horde, their commanders (CampaignAI: zombie rounds, the Colossus, Medusa's lair, reinforcements), Medusa herself (her gaze and petrification), the campaign map and briefings
 - `quartermaster.js`, `gladiator.js`, `necromancer.js`: the Quartermaster's jobs, the Gladiator's throws and glory, and the Necromancer and its zombies
