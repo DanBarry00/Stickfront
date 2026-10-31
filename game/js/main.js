@@ -22,6 +22,7 @@
         if (G.over && G.state === 'play' && G.overT > 2.5) showEnd();
       }
       updateCamera(dt);
+      audioTick(dt);
       clampCam();
       updateWeather(dt, VIEW.w);
       render(ctx);

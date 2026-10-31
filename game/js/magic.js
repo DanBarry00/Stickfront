@@ -60,6 +60,7 @@ function updateMageCasting(u, dt) {
 // The spell leaves the staff at the top of the cast animation.
 function releaseSpell(u, c) {
   const S = SPELLS[c.k], team = u.team;
+  sfx('cast', c.x);
   const color = u.type === 'cleric' ? '#f2dc8a' : '#b04dff';
   G.spellFx.push({ kind: 'ring', x: c.x, y: c.y, r: S.r, color, t: 0, max: 0.6 });
   floatText(c.x, c.y - 90, S.name, color);
@@ -167,6 +168,7 @@ function fireBolt(u, t, dmg) {
 }
 
 function explodeFireball(s) {
+  sfx('boom', s.tx);
   const S = SPELLS.fireball, src = s.src && !s.src.dead ? s.src : null;
   const x = s.tx, y = s.ty + 20;
   for (const e of G.units.slice()) {

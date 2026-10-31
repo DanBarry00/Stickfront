@@ -2,18 +2,11 @@
 
 A Stick War 2–style side-scrolling battle game. It's a test build with randomly generated maps (each with its own lane depth, gold layout and sometimes a Monolith to fight over), nine clans to choose from, a castle you can garrison, statues with health and mana, gold mines, miners, seven soldier types plus giants (including vanishing ninjas and flying Kestrels), tiered upgrades, and a computer opponent with four difficulty levels.
 
-## Install (Windows)
-Download **[StickfrontSetup.bat](https://github.com/DanBarry00/Stickfront/raw/main/installer/StickfrontSetup.bat)** and double-click it. The setup wizard:
-1. checks for Git, and offers to install it (with winget) if it's missing,
-2. downloads the game from this repository into `%LOCALAPPDATA%\Programs\Stickfront` (or a folder you pick),
-3. puts a **Stickfront** shortcut on your desktop.
+## Play in your browser
+No install: **https://danbarry00.github.io/Stickfront/** (GitHub Pages, published from `main`). The root `index.html` just sends you on to `game/index.html`. Progress and settings are saved in your browser.
 
-Every time you start the game from the shortcut, it checks GitHub for a newer version. If there is one, it lists what changed and asks whether to update; **Yes** runs a `git pull`, then the game starts. Offline, it just starts the game. Running the setup again on an existing install updates it and recreates the shortcut. Windows may warn about a downloaded script the first time; choose **More info → Run anyway**.
-
-The installer takes the `main` branch (set `$Branch` near the top of the file to give testers another one). For testing the setup itself, `SF_UNATTENDED=1` answers every question with Yes, and `SF_DIR`, `SF_DESKTOP`, `SF_REPO` and `SF_BRANCH` override the folder, the shortcut's location, the repository and the branch. `launcher\launch.ps1 -CheckOnly` prints how many updates are waiting.
-
-## Run it
-Use the desktop shortcut, or double-click **`Play Stickfront.bat`** in the game folder (it does the same update check). It opens the game in its own Microsoft Edge app window, or your default browser if Edge isn't installed. With a plain copy of the files (no Git), it skips the update check and just starts the game.
+## Run it locally
+Open `game/index.html` in any modern browser (double-click it). No server or install is needed.
 
 ## Starting a game
 The main menu offers **Tutorial**, **Campaign** and **Skirmish**, a single battle against the computer. The Skirmish setup screen lets you choose **your clan** and the **enemy clan** (or **Random** for either; random clans are revealed when the battle begins, and both sides can draw the same clan), the opponent's **difficulty**, whether there is a **Monolith**, how much **gold** the deposits hold, and the map **seed**. The map behind the menu is a live preview of your choices. Your settings are remembered. Restart and Rematch keep the same clans and map.
@@ -303,6 +296,13 @@ A rider under big flame-membraned da Vinci wings, trained in the Ranged group (h
 - The statue earns no passive gold until you buy the **Statue Offerings** / **Golden Idol** castle upgrades.
 - **Castle upgrades need an Architect:** you can't start one without a living Architect, and one under way pauses while you have none.
 
+## Sound
+Everything is synthesized in the browser with the Web Audio API: there are no sound files. Sound starts with your first click or key press (browsers require one).
+- **Units and actions:** sword clashes, claws, giant and golem thuds, bows, crossbows, stars, slings, arrow hits, Warlock bolts, healing chimes, spells, blasts (mines, Fireballs, fire pots), tar splashes, deaths, Medusa's gaze and stone, trenches and towers crumbling, statues falling, picks on rock, gold handed in, architects' mallets, a soft cue when a unit of yours is trained, and a horn with warnings. Sounds are louder near the middle of the screen, fade out past its edges and pan left or right, and each kind is rate-limited so a big battle stays readable.
+- **Ambience:** every 9 to 20 seconds a breeze drifts through or birds chirp (only the breeze on snowy and ember-lit maps).
+- **Drums:** a quick war-drum beat while either side attacks, a slow one while a line advances in formation, and silence otherwise (and while paused).
+- **Volume:** the slider on the main menu and in the pause menu (saved in your browser).
+
 ## Controls
 - **Training** is on the bottom-left, as small icon buttons staggered over two rows in five colour-coded groups, one per building: **Workers** (Miner, Architect, Quartermaster), **Infantry** (Swordwrath, Spearton, Gladiator, Ninja), **Ranged** (Archer, Kestrel), **Mages** (Cleric, Warlock, Necromancer) and **Giants**. Each group trains **one unit at a time** from a shared queue, in the order you click: a Spearton queued behind a Swordwrath waits for it. Click to train, right-click to cancel one (refunded). The small ⚒ in each button's corner opens its building's upgrades (every unit of the class, a row each), and the castle button at the end opens castle upgrades. Clicking a building in the castle does the same.
 - **Moving:** right-click the ground to move the selected units there. It's an attack-move: troops stop to fight any enemy in range on the way, then carry on. Ninjas and saboteurs move straight there instead, so they can slip past and pick their own targets (right-click an enemy to attack it directly).
@@ -316,18 +316,24 @@ A rider under big flame-membraned da Vinci wings, trained in the Ranged group (h
   - Mine, Pray, Pan
   - Dig trench, Palisade, Repair, Tar pit, Mine, Archer tower, Replenish
   - Refit
-- **Top-right buttons** command the **whole army**: Garrison / Defend / Attack (Q / W / E), **Muster** (G: where newly trained soldiers gather and where the defend line forms; on the way there they stop to fight any enemy in range), **Miners** (Z: miners only retreat inside and pan), and **Siege** (Shift+Z: a toggle; while it's on, miners take shelter in the castle on their own whenever enemies they can't handle come near, and go back to work once it's clear. Pressing Z yourself turns it off).
+- **Command buttons around the minimap** command the **whole army**:
+  - **Pickaxe** (left, Z): your miners and architects drop their work and shelter in the castle, panning the stream; click again to send them back. Right-click it (or Shift+Z) for **Siege mode**, a toggle: while it's on (an S badge shows), miners take shelter on their own whenever enemies they can't handle come near and go back to work once it's clear. Pressing Z yourself turns it off.
+  - **Sword** (right, E): the army attacks the enemy statue. While it's attacking the button reads Retreat, and clicking it again pulls everyone back inside the castle to heal (Q).
+  - **Shield** (right, C with no soldiers selected): the army advances together in formation, melee in front and archers behind.
+  - **Defend** (under the minimap, W): the army holds the line in front of your statue, or at the muster flag.
+  - **Muster** (under the minimap, G): where newly trained soldiers gather and where the defend line forms; on the way there they stop to fight any enemy in range. Right-click it to clear it.
 
 | Key | Action |
 |---|---|
-| Q / W / E | Whole army: Garrison / Defend / Attack |
+| Q / W / E | Whole army: Retreat into the castle / Defend / Attack (E again retreats) |
+| C | Advance in formation (the selected soldiers, or the whole army) |
 | Shift + Q / W / E | Selected units only |
 | Shift + E / C / Shift + C | Selected units attack / advance / retreat together |
 | S / K / X / R | Hold / Defend trench / Shield wall / Refit |
 | I / O | Miners: mine / pray |
 | B / J / Y / N | Dig trench / Palisade / Repair trenches and towers / Replenish deposit |
 | Shift + B / N / Y | Architects: tar pit / mine / archer tower |
-| G / Z / Shift+Z | Muster point / miners-only retreat / siege mode (miners shelter automatically) |
+| G / Z / Shift+Z | Muster point / miners and architects shelter in the castle / siege mode (miners shelter automatically) |
 | `, 1 – 6, comma, 9, 0, −, =, [ | Train Architect / Miner / Swordwrath / Archer / Spearton / Cleric / Warlock / Quartermaster / Gladiator / Necromancer / Giant / Ninja / Kestrel |
 | M | Ninjas with Throwing Stars: weapon Auto / Blade / Stars |
 | 7 8 / L | Cast mage spells / toggle auto-cast (with a Necromancer: zombies charge) |
@@ -346,11 +352,11 @@ A rider under big flame-membraned da Vinci wings, trained in the Ranged group (h
 - `game.js`: game state, training queues, research, trenches, castle archers, the Monolith, projectiles
 - `giants.js`: giant obedience, targeting, splash, knockback and the statue giant
 - `build.js`: the Architect: traps, archer towers, ruins and rebuilding, repairs and upgrade research (random or the one you pick)
+- `audio.js`: the synthesized sound: unit and action sounds, ambience, war drums and the volume slider
 - `tutorial.js`: the tutorial's lessons, their scripted opponents (LessonAI), the lesson box and the tutorial menus
 - `campaign.js`: the campaign's levels against the Horde, their commanders (CampaignAI: zombie rounds, the Colossus, Medusa's lair, reinforcements), Medusa herself (her gaze and petrification), the campaign map and briefings
 - `quartermaster.js`, `gladiator.js`, `necromancer.js`: the Quartermaster's jobs, the Gladiator's throws and glory, and the Necromancer and its zombies
 - `ai.js`: the computer opponents (Easy, Normal, Hard, Very Hard)
 - `clans.js`: the clans (starting armies, free and locked upgrades, prices, buffs) and the helpers the game uses to apply them
-- `../launcher/launch.ps1`, `../installer/StickfrontSetup.bat`: the update-checking launcher (the desktop shortcut runs it) and the Windows setup wizard
 - `stats.js`: the battle timeline and end-screen charts, the debug overlay, autopilot and the headless balance and clan tests
 - `render.js`, `ui.js`, `main.js`: rendering, input, the HUD and command card, and the main loop
