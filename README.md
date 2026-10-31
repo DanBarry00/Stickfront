@@ -316,18 +316,24 @@ Everything is synthesized in the browser with the Web Audio API: there are no so
   - Mine, Pray, Pan
   - Dig trench, Palisade, Repair, Tar pit, Mine, Archer tower, Replenish
   - Refit
-- **Top-right buttons** command the **whole army**: Garrison / Defend / Attack (Q / W / E), **Muster** (G: where newly trained soldiers gather and where the defend line forms; on the way there they stop to fight any enemy in range), **Miners** (Z: miners only retreat inside and pan), and **Siege** (Shift+Z: a toggle; while it's on, miners take shelter in the castle on their own whenever enemies they can't handle come near, and go back to work once it's clear. Pressing Z yourself turns it off).
+- **Command buttons around the minimap** command the **whole army**:
+  - **Pickaxe** (left, Z): your miners and architects drop their work and shelter in the castle, panning the stream; click again to send them back. Right-click it (or Shift+Z) for **Siege mode**, a toggle: while it's on (an S badge shows), miners take shelter on their own whenever enemies they can't handle come near and go back to work once it's clear. Pressing Z yourself turns it off.
+  - **Sword** (right, E): the army attacks the enemy statue. While it's attacking the button reads Retreat, and clicking it again pulls everyone back inside the castle to heal (Q).
+  - **Shield** (right, C with no soldiers selected): the army advances together in formation, melee in front and archers behind.
+  - **Defend** (under the minimap, W): the army holds the line in front of your statue, or at the muster flag.
+  - **Muster** (under the minimap, G): where newly trained soldiers gather and where the defend line forms; on the way there they stop to fight any enemy in range. Right-click it to clear it.
 
 | Key | Action |
 |---|---|
-| Q / W / E | Whole army: Garrison / Defend / Attack |
+| Q / W / E | Whole army: Retreat into the castle / Defend / Attack (E again retreats) |
+| C | Advance in formation (the selected soldiers, or the whole army) |
 | Shift + Q / W / E | Selected units only |
 | Shift + E / C / Shift + C | Selected units attack / advance / retreat together |
 | S / K / X / R | Hold / Defend trench / Shield wall / Refit |
 | I / O | Miners: mine / pray |
 | B / J / Y / N | Dig trench / Palisade / Repair trenches and towers / Replenish deposit |
 | Shift + B / N / Y | Architects: tar pit / mine / archer tower |
-| G / Z / Shift+Z | Muster point / miners-only retreat / siege mode (miners shelter automatically) |
+| G / Z / Shift+Z | Muster point / miners and architects shelter in the castle / siege mode (miners shelter automatically) |
 | `, 1 – 6, comma, 9, 0, −, =, [ | Train Architect / Miner / Swordwrath / Archer / Spearton / Cleric / Warlock / Quartermaster / Gladiator / Necromancer / Giant / Ninja / Kestrel |
 | M | Ninjas with Throwing Stars: weapon Auto / Blade / Stars |
 | 7 8 / L | Cast mage spells / toggle auto-cast (with a Necromancer: zombies charge) |

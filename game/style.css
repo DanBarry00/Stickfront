@@ -54,24 +54,39 @@ button { font-family: inherit; cursor: pointer; }
 .ico.mana { width: 10px; height: 10px; margin: 0 2px; transform: rotate(45deg); background: linear-gradient(135deg, #cdeaf4, var(--mana) 50%, #164d66); }
 .ico.pop { border-radius: 50% 50% 3px 3px; background: linear-gradient(#d8ccb0, #7d7058); width: 11px; }
 
-/* minimap only, top center */
+/* top center: the minimap, flanked by the army commands (workers left, army right), with
+   Defend and Muster tucked underneath */
+#cmdbar { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); display: flex; align-items: flex-start; gap: 6px; }
+.cmdside { display: flex; gap: 4px; }
+.cmdmid { display: flex; flex-direction: column; align-items: center; }
 #minimap {
-  position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
-  width: 440px; height: 60px; border: 1px solid var(--edge); border-radius: 3px; cursor: pointer;
+  display: block; width: 440px; height: 60px; border: 1px solid var(--edge); border-radius: 3px; cursor: pointer;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.6); filter: saturate(0.8);
 }
-
-/* stances */
-#stances { position: absolute; top: 10px; right: 10px; display: flex; gap: 4px; padding: 4px; }
-#stances button {
-  width: 62px; padding: 5px 3px 3px; display: flex; flex-direction: column; align-items: center; gap: 1px;
-  background: rgba(255, 255, 255, 0.03); color: var(--dim);
-  border: 1px solid rgba(255, 255, 255, 0.07); border-radius: 3px; font-size: 10px;
+#cmdbar button { color: var(--dim); background: linear-gradient(rgba(34, 27, 21, 0.94), rgba(16, 12, 9, 0.94)); border: 1px solid var(--edge); cursor: pointer; }
+#cmdbar button:hover { color: var(--text); border-color: var(--edge-hi); }
+#cmdbar button.on { color: #1a1206; background: linear-gradient(#b8923a, #7a5c18); border-color: #d8b860; }
+#cmdbar button.on kbd { color: #2e2208; border-color: rgba(46, 34, 8, 0.5); background: transparent; }
+#cmdbar .cmd {
+  position: relative; width: 58px; height: 62px; padding: 6px 2px 4px; border-radius: 4px;
+  display: flex; flex-direction: column; align-items: center; justify-content: space-between;
+  font: 600 10px var(--serif); letter-spacing: 0.5px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.55);
 }
-#stances button svg { width: 20px; height: 20px; fill: currentColor; }
-#stances button:hover { color: var(--text); background: rgba(255, 255, 255, 0.07); }
-#stances button.on { color: #1a1206; background: linear-gradient(#b8923a, #7a5c18); border-color: #d8b860; }
-#stances button.on kbd { color: #2e2208; border-color: rgba(46, 34, 8, 0.5); background: transparent; }
+#cmdbar .cmd svg { width: 32px; height: 32px; }
+#cmdbar .cmd.back { color: #f0a898; border-color: #8c3a2c; }   /* the army is falling back */
+#cmdbar .badge {
+  display: none; position: absolute; top: 2px; right: 2px; width: 13px; height: 13px; border-radius: 50%;
+  font: 700 9px/13px sans-serif; font-style: normal; color: #1a1206; background: #c49a2c;
+}
+#cmdbar .cmd.siege .badge { display: block; }
+#cmdbar .cmd.siege.on .badge { color: #e8dcc0; background: #3a2a10; }
+#cmdlow { display: flex; gap: 4px; margin-top: -1px; }
+#cmdbar .mini {
+  display: flex; align-items: center; gap: 4px; height: 21px; padding: 0 7px 0 5px;
+  border-top: none; border-radius: 0 0 4px 4px; font-size: 10px;
+}
+#cmdbar .mini svg { width: 15px; height: 15px; }
+#cmdbar .mini kbd { font-size: 9px; padding: 0 3px; }
 
 /* compact training bar */
 #train { position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; padding: 8px; }
@@ -174,7 +189,7 @@ button { font-family: inherit; cursor: pointer; }
 #tip em { color: var(--dim); font-size: 11px; }
 
 #toast {
-  position: absolute; top: 82px; left: 50%; transform: translate(-50%, -6px); opacity: 0;
+  position: absolute; top: 106px; left: 50%; transform: translate(-50%, -6px); opacity: 0;
   padding: 6px 16px; border-radius: 3px; background: rgba(14, 11, 9, 0.9); border: 1px solid var(--edge);
   font-size: 13px; transition: opacity 0.2s, transform 0.2s; pointer-events: none; white-space: nowrap;
 }
@@ -258,7 +273,7 @@ button { font-family: inherit; cursor: pointer; }
 .card.briefing .unlock { margin: 6px 0; }
 .card.briefing .row { justify-content: flex-end; margin-top: 16px; }
 #lessonBox {
-  position: fixed; top: 74px; left: 50%; transform: translateX(-50%); width: min(520px, 92vw); z-index: 3; padding: 8px 12px 10px;
+  position: fixed; top: 104px; left: 50%; transform: translateX(-50%); width: min(520px, 92vw); z-index: 3; padding: 8px 12px 10px;
   background: rgba(14, 11, 9, 0.88); border: 1px solid #8c7046; border-radius: 4px; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.6); font-size: 13px;
 }
 #lessonBox.hidden { display: none; }
@@ -269,7 +284,7 @@ button { font-family: inherit; cursor: pointer; }
 #lessonBox .lbhead button:disabled { opacity: 0.35; cursor: default; }
 #lessonBox p { margin: 6px 0 0; line-height: 1.5; }
 #lessonBox.min p { display: none; }
-#lessonBox.closed { top: 100px; width: auto; padding: 3px; background: rgba(14, 11, 9, 0.75); }
+#lessonBox.closed { top: 104px; width: auto; padding: 3px; background: rgba(14, 11, 9, 0.75); }
 #lessonBox.closed button { padding: 3px 10px; font: 600 12px var(--serif); color: var(--gold); background: none; border: none; cursor: pointer; }
 #lessonBox kbd { font-size: 11px; }
 #lessonBox .lbstat { margin-top: 5px; padding: 3px 8px; color: #f0d898; background: rgba(140, 40, 30, 0.28); border-left: 2px solid #c0432f; font-size: 12px; letter-spacing: 0.5px; }
@@ -328,7 +343,8 @@ button { font-family: inherit; cursor: pointer; }
 #helpClose { margin-top: 14px; }
 
 @media (max-width: 1100px) {
-  #minimap { top: 56px; width: 320px; }
+  #cmdbar { top: 56px; }
+  #minimap { width: 320px; }
 }
 
 
@@ -347,12 +363,10 @@ button { font-family: inherit; cursor: pointer; }
 #sel .acts:empty { display: none; }
 #sel .acts .act { margin-top: 5px; }
 #sel .act.on { color: #1a1206; background: linear-gradient(#b8923a, #7a5c18); border-color: #d8b860; }
-#stances #btnFlag.on { color: var(--gold); border-color: var(--edge-hi); }
 
 /* castle upgrade button at the end of the unit bar */
 .upgbtn.castlebtn { width: 26px; height: 87px; display: flex; align-items: center; justify-content: center; }
 .upgbtn.castlebtn svg { width: 20px; height: 20px; fill: currentColor; }
-#stances #btnMiners.on { color: #1a1206; background: linear-gradient(#b8923a, #7a5c18); border-color: #d8b860; }
 
 /* ---------------------------------------------------------------- layout v4
    training bar bottom-left, command card bottom-right, system buttons up top */

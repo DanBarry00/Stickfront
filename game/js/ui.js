@@ -314,8 +314,22 @@ function refitSelected() {
 function toggleMinerRecall() {
   const me = G.teams[0];
   me.siege = false;   // taking manual control ends siege mode
-  setMinerGarrison(me, !me.minersIn);
-  toast(me.minersIn ? 'Miners are retreating into the castle to pan the stream' : 'Miners are back to work');
+  setMinerGarrison(me, !me.minersIn, true);
+  toast(me.minersIn ? 'Miners and architects are sheltering in the castle' : 'Miners and architects are back to work');
+}
+
+// The sword: the whole army attacks, or (while it is attacking) retreats into the castle.
+function toggleAttack() {
+  const me = G.teams[0];
+  setStance(me, me.stance === 'attack' ? 'garrison' : 'attack');
+}
+
+// The shield: the whole army advances together in formation.
+function armyAdvance() {
+  const me = G.teams[0];
+  if (me.stance === 'garrison') setStance(me, 'defend');   // so they don't head home once the march ends
+  const army = G.units.filter(u => u.team === 0 && !u.dead && !isWorker(u) && u.order.type !== 'tower' && u.order.type !== 'refit');
+  if (!formGroup(me, army, 'advance')) toast('No soldiers to advance');
 }
 
 // Siege mode: miners shelter in the castle on their own whenever enemies threaten them.
@@ -608,10 +622,10 @@ function initInput() {
     switch (e.code) {
       case 'KeyQ': setStance(me, 'garrison'); break;
       case 'KeyW': setStance(me, 'defend'); break;
-      case 'KeyE': setStance(me, 'attack'); break;
+      case 'KeyE': toggleAttack(); break;
       case 'KeyZ': toggleMinerRecall(); break;
       case 'KeyG': UI.placing = 'flag'; break;
-      case 'KeyC': runCommand('advance'); break;
+      case 'KeyC': if (milSel().length) runCommand('advance'); else armyAdvance(); break;
       case 'KeyK': runCommand('manwall'); break;
       case 'KeyL': runCommand(mageSel().length ? 'auto' : 'zcharge'); break;
       case 'KeyM': runCommand('stars'); break;
@@ -831,17 +845,17 @@ function buildTrainBar() {
 function buildHUD() {
   buildTrainBar();
 
-  document.querySelectorAll('#stances button[data-stance]').forEach(b => {
-    b.addEventListener('click', () => setStance(G.teams[0], b.dataset.stance));
-  });
+  $('btnPick').addEventListener('click', toggleMinerRecall);
+  $('btnPick').addEventListener('contextmenu', e => { e.preventDefault(); toggleSiegeMode(); });
+  $('btnSword').addEventListener('click', toggleAttack);
+  $('btnShield').addEventListener('click', armyAdvance);
+  $('btnDefend').addEventListener('click', () => setStance(G.teams[0], 'defend'));
   $('btnFlag').addEventListener('click', () => { UI.placing = UI.placing === 'flag' ? null : 'flag'; });
   $('btnFlag').addEventListener('contextmenu', e => {
     e.preventDefault();
     G.teams[0].musterX = null;
     toast('Muster point cleared: new troops follow the army stance');
   });
-  $('btnMiners').addEventListener('click', toggleMinerRecall);
-  $('btnSiege').addEventListener('click', toggleSiegeMode);
   $('prio').addEventListener('click', cycleMinerDefault);
   $('card').addEventListener('click', e => {
     const c = e.target.closest('[data-cmd]');
@@ -1083,10 +1097,15 @@ function updateHUD(dt) {
   const cb = document.querySelector('#train .castlebtn');
   cb.classList.toggle('busy', !!me.research.castle);
   cb.classList.toggle('on', UI.panel === 'castle');
-  document.querySelectorAll('#stances button[data-stance]').forEach(b => b.classList.toggle('on', b.dataset.stance === me.stance));
+  const sword = $('btnSword'), attacking = me.stance === 'attack';
+  sword.classList.toggle('on', attacking);
+  sword.classList.toggle('back', me.stance === 'garrison');
+  sword.querySelector('span').textContent = attacking ? 'Retreat' : 'Attack';
+  $('btnShield').classList.toggle('on', G.groups.some(g => g.team === 0 && !g.done && g.mode === 'advance'));
+  $('btnDefend').classList.toggle('on', me.stance === 'defend');
   $('btnFlag').classList.toggle('on', UI.placing === 'flag' || me.musterX !== null);
-  $('btnMiners').classList.toggle('on', me.minersIn);
-  $('btnSiege').classList.toggle('on', me.siege);
+  $('btnPick').classList.toggle('on', me.minersIn);
+  $('btnPick').classList.toggle('siege', me.siege);
 
   // command card: rebuild only when what it should show changes
   const sel = liveSel();

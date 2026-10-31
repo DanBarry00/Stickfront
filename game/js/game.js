@@ -346,12 +346,14 @@ function setUnitStance(u, s) {
   setOrder(u, { type: 'stance' });
 }
 
-// Recall only the miners into the castle (or send them back to work).
-function setMinerGarrison(team, on) {
+// Recall only the miners into the castle (or send them back to work). The player's button
+// (withArchitects) calls the architects in too, dropping whatever they were building.
+function setMinerGarrison(team, on, withArchitects) {
   team.minersIn = on;
   for (const u of G.units) {
-    if (u.team !== team.id || u.dead || u.type !== 'miner') continue;
-    if (['work', 'move', 'hold', 'garrison', 'attack'].includes(u.order.type)) setOrder(u, { type: 'stance' });
+    if (u.team !== team.id || u.dead) continue;
+    if (u.type === 'miner' && ['work', 'move', 'hold', 'garrison', 'attack'].includes(u.order.type)) setOrder(u, { type: 'stance' });
+    if (u.type === 'architect' && withArchitects && on && ['build', 'trap', 'move', 'hold', 'attack'].includes(u.order.type)) setOrder(u, { type: 'stance' });
   }
 }
 
