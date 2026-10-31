@@ -311,25 +311,63 @@ function refitSelected() {
   toast(`Refitting ${s.length} unit${s.length > 1 ? 's' : ''}: ${n} upgrade${n > 1 ? 's' : ''}, ${n * REFIT_COST} gold`);
 }
 
-function toggleMinerRecall() {
+function toggleMinerRecall() { workersIn(!G.teams[0].minersIn); }
+
+// Miners and architects shelter in the castle (or go back to work).
+function workersIn(on) {
   const me = G.teams[0];
   me.siege = false;   // taking manual control ends siege mode
-  setMinerGarrison(me, !me.minersIn, true);
-  toast(me.minersIn ? 'Miners and architects are sheltering in the castle' : 'Miners and architects are back to work');
+  setMinerGarrison(me, on, true);
+  toast(on ? 'Miners and architects are sheltering in the castle' : 'Miners and architects are back to work');
 }
 
-// The sword: the whole army attacks, or (while it is attacking) retreats into the castle.
-function toggleAttack() {
+// The whole army marches together in formation: 'advance' toward the enemy or 'retreat' to the gate.
+function armyMarch(mode) {
   const me = G.teams[0];
-  setStance(me, me.stance === 'attack' ? 'garrison' : 'attack');
-}
-
-// The shield: the whole army advances together in formation.
-function armyAdvance() {
-  const me = G.teams[0];
-  if (me.stance === 'garrison') setStance(me, 'defend');   // so they don't head home once the march ends
+  // so they don't turn back around (or head home) once the march ends
+  if (me.stance === (mode === 'advance' ? 'garrison' : 'attack')) setStance(me, 'defend');
   const army = G.units.filter(u => u.team === 0 && !u.dead && !isWorker(u) && u.order.type !== 'tower' && u.order.type !== 'refit');
-  if (!formGroup(me, army, 'advance')) toast('No soldiers to advance');
+  if (!formGroup(me, army, mode)) toast('No soldiers to march');
+}
+const armyMarching = mode => G.groups.some(g => g.team === 0 && !g.done && g.mode === mode);
+
+// The skinny command buttons beside the minimap: a pickaxe, sword and shield on each side. Those
+// on the left point home and pull back; those on the right point at the enemy and push forward.
+const ARMY_ICONS = {
+  pick: '<path d="M2.6 8.4C6.4 3.3 13.6 1.4 19.4 3.6c-4.6.2-9.6 2.6-13 6.4z" fill="currentColor"/><path d="M19.4 3.6c.9 2.9.6 6-.8 8.9-.2-2.4-1.1-4.6-2.6-6.3z" fill="currentColor" opacity=".8"/><path d="M14.8 6.4L4 21.6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>',
+  sword: '<path d="M12 .3l1.6 2.6v13.4h-3.2V2.9z" fill="currentColor"/><path d="M12 2.4v13.4" stroke="#120d0a" stroke-width=".8" opacity=".45"/><path d="M7.4 16.3h9.2l-.8 1.7H8.2z" fill="currentColor"/><path d="M11.1 18h1.8v3.5h-1.8z" fill="currentColor" opacity=".85"/><circle cx="12" cy="22.5" r="1.3" fill="currentColor"/>',
+  shield: '<path d="M12 1.5l8.5 3v6.5c0 5.6-3.7 9.9-8.5 11.5C7.2 20.9 3.5 16.6 3.5 11V4.5z" fill="currentColor"/><path d="M12 4.2v15.6M6 10h12" stroke="#120d0a" stroke-width="1.5" opacity=".5"/><circle cx="12" cy="10" r="2.3" fill="#120d0a" opacity=".65"/>',
+};
+const ARMY_BTNS = [   // left side listed outside-in, right side inside-out, so the two mirror
+  { id: 'pickIn', side: 'L', icon: 'pick', run: () => workersIn(true), on: me => me.minersIn, siege: true,
+    tip: 'Workers in (Z) — your miners and architects drop their work and shelter in the castle, panning the stream. Right-click (or Shift+Z) for Siege mode: they shelter on their own whenever enemies they can\'t handle come near.' },
+  { id: 'swordBack', side: 'L', icon: 'sword', run: () => setStance(G.teams[0], 'garrison'), on: me => me.stance === 'garrison',
+    tip: 'Retreat (Q) — the whole army falls back inside the castle and heals; castle archers shoot faster. Shift+Q orders only the selected units.' },
+  { id: 'shieldBack', side: 'L', icon: 'shield', run: () => armyMarch('retreat'), on: () => armyMarching('retreat'),
+    tip: 'Fall back — the whole army backs off to the gate together in formation, still fighting what is in reach. Shift+C does it for the selected soldiers.' },
+  { id: 'shieldFwd', side: 'R', icon: 'shield', run: () => armyMarch('advance'), on: () => armyMarching('advance'),
+    tip: 'Advance (C) — the whole army marches forward together in formation, melee in front and archers behind, fighting only what is in reach. With soldiers selected, C advances just them.' },
+  { id: 'swordFwd', side: 'R', icon: 'sword', run: () => setStance(G.teams[0], 'attack'), on: me => me.stance === 'attack',
+    tip: 'Attack (E) — the whole army marches on the enemy statue. Shift+E orders only the selected units.' },
+  { id: 'pickOut', side: 'R', icon: 'pick', run: () => workersIn(false), on: me => !me.minersIn && !me.siege, siege: true,
+    tip: 'Workers out (Z) — your miners and architects go back to work. Right-click (or Shift+Z) for Siege mode.' },
+];
+const ARROW = { L: '<path d="M15 5l-7 7 7 7" stroke-width="2.6"/>', R: '<path d="M9 5l7 7-7 7" stroke-width="2.6"/>' };
+
+function buildArmyButtons() {
+  for (const side of ['L', 'R']) {
+    $('cmd' + side).innerHTML = ARMY_BTNS.filter(b => b.side === side).map(b => `
+      <button id="cmd_${b.id}" class="cmd" data-tip="${b.tip.replace(/"/g, '&quot;')}">
+        <svg viewBox="0 0 24 24">${ARMY_ICONS[b.icon]}</svg>
+        <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">${ARROW[side]}</svg>
+        ${b.siege && side === 'L' ? '<i class="badge">S</i>' : ''}
+      </button>`).join('');
+  }
+  for (const b of ARMY_BTNS) {
+    const el = $('cmd_' + b.id);
+    el.addEventListener('click', b.run);
+    if (b.siege) el.addEventListener('contextmenu', e => { e.preventDefault(); toggleSiegeMode(); });
+  }
 }
 
 // Siege mode: miners shelter in the castle on their own whenever enemies threaten them.
@@ -622,10 +660,10 @@ function initInput() {
     switch (e.code) {
       case 'KeyQ': setStance(me, 'garrison'); break;
       case 'KeyW': setStance(me, 'defend'); break;
-      case 'KeyE': toggleAttack(); break;
+      case 'KeyE': setStance(me, 'attack'); break;
       case 'KeyZ': toggleMinerRecall(); break;
       case 'KeyG': UI.placing = 'flag'; break;
-      case 'KeyC': if (milSel().length) runCommand('advance'); else armyAdvance(); break;
+      case 'KeyC': if (milSel().length) runCommand('advance'); else armyMarch('advance'); break;
       case 'KeyK': runCommand('manwall'); break;
       case 'KeyL': runCommand(mageSel().length ? 'auto' : 'zcharge'); break;
       case 'KeyM': runCommand('stars'); break;
@@ -845,10 +883,7 @@ function buildTrainBar() {
 function buildHUD() {
   buildTrainBar();
 
-  $('btnPick').addEventListener('click', toggleMinerRecall);
-  $('btnPick').addEventListener('contextmenu', e => { e.preventDefault(); toggleSiegeMode(); });
-  $('btnSword').addEventListener('click', toggleAttack);
-  $('btnShield').addEventListener('click', armyAdvance);
+  buildArmyButtons();
   $('btnDefend').addEventListener('click', () => setStance(G.teams[0], 'defend'));
   $('btnFlag').addEventListener('click', () => { UI.placing = UI.placing === 'flag' ? null : 'flag'; });
   $('btnFlag').addEventListener('contextmenu', e => {
@@ -1097,15 +1132,10 @@ function updateHUD(dt) {
   const cb = document.querySelector('#train .castlebtn');
   cb.classList.toggle('busy', !!me.research.castle);
   cb.classList.toggle('on', UI.panel === 'castle');
-  const sword = $('btnSword'), attacking = me.stance === 'attack';
-  sword.classList.toggle('on', attacking);
-  sword.classList.toggle('back', me.stance === 'garrison');
-  sword.querySelector('span').textContent = attacking ? 'Retreat' : 'Attack';
-  $('btnShield').classList.toggle('on', G.groups.some(g => g.team === 0 && !g.done && g.mode === 'advance'));
+  for (const b of ARMY_BTNS) $('cmd_' + b.id).classList.toggle('on', !!b.on(me));
+  $('cmd_pickIn').classList.toggle('siege', me.siege);
   $('btnDefend').classList.toggle('on', me.stance === 'defend');
   $('btnFlag').classList.toggle('on', UI.placing === 'flag' || me.musterX !== null);
-  $('btnPick').classList.toggle('on', me.minersIn);
-  $('btnPick').classList.toggle('siege', me.siege);
 
   // command card: rebuild only when what it should show changes
   const sel = liveSel();
