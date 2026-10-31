@@ -68,14 +68,14 @@ button { font-family: inherit; cursor: pointer; }
 #cmdbar button.on { color: #1a1206; background: linear-gradient(#b8923a, #7a5c18); border-color: #d8b860; }
 #cmdbar button.on kbd { color: #2e2208; border-color: rgba(46, 34, 8, 0.5); background: transparent; }
 #cmdbar .cmd {
-  position: relative; width: 58px; height: 62px; padding: 6px 2px 4px; border-radius: 4px;
+  position: relative; width: 26px; height: 62px; padding: 7px 0 5px; border-radius: 4px;
   display: flex; flex-direction: column; align-items: center; justify-content: space-between;
-  font: 600 10px var(--serif); letter-spacing: 0.5px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.55);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.55);
 }
-#cmdbar .cmd svg { width: 32px; height: 32px; }
-#cmdbar .cmd.back { color: #f0a898; border-color: #8c3a2c; }   /* the army is falling back */
+#cmdbar .cmd svg { width: 20px; height: 20px; }
+#cmdbar .cmd svg.arrow { width: 16px; height: 16px; }
 #cmdbar .badge {
-  display: none; position: absolute; top: 2px; right: 2px; width: 13px; height: 13px; border-radius: 50%;
+  display: none; position: absolute; top: -5px; right: -5px; width: 13px; height: 13px; border-radius: 50%;
   font: 700 9px/13px sans-serif; font-style: normal; color: #1a1206; background: #c49a2c;
 }
 #cmdbar .cmd.siege .badge { display: block; }
