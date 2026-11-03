@@ -5,7 +5,7 @@
 //   2. refit veterans for free, soldiers and workers alike (a miner pauses for it)
 //   3. patch up the wounded
 //   4. restore worked-out gold deposits on our half
-//   5. bring an Architect materials for a free trap
+//   5. bring the Architect materials for a free trap, and the Castle Wizard reagents for a free rune
 //   6. cheer the miners on (they walk faster and work twice as fast), topping them up before it wears off
 // With two, the first looks after the troops (1–3) and the second the workers (2, 4–6); each lends a
 // hand with the other's work when it has nothing of its own. Player orders (move, hold, garrison,
@@ -13,8 +13,8 @@
 // comes up.
 
 const QM_TROOP_JOBS = ['gear', 'refit', 'heal'];
-const QM_WORK_JOBS = ['refit', 'prospect', 'materials', 'cheer'];
-const QM_PRIORITY = { gear: 0, refit: 1, heal: 2, prospect: 3, materials: 4, cheer: 5 };
+const QM_WORK_JOBS = ['refit', 'prospect', 'materials', 'reagents', 'cheer'];
+const QM_PRIORITY = { gear: 0, refit: 1, heal: 2, prospect: 3, materials: 4, reagents: 4, cheer: 5 };
 
 // A unit too deep in a fight to tend to.
 const inMelee = t => G.units.some(e => e.team !== t.team && !e.dead && !e.inside && !isWorker(e) && Math.abs(e.x - t.x) < 90 && Math.abs(e.y - t.y) < 60);
@@ -36,6 +36,10 @@ function qmJobs(team) {
   if (G.time >= (team.materialsAt || 0) && canTrain(team, 'architect')) {
     const a = G.units.find(q => q.team === team.id && !q.dead && !q.inside && q.type === 'architect' && !(q.materials > 0));
     if (a) jobs.push({ kind: 'materials', t: a });
+  }
+  if (G.time >= (team.reagentsAt || 0) && canTrain(team, 'wizard')) {
+    const w = G.units.find(q => q.team === team.id && !q.dead && !q.inside && q.type === 'wizard' && !(q.reagents > 0));
+    if (w) jobs.push({ kind: 'reagents', t: w });
   }
   // miners at work whose cheer is running out (or never started)
   for (const m of G.units) {
@@ -137,6 +141,11 @@ function updateQuartermaster(u, dt) {
     if (t.team === 0) floatText(t.x, t.y - 80, 'Materials for a trap', '#c9b27a');
     team.materialsAt = G.time + (team.upgrades.quartermaster.wagon ? QM.materialsWagon : QM.materialsCd);
     u.qmJob = null;
+  } else if (j.kind === 'reagents') {
+    t.reagents = (t.reagents || 0) + 1;
+    if (t.team === 0) floatText(t.x, t.y - 80, 'Reagents for a rune', '#c8a8f0');
+    team.reagentsAt = G.time + (team.upgrades.quartermaster.wagon ? QM.materialsWagon : QM.materialsCd);
+    u.qmJob = null;
   } else if (j.kind === 'cheer') {
     // every miner within earshot gets fired up, not just the one he walked over to
     for (const m of G.units) if (m.team === u.team && !m.dead && !m.inside && m.type === 'miner' && Math.abs(m.x - u.x) < QM.cheerR) m.cheerT = QM.cheerTime;
@@ -153,7 +162,7 @@ function qmStillNeeded(j) {
   if (j.kind === 'refit') return missingUpgrades(t).length > 0;
   if (j.kind === 'heal') return t.hp < t.maxHp * 0.95;
   if (j.kind === 'cheer') return (t.cheerT || 0) <= QM.cheerTopUp;
-  return true;   // materials
+  return true;   // materials, reagents
 }
 
 // Restoring a deposit: kneel beside it and work it back up.

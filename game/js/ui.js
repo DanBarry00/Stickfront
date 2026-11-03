@@ -109,11 +109,14 @@ function selectType(type) {
 const liveSel = () => G.selection.filter(u => !u.dead);
 const milSel = () => liveSel().filter(u => !isWorker(u) && !isGiant(u));
 // Giants obey nobody directly: only those with Blinders can be selected (for move / hold).
-const selectable = u => u.type !== 'zombie' && (!isGiant(u) || (!u.isStatueGiant && !!u.perks.blinders));   // (zombies follow their Necromancer)
+const selectable = u => u.type !== 'zombie' && u.type !== 'wagon' && (!isGiant(u) || (!u.isStatueGiant && !!u.perks.blinders));   // (zombies follow their Necromancer)
 const meleeSel = () => liveSel().filter(u => u.type === 'sword' || u.type === 'spear');
 const minerSel = () => liveSel().filter(u => u.type === 'miner');
 const mageSel = () => liveSel().filter(u => isMage(u));
 const archSel = () => liveSel().filter(u => u.type === 'architect');
+const wizSel = () => liveSel().filter(u => u.type === 'wizard');
+// One of your traps or runes under the cursor (finished or not).
+const ownTrapAt = (wx, wy) => G.traps.find(t => t.team === 0 && !t.dead && Math.abs(t.x - wx) < 18 && Math.abs(t.y - wy) < 12);
 const builderSelection = () => (G.teams[0].upgrades.architect.walls ? archSel() : []);     // Earthworks: trenches
 const fortifierSelection = () => (G.teams[0].upgrades.architect.walls2 ? archSel() : []);  // Palisade
 const prospectorSelection = () => liveSel().filter(u => u.type === 'quartermaster');   // (Quartermasters restore deposits)
@@ -148,9 +151,44 @@ function issueCommand(wx, wy) {
     if (rebuildStructure(me, ruin, rebuilders)) marker(ruin.x, ruin.isTower ? ruin.y : LANE_BOT, '#c9b27a');
     return;
   }
+  // one of our traps or runes: the Architect finishes, re-arms or reinforces it, the Castle Wizard
+  // finishes or enchants it
+  const myTrap = !foe && ownTrapAt(wx, wy);
+  if (myTrap) {
+    const archs = archSel(), wizs = wizSel();
+    let done = null;
+    if (!myTrap.armed && !isRune(myTrap.kind) && archs.length) done = startArchJob(me, { kind: 'finish', s: myTrap }, archs);
+    else if (!myTrap.armed && isRune(myTrap.kind) && wizs.length) done = startWizJob(me, { kind: 'finish', s: myTrap }, wizs);
+    else if (isRune(myTrap.kind) && archs.length) done = reinforceRune(me, myTrap, archs);
+    else if (!isRune(myTrap.kind) && wizs.length) done = enchantTrap(me, myTrap, wizs);
+    if (done) { marker(myTrap.x, myTrap.y, isRune(myTrap.kind) || wizs.length ? '#c8a8f0' : '#c9b27a'); return; }
+    if (archs.length || wizs.length) return;
+  }
+  // our statue, trenches and towers: the Castle Wizard wards them
+  const wizs = wizSel();
+  if (wizs.length && !foe) {
+    const s = (st && st.team === 0 && st) || ((w => w && w.team === 0 && !w.ruin && w.progress >= 1 && w)(wallAt(wx, wy))) || ((t => t && canMend(me, t) && !t.ruin && t.progress >= 1 && t)(towerAt(wx, wy)));
+    if (s) {
+      if (s.isTower && s.converting) { if (convertTower(me, s, wizs)) marker(s.x, s.y, '#c8a8f0'); return; }
+      if ((s.ward || 0) < wardMax(me, s) - 1) {
+        setOrder(wizs[0], { type: 'ward', s });
+        marker(s.x, s.isTower ? s.y : s.isStatue ? LANE_TOP - 30 : LANE_BOT, '#a8d8ff');
+      } else toast('Its ward is already full');
+      if (wizs.length === sel.length) return;
+    }
+  }
   // a tower: archers climb into ours (or a free neutral one), architects finish or mend ours,
-  // anyone can attack the enemy's
+  // mages climb into our wizard tower, anyone can attack the enemy's
   const tw = towerAt(wx, wy);
+  if (tw && !foe && tw.wizard && tw.team === 0) {
+    const mage = sel.filter(u => TOWER_MAGES.includes(u.type)).sort((p, q) => Math.abs(p.x - tw.x) - Math.abs(q.x - tw.x))[0];
+    if (mage) {
+      if (postMage(mage, tw)) marker(tw.x, tw.y, '#c8a8f0');
+      else toast('The wizard tower already has a mage');
+      return;
+    }
+    if (sel.some(u => u.type === 'archer')) { toast('A wizard tower takes a Necromancer, Cleric or Warlock, not an archer'); return; }
+  }
   if (tw && !foe) {
     const archers = sel.filter(u => u.type === 'archer'), archs = sel.filter(u => u.type === 'architect');
     const free = tw.team === -1 && towerCrew(tw).every(a => a.team === 0);   // the Monolith's, once nobody else holds it
@@ -236,6 +274,11 @@ function issueCommand(wx, wy) {
       return;
     }
   }
+  if (st && st.team === 0 && st.hp < st.max && archSel().length) {
+    for (const u of archSel()) setOrder(u, { type: 'build', wall: st });
+    marker(st.x, LANE_TOP - 30, '#c9b27a');
+    if (archSel().length === sel.length) return;
+  }
   if (st && st.team === 0) {
     for (const u of sel) {
       if (u.type === 'miner') setOrder(u, { type: 'mana' });
@@ -279,10 +322,11 @@ function startPlacing(mode) {
   if (mode === 'wall' && !need(builderSelection, 'walls', 'Earthworks')) return;
   if (mode === 'reinforce' && !need(fortifierSelection, 'walls2', 'Palisade')) return;
   if (mode === 'replenish' && !need(prospectorSelection, 'prospect', 'Prospecting')) return;
-  if ((mode === 'tar' || mode === 'mine' || mode === 'tower') && !archSel().length) return toast('Select architects');
-  if (mode === 'tar' || mode === 'mine') {
+  if ((ARCH_TRAPS.includes(mode) || mode === 'tower') && !archSel().length) return toast('Select your Architect');
+  if ((WIZ_RUNES.includes(mode) || ['ward', 'enchant', 'wtower'].includes(mode)) && !wizSel().length) return toast('Select your Castle Wizard');
+  if (ARCH_TRAPS.includes(mode) || WIZ_RUNES.includes(mode)) {
     const cd = (me.trapCd || {})[mode] || 0;
-    if (cd > G.time) return toast(`${TRAP[mode].name} ready in ${Math.ceil(cd - G.time)}s`);
+    if (cd > G.time) return toast(`${trapDef(mode).name} ready in ${Math.ceil(cd - G.time)}s`);
   }
   UI.placing = mode;
 }
@@ -461,6 +505,15 @@ const ICONS = {
   tar: '<ellipse cx="12" cy="16" rx="9" ry="4" fill="currentColor" stroke="none"/><circle cx="9" cy="10" r="1.6" stroke-width="1.4"/><circle cx="15" cy="7" r="1.2" stroke-width="1.4"/>',
   landmine: '<ellipse cx="11" cy="17" rx="7" ry="3.5" fill="currentColor" stroke="none"/><path d="M13 15q3-6 7-5" stroke-width="1.6"/><path d="M20 4v3M18.5 5.5h3" stroke-width="1.4"/>',
   tower: '<path d="M7 22l2-14h6l2 14M9 8h6M6 8h12v-3h-2v2h-2v-2h-4v2H8V5H6z" stroke-width="1.6"/><path d="M9 15h6" stroke-width="1.4"/>',
+  spikes: '<ellipse cx="12" cy="18" rx="9" ry="3.5" fill="currentColor" stroke="none" opacity=".5"/><path d="M6 19l1-9M10 19l1-11M14 19l1-10M18 19l-1-8" stroke-width="1.8"/>',
+  caltrops: '<path d="M5 14h6M8 11v6M14 18h6M17 15v6M12 7h6M15 4v6" stroke-width="1.8"/>',
+  snare: '<ellipse cx="10" cy="17" rx="7" ry="3" stroke-width="1.8"/><path d="M17 17c3-3 3-9 0-13" stroke-width="1.8"/>',
+  bind: '<ellipse cx="12" cy="14" rx="9" ry="4" stroke-width="1.8"/><path d="M3 14h18" stroke-width="1.6"/><path d="M12 3l1.5 4h-3z" fill="currentColor" stroke="none"/>',
+  hex: '<ellipse cx="12" cy="15" rx="9" ry="4" stroke-width="1.6"/><path d="M6 12l6 6 6-6M6 18h12" stroke-width="1.6"/>',
+  dread: '<ellipse cx="12" cy="15" rx="9" ry="4" stroke-width="1.6"/><path d="M8 12l8 6M16 12l-8 6" stroke-width="1.8"/><circle cx="12" cy="6" r="2.4" fill="currentColor" stroke="none"/>',
+  ward: '<path d="M12 2l8 3v6c0 5.4-3.6 9.5-8 11-4.4-1.5-8-5.6-8-11V5z" stroke-width="1.8"/><path d="M8 11l3 3 5-6" stroke-width="1.6"/>',
+  enchant: '<path d="M5 19L15 9" stroke-width="2"/><path d="M17 3l1 3 3 1-3 1-1 3-1-3-3-1 3-1z" fill="currentColor" stroke="none"/>',
+  wtower: '<path d="M8 22l1.5-10h5L16 22M7 12h10L12 3z" stroke-width="1.6"/><circle cx="12" cy="3" r="1.6" fill="currentColor" stroke="none"/>',
   salt: '<path d="M8 4h8l2 5H6z" fill="currentColor" stroke="none"/><path d="M6 9h12v6a6 6 0 0 1-12 0z" stroke-width="1.8"/><path d="M9 21h1M13 22h1M16 20h1" stroke-width="2"/>',
   replenish: '<path d="M4 21l4-7h8l4 7z" fill="currentColor" stroke="none"/><path d="M12 11V3M8 7l4-4 4 4" stroke-width="2"/>',
   refit: '<path d="M4 18h16M7 18v-4h10v4M9 14V9h6v5M12 9V4" stroke-width="2"/>',
@@ -486,6 +539,15 @@ const COMMANDS = [
   { id: 'repair', label: 'Repair', key: 'Y', show: s => s.arch, run: () => { const w = repairStructures(G.teams[0], archSel(), true); if (w) G.markers.push({ x: w.x, y: w.isTower ? w.y : LANE_BOT, t: 0, color: '#c9b27a' }); else toast('Nothing to repair or rebuild'); } },
   { id: 'tar', label: s => `Tar pit (${trapCost(G.teams[0], 'tar')})`, key: '⇧B', show: s => s.arch, run: () => startPlacing('tar'), cd: 'tar' },
   { id: 'landmine', label: s => `Mine (${trapCost(G.teams[0], 'mine')})`, key: '⇧N', show: s => s.arch, run: () => startPlacing('mine'), cd: 'mine' },
+  { id: 'spikes', label: s => `Spike pit (${trapCost(G.teams[0], 'spikes')})`, key: '⇧K', show: s => s.arch, run: () => startPlacing('spikes'), cd: 'spikes' },
+  { id: 'caltrops', label: s => `Caltrops (${trapCost(G.teams[0], 'caltrops')})`, key: '⇧L', show: s => s.arch, run: () => startPlacing('caltrops'), cd: 'caltrops' },
+  { id: 'snare', label: s => `Snare (${trapCost(G.teams[0], 'snare')})`, key: '⇧M', show: s => s.arch, run: () => startPlacing('snare'), cd: 'snare' },
+  { id: 'bind', label: s => `Binding rune (${trapCost(G.teams[0], 'bind')})`, key: '⇧F', show: s => s.wiz, run: () => startPlacing('bind'), cd: 'bind', mana: true },
+  { id: 'hex', label: s => `Hex rune (${trapCost(G.teams[0], 'hex')})`, key: '⇧V', show: s => s.wiz, run: () => startPlacing('hex'), cd: 'hex', mana: true },
+  { id: 'dread', label: s => `Dread sigil (${trapCost(G.teams[0], 'dread')})`, key: '⇧X', show: s => s.wiz, run: () => startPlacing('dread'), cd: 'dread', mana: true },
+  { id: 'ward', label: 'Ward', key: 'RMB', show: s => s.wiz, run: () => startPlacing('ward') },
+  { id: 'enchant', label: s => `Enchant (${enchantCost(G.teams[0])})`, key: 'RMB', show: s => s.wiz, run: () => startPlacing('enchant') },
+  { id: 'wtower', label: `Wizard tower (${WTOWER.gold}/${WTOWER.mana})`, key: 'RMB', show: s => s.wiz, run: () => startPlacing('wtower') },
   { id: 'tower', label: `Archer tower (${TOWER.cost})`, key: '⇧Y', show: s => s.arch, run: () => startPlacing('tower') },
   { id: 'replenish', label: 'Replenish', key: 'N', show: s => s.prosp, run: () => startPlacing('replenish') },
   { id: 'salt', label: 'Salt mine', key: 'RMB', show: s => s.sab, run: () => { UI.placing = 'salt'; } },
@@ -519,6 +581,7 @@ function selectionCaps() {
     golemOnly: shieldSelection().length > 0 && shieldSelection().every(u => u.type === 'golem'),
     build: builderSelection().length > 0,
     arch: archSel().length > 0,
+    wiz: wizSel().length > 0,
     fort: fortifierSelection().length > 0,
     prosp: prospectorSelection().length > 0,
     mage: mageSel().length > 0,
@@ -546,9 +609,22 @@ function placeAt(wx, wy, keep) {
   const me = G.teams[0];
   if (UI.placing === 'wall') {
     if (placeWall(me, wx, builderSelection()) && !keep) UI.placing = null;
-  } else if (UI.placing === 'tar' || UI.placing === 'mine') {
-    const t = orderTrap(me, UI.placing, wx, clamp(wy, LANE_TOP + 4, LANE_BOT - 4), archSel());
-    if (t) { G.markers.push({ x: t.x, y: t.y, t: 0, color: '#c9b27a' }); UI.placing = null; }
+  } else if (ARCH_TRAPS.includes(UI.placing) || WIZ_RUNES.includes(UI.placing)) {
+    const t = orderTrap(me, UI.placing, wx, clamp(wy, LANE_TOP + 4, LANE_BOT - 4), liveSel());
+    if (t) { G.markers.push({ x: t.x, y: t.y, t: 0, color: isRune(t.kind) ? '#c8a8f0' : '#c9b27a' }); UI.placing = null; }
+  } else if (UI.placing === 'ward') {
+    const st = statueAt(wx, wy), w = wallAt(wx, wy), t = towerAt(wx, wy);
+    const s = (st && st.team === 0 && st) || (w && w.team === 0 && !w.ruin && w.progress >= 1 && w) || (t && canMend(me, t) && !t.ruin && t.progress >= 1 && t);
+    if (!s) return toast('Click your statue, a trench or a tower');
+    if ((s.ward || 0) >= wardMax(me, s) - 1) return toast('Its ward is already full');
+    setOrder(wizSel()[0], { type: 'ward', s });
+    UI.placing = null;
+  } else if (UI.placing === 'enchant') {
+    const t = ownTrapAt(wx, wy);
+    if (!t || isRune(t.kind)) return toast('Click one of your Architect\'s traps');
+    if (enchantTrap(me, t, wizSel())) UI.placing = null;
+  } else if (UI.placing === 'wtower') {
+    if (convertTower(me, towerAt(wx, wy), wizSel())) UI.placing = null;
   } else if (UI.placing === 'tower') {
     const t = orderTower(me, wx, clamp(wy, LANE_TOP + 4, LANE_BOT - 4), archSel());
     if (t) { G.markers.push({ x: t.x, y: t.y, t: 0, color: '#c9b27a' }); UI.placing = null; }
@@ -653,6 +729,12 @@ function initInput() {
     if (e.shiftKey && e.code === 'KeyB') { startPlacing('tar'); return; }     // architects: tar pit
     if (e.shiftKey && e.code === 'KeyN') { startPlacing('mine'); return; }    // mine
     if (e.shiftKey && e.code === 'KeyY') { startPlacing('tower'); return; }   // archer tower
+    if (e.shiftKey && e.code === 'KeyK') { startPlacing('spikes'); return; }  // spike pit
+    if (e.shiftKey && e.code === 'KeyL') { startPlacing('caltrops'); return; }   // caltrops
+    if (e.shiftKey && e.code === 'KeyM') { startPlacing('snare'); return; }   // snare
+    if (e.shiftKey && e.code === 'KeyF') { startPlacing('bind'); return; }    // the Castle Wizard: binding rune
+    if (e.shiftKey && e.code === 'KeyV') { startPlacing('hex'); return; }     // hex rune
+    if (e.shiftKey && e.code === 'KeyX') { startPlacing('dread'); return; }   // dread sigil
     if (e.shiftKey && ['KeyQ', 'KeyW', 'KeyE', 'KeyC'].includes(e.code)) {
       runCommand({ KeyQ: 'garrison', KeyW: 'defend', KeyE: 'attack', KeyC: 'retreat' }[e.code]);
       return;
@@ -779,7 +861,16 @@ const CMD_TIPS = {
   tar: `Lay a hidden tar pit: the first enemy on foot to step on it springs a pool of tar that slows everyone wading through it for ${TRAP.tar.poolTime}s. Arcane Circle tar burns too. Not past the middle; ${TRAP.lineMax} to a line across the lane.`,
   landmine: `Bury a hidden mine: the first enemy on foot to step on it blows up everyone nearby (${TRAP.mine.dmg} damage at the centre, more for the Arcane Circle). Ninjas, saboteurs and flyers don't set traps off.`,
   tower: `Raise an archer tower (${TOWER.cost} gold). Right-click it with an archer to post them: +${TOWER.range} range, and arrows hurt them less. If melee troops wreck it, the archer dies in the collapse.`,
-  repair: 'Send the selected architects to mend your most damaged trench or tower (the Monolith’s tower too, while no one else holds it). With nothing damaged, they rebuild the nearest ruin (right-click a ruin to pick one).',
+  repair: 'Finish whatever was left half-built (a trench, palisade, tower or trap; a sprung spike pit gets re-armed), else mend your most damaged trench, tower or statue, else rebuild the nearest ruin. With the Architect selected, everything it can work on is marked: right-click one to pick it. It does the free work on its own when idle.',
+  spikes: `Dig a covered spike pit: the first enemy on foot through it takes ${TRAP.spikes.dmg} damage. It stays open afterwards and your Architect re-arms it for free. Enchanted, the victim's screams terrify those around.`,
+  caltrops: `Hide a sack of caltrops: whoever treads on it scatters them over the ground for ${TRAP.caltrops.time}s, slowing and cutting (${TRAP.caltrops.dps} damage a second) everyone crossing. Enchanted, they're poisoned (${TRAP.caltrops.magicDps}).`,
+  snare: `Lay a snare: it snaps tight round the first enemy on foot to step in it, holding it for ${TRAP.snare.time}s. Enchanted, it binds everyone near it.`,
+  bind: `A binding rune (mana): stuns every enemy near it for ${RUNE.bind.stun}s (giants briefly). Reinforced by the Architect, iron spikes add ${RUNE.bind.spikeDmg} damage.`,
+  hex: `A hex rune (mana): enemies near it turn on their own side for ${RUNE.hex.time}s, attacking whoever they can reach. Giants shrug it off. Reinforced, it curses them too (they take ${RUNE.hex.curse * 100}% more damage).`,
+  dread: `A dread sigil (mana): enemies near it run for their castle in terror for ${RUNE.dread.time}s. Giants shrug it off. Reinforced, a hidden pit adds ${RUNE.dread.pitDmg} damage and longer terror.`,
+  ward: 'Click your statue, a trench or a tower: the Castle Wizard channels a ward onto it that soaks up damage first (it does this on its own when idle, too).',
+  enchant: `Click one of the Architect's traps: the Castle Wizard enchants it (${RUNE.enchant} mana; half for the Arcane Circle). Tar burns, mines hit harder, spikes terrify, caltrops poison, snares bind everyone nearby.`,
+  wtower: `Click one of your archer towers: the Castle Wizard rebuilds it as a wizard tower (${WTOWER.gold} gold, ${WTOWER.mana} mana, one per side). Post a Necromancer (a Graveyard of endless marching zombies), a Cleric (a Sanctum: stronger healing, and Hope and magic armor far around) or a Warlock (a Spire: harder-hitting, longer bolts) in it. Spells up there are free.`,
   reinforce: `Raise a sharpened log palisade on a finished trench (${WALL_COST} gold, +${WALL_HP2} hp).`,
   replenish: 'Quartermasters: restore a gold deposit, even an exhausted one (they do it on their own too).',
   refit: `Walk back to their building and take every upgrade they're missing (${REFIT_COST} gold and ${REFIT_TIME}s each).`,
@@ -802,8 +893,9 @@ function tipHTML(el) {
     const locked = d.requires && !me.upgrades[type][d.requires] ? `Requires ${upgradeDef(type, d.requires).name}` : '';
     const state = me.upgrades[type][key] ? 'Researched' : r && r.key === key ? 'Researching… (right-click to cancel)' : locked;
     const note = d.team ? 'Takes effect immediately.' : `Only units trained after research get this. Veterans can refit (R) for ${REFIT_COST} gold.`;
-    const p = upgradePrice(me, type, d), save = p.off ? ` <i class="save">(-${Math.round(p.off * 100)}%)</i>` : '';   // architects' savings
-    return `<b>${d.name}</b><span class="cost"><i class="ico gold"></i>${p.gold}${p.mana ? ` <i class="ico mana"></i>${p.mana}` : ''}${save} · ${d.time}s</span><p>${d.desc}</p><em>${state || note}</em>`;
+    const p = upgradePrice(me, type, d), save = p.off || p.offMana ? ` <i class="save">(${[p.off ? `-${Math.round(p.off * 100)}% gold` : '', p.offMana ? `-${Math.round(p.offMana * 100)}% mana` : ''].filter(Boolean).join(', ')})</i>` : '';   // the Architect's and Castle Wizard's savings
+    const found = d.repeat ? ` Laid so far: ${me.foundN || 0} · population ${popCap(me)}/${POP_MAX}.` : '';
+    return `<b>${d.name}</b><span class="cost"><i class="ico gold"></i>${p.gold}${p.mana ? ` <i class="ico mana"></i>${p.mana}` : ''}${save} · ${d.time}s</span><p>${d.desc}${found}</p><em>${d.repeat && popCap(me) >= POP_MAX ? 'Your castle can hold no more' : state || note}</em>`;
   }
   if (el.dataset.cmd && el.dataset.cmd.startsWith('spell:')) {
     const k = el.dataset.cmd.slice(6), S = SPELLS[k], cd = spellCooldown(k);
@@ -978,7 +1070,7 @@ function buildCard(mode) {
         b.dataset.tip = '';
         b.innerHTML = `<canvas width="80" height="80"></canvas><span class="uc"></span><div class="prog"><i></i></div>` +
           (chain.length > 1 ? `<span class="pips">${chain.map(() => '<i></i>').join('')}</span>` : '') +
-          `<i class="study" data-tip="Architects: study this to make it cheaper (click again to stop)"><svg viewBox="0 0 16 16"><path d="M2 3.5C4 2.6 6 2.7 8 4c2-1.3 4-1.4 6-.5v9c-2-.9-4-.8-6 .5-2-1.3-4-1.4-6-.5z" fill="currentColor"/><path d="M8 4v9" stroke="#1a140e" stroke-width="1"/></svg></i>`;
+          `<i class="study" data-tip="Study this: your Architect makes it cheaper in gold, your Castle Wizard in mana (click again to stop)"><svg viewBox="0 0 16 16"><path d="M2 3.5C4 2.6 6 2.7 8 4c2-1.3 4-1.4 6-.5v9c-2-.9-4-.8-6 .5-2-1.3-4-1.4-6-.5z" fill="currentColor"/><path d="M8 4v9" stroke="#1a140e" stroke-width="1"/></svg></i>`;
         b.addEventListener('click', e => {
           const k = b.dataset.upg.split(':')[1];
           if (e.target.closest('.study')) return setStudyFocus(G.teams[0], type, k);
@@ -1040,16 +1132,24 @@ function unitJob(u, me) {
     return ({ mana: 'Praying for mana', pan: 'Going to pan', build: 'Working on a trench', replenish: 'Replenishing a deposit', refit: 'Going to refit', garrison: 'Garrisoned', move: 'Moving', hold: 'Holding', attack: 'Fighting' }[u.order.type]
       || (u.retaliateT > 0 ? 'Defending itself' : u.praying ? 'Praying for mana' : u.carry >= u.carryCap ? 'Returning gold' : u.mine ? 'Mining gold' : 'Idle'));
   }
-  if (u.type === 'architect') {
-    if (u.order.type === 'build') return u.order.wall.isTower ? (u.order.wall.progress < 1 ? 'Building a tower' : 'Repairing a tower') : 'Working on a trench';
-    if (u.order.type === 'trap') return u.laying ? `Laying a ${TRAP[u.order.trap.kind].name.toLowerCase()}` : 'Going to lay a trap';
+  if (u.type === 'architect' || u.type === 'wizard') {
+    const o = u.order, auto = o.auto ? ' (on its own)' : '';
+    if (o.type === 'build') return (o.wall.isStatue ? 'Repairing the statue' : o.wall.isTower ? (o.wall.progress < 1 ? 'Building a tower' : 'Repairing a tower') : 'Working on a trench') + auto;
+    if (o.type === 'trap') return (u.laying ? `${o.trap.sprung ? 'Re-arming' : 'Laying'} a ${trapDef(o.trap.kind).name.toLowerCase()}` : 'Going to lay a trap') + auto;
+    if (o.type === 'rework') return u.type === 'architect' ? 'Reinforcing a rune' : 'Enchanting a trap';
+    if (o.type === 'ward') return `Warding ${o.s.isStatue ? 'the statue' : o.s.isTower ? 'a tower' : 'a trench'}${auto}`;
+    if (o.type === 'convert') return 'Raising a wizard tower';
     if (u.inside) return 'Studying in the castle';
-    if (u.order.type === 'stance' && !u.moving) return 'Studying (cheaper upgrades)';
+    if (u.order.type === 'stance' && !u.moving) return u.type === 'architect' ? 'Studying (gold, cheaper upgrades)' : 'Studying (mana, cheaper upgrades)';
   }
+  if (u.order.type === 'tower' && u.onTower && u.onTower.wizard) return `Manning the ${WTOWER_NAMES[wizardTowerKind(u.onTower)]}`;
+  if (u.scaredT > 0) return 'Terrified!';
+  if (u.hexT > 0) return 'Hexed!';
+  if (u.snared && u.netT > 0) return 'Snared!';
   if (u.type === 'quartermaster' && (u.order.type === 'stance' || u.order.type === 'replenish')) {
     if (u.order.type === 'replenish' || (u.qmJob && u.qmJob.kind === 'prospect')) return 'Restoring a gold deposit';
     const j = u.qmJob;
-    if (j) return { heal: 'Patching up a soldier', refit: j.t && isWorker(j.t) ? 'Refitting a worker' : 'Refitting a veteran', gear: 'Bringing a new net and javelin', cheer: 'Cheering on the miners', materials: 'Bringing an Architect materials' }[j.kind];
+    if (j) return { heal: 'Patching up a soldier', refit: j.t && isWorker(j.t) ? 'Refitting a worker' : 'Refitting a veteran', gear: 'Bringing a new net and javelin', cheer: 'Cheering on the miners', materials: 'Bringing the Architect materials', reagents: 'Bringing the Castle Wizard reagents' }[j.kind];
     return { troops: 'Making the rounds (troops)', workers: 'Making the rounds (workers)' }[u.qmRole] || 'Making the rounds';
   }
   if (u.type === 'necromancer' && u.order.type === 'stance') return `Leading ${zombiesOf(u).length}/${hordeSize(me, u)} zombies (${u.souls || 0} souls)`;
@@ -1084,6 +1184,9 @@ function selectionInfoHTML(me) {
     if (u.fx.empower > 0) buffs.push('Blessed');
     if (u.fx.enfeeble > 0) buffs.push('Weakened');
     if (u.hope) buffs.push('Hope');
+    if (u.curseT > 0) buffs.push('Cursed');
+    if (u.materials > 0) buffs.push(`Materials for ${u.materials} trap${u.materials > 1 ? 's' : ''}`);
+    if (u.reagents > 0) buffs.push(`Reagents for ${u.reagents} rune${u.reagents > 1 ? 's' : ''}`);
     if (u.fear) buffs.push('Fear');
     if (u.inside && u.hp < u.maxHp) buffs.push('Healing');
     if (isMage(u)) buffs.push(u.auto ? 'Auto-cast on' : 'Auto-cast off');
@@ -1121,6 +1224,7 @@ function updateHUD(dt) {
     const n = queuedCount(me, type), training = q.length > 0 && q[0].type === type;
     const cost = unitCost(me, type);
     b.classList.toggle('poor', me.gold < cost.gold || me.mana < cost.mana);
+    b.classList.toggle('full', !!def.max && G.units.filter(u => u.team === 0 && !u.dead && u.type === type).length + n >= def.max);   // (one Architect, one Castle Wizard, two Quartermasters)
     b.classList.toggle('queued', n > 0);
     b.classList.toggle('training', training);
     b.querySelector('.badge').textContent = n ? n : '';
@@ -1145,7 +1249,7 @@ function updateHUD(dt) {
   if (mode !== UI.cardMode) buildCard(mode);
   if (UI.panel) {
     const card = $('card'), active = panelTypes(UI.panel).filter(t => me.research[t]).map(t => upgradeDef(t, me.research[t].key).name);
-    const studying = canTrain(me, 'architect') && G.units.some(u => u.team === 0 && !u.dead && u.type === 'architect');
+    const studying = G.units.some(u => u.team === 0 && !u.dead && (u.type === 'architect' || u.type === 'wizard'));
     const noArch = panelTypes(UI.panel).includes('castle') && !hasArchitect(me);
     card.querySelector('.rs').textContent = noArch ? (me.research.castle ? `${upgradeDef('castle', me.research.castle.key).name} waits for an Architect` : 'Castle upgrades need an Architect') : active.length ? `Researching ${active.join(', ')}` : 'Idle';
     card.querySelectorAll('.ubtn').forEach(b => {
@@ -1162,10 +1266,10 @@ function updateHUD(dt) {
       if (b.dataset.price !== priceKey) {
         b.dataset.price = priceKey;
         b.querySelector('.uc').innerHTML = `${p.gold}${p.mana ? `<i class="ico mana"></i>${p.mana}` : ''}`;
-        b.classList.toggle('saved', p.off > 0);
+        b.classList.toggle('saved', p.off > 0 || p.offMana > 0);
       }
       b.querySelectorAll('.pips i').forEach((p, i) => p.classList.toggle('on', !!me.upgrades[type][chain[i].key]));
-      const done = !!me.upgrades[type][key], active = r && r.key === key;
+      const done = d.repeat ? popCap(me) >= POP_MAX : !!me.upgrades[type][key], active = r && r.key === key;
       b.classList.toggle('done', done);
       b.classList.toggle('active', !!active);
       b.classList.toggle('poor', !done && !active && (me.gold < p.gold || me.mana < p.mana));
@@ -1190,6 +1294,11 @@ function updateHUD(dt) {
       const c = COMMANDS.find(c => c.id === id);
       b.classList.toggle('on', !!(c.on && c.on()));
       if (c.id === 'refit') b.classList.toggle('off', !refitSelection().length);
+      if (c.cd) {   // a trap or rune on its cooldown, or one you can't afford
+        const left = ((me.trapCd || {})[c.cd] || 0) - G.time;
+        b.classList.toggle('off', left > 0);
+        b.classList.toggle('poor', (c.mana ? me.mana : me.gold) < trapCost(me, c.cd));
+      }
     });
   }
 
@@ -1282,8 +1391,23 @@ function togglePause() {
 
 function initPauseMenu() {
   $('pmResume').onclick = togglePause;
-  $('pmRestart').onclick = () => { $('pauseMenu').classList.add('hidden'); if (G.lesson) return G.lesson.campaign ? startCampaignLevel(G.lesson.key) : startLesson(G.lesson.key); newGame(G.seed, G.clans); startBattle(); };
-  $('pmNew').onclick = () => { $('pauseMenu').classList.add('hidden'); if (G.lesson) { const camp = G.lesson.campaign; G.paused = false; newGame(randomSeed()); return camp ? showCampaignMap() : showTutorialMenu(); } newGame(randomSeed()); showTitle(); };
+  $('pmRestart').onclick = () => {
+    $('pauseMenu').classList.add('hidden');
+    if (G.clash) return startClash(G.clash.buy, G.clash);   // (the same two armies)
+    if (G.lesson && G.lesson.mode) return startModeBattle(G.lesson.mode, G.lesson.variant);
+    if (G.lesson) return G.lesson.survival ? startSurvival(G.lesson.clanKey) : G.lesson.campaign ? startCampaignLevel(G.lesson.key) : startLesson(G.lesson.key);
+    newGame(G.seed, G.clans);
+    startBattle();
+  };
+  $('pmNew').onclick = () => {
+    $('pauseMenu').classList.add('hidden');
+    G.paused = false;
+    document.body.classList.remove('clash');
+    if (G.clash) { newGame(randomSeed()); return showClashMenu(); }
+    if (G.lesson) { const camp = G.lesson.campaign, surv = G.lesson.survival, md = G.lesson.mode; newGame(randomSeed()); return md ? showModesMenu() : surv ? showSurvivalMenu() : camp ? showCampaignMap() : showTutorialMenu(); }
+    newGame(randomSeed());
+    showTitle();
+  };
   $('pmHelp').onclick = toggleHelp;
   $('pmVol').innerHTML = volumeHTML();
   wireVolume($('pmVol'));
@@ -1319,6 +1443,9 @@ function showMainMenu() {
         <button id="btnTutorial" class="mode"><b>Tutorial</b><span>Learn each unit in battles of its own, unlocking your army as you go</span></button>
         <button id="btnCampaign" class="mode"><b>Campaign</b><span>March against the Horde, a monster army, battle by battle across the map</span></button>
         <button id="btnSkirmish" class="mode play"><b>Skirmish</b><span>One battle against the computer, your clans and map</span></button>
+        <button id="btnSurvival" class="mode"><b>Survival</b><span>Hold your castle against endless rounds of the Horde${SURV.best ? ` · best ${SURV.best}` : ''}</span></button>
+        <button id="btnClash" class="mode"><b>Clash</b><span>No castles: spend a budget on an army, then one battle. Learn the matchups</span></button>
+        <button id="btnModes" class="mode"><b>Battle modes</b><span>King of the Hill, Siege and Escort: a full battle with a different way to win</span></button>
       </div>
       <div class="menuvol">${volumeHTML()}</div>
     </div>`;
@@ -1327,6 +1454,9 @@ function showMainMenu() {
   wireVolume($('overlay'));
   $('btnTutorial').onclick = () => showTutorialMenu();
   $('btnCampaign').onclick = () => showCampaignMap();
+  $('btnSurvival').onclick = () => showSurvivalMenu();
+  $('btnClash').onclick = () => showClashMenu();
+  $('btnModes').onclick = () => showModesMenu();
 }
 
 function showTitle() {
@@ -1402,6 +1532,7 @@ function showEnd() {
   UI.placing = null;
   $('debug').classList.add('hidden');
   if (G.lesson) return showLessonEnd(won, `${mins}:${secs}`);
+  if (G.clash) return showClashEnd();
   $('overlay').innerHTML = `
     <div class="card wide ${won ? 'win' : 'lose'}">
       <h1>${won ? 'VICTORY' : 'DEFEAT'}</h1>
@@ -1421,12 +1552,12 @@ function showEnd() {
 // The end of a tutorial lesson: what it unlocked, and on to the next one (or try again).
 function showLessonEnd(won, time) {
   hideLessonBox();
-  const L = G.lesson.L, { msg, next } = lessonEndHTML(won);
+  const L = G.lesson.L, { msg, next } = lessonEndHTML(won), surv = !!G.lesson.survival, md = G.lesson.mode, variant = G.lesson.variant;
   const giant = L.statueGiant;
   $('overlay').innerHTML = `
     <div class="card wide ${won ? 'win' : 'lose'}">
-      <h1>${won ? 'VICTORY' : 'DEFEAT'}</h1>
-      <p class="sub">${L.name} · ${won ? (giant ? 'The enemy statue and the giant within it have fallen.' : 'The enemy statue has fallen.') : (giant ? 'Your statue lies in ruins and its giant is slain.' : 'Your statue has fallen.')} · ${time}</p>
+      <h1>${surv ? 'OVERRUN' : won ? 'VICTORY' : 'DEFEAT'}</h1>
+      <p class="sub">${md ? modeDef(md, variant).name : L.name} · ${md ? `${clanOf(G.teams[0]).name} vs ${clanOf(G.teams[1]).name}` : surv ? `The Horde has torn down your statue · ${clanOf(G.teams[0]).name}` : won ? (giant ? 'The enemy statue and the giant within it have fallen.' : 'The enemy statue has fallen.') : (giant ? 'Your statue lies in ruins and its giant is slain.' : 'Your statue has fallen.')} · ${time}</p>
       ${msg}
       ${endScreenHTML(won)}
       <div class="row">
@@ -1437,11 +1568,13 @@ function showLessonEnd(won, time) {
     </div>`;
   $('overlay').classList.remove('hidden');
   wireEndCharts();
-  const key = G.lesson.key, camp = G.lesson.campaign;
+  const key = G.lesson.key, camp = G.lesson.campaign, ck = G.lesson.clanKey;
   if (camp) $('btnTutMenu').textContent = 'Campaign map';
+  if (surv) { $('btnTutMenu').textContent = 'Survival menu'; $('btnRetry').textContent = 'Try again'; $('btnRetry').className = 'big'; }
+  if (md) $('btnTutMenu').textContent = 'Battle modes';
   if ($('btnNextLesson')) $('btnNextLesson').onclick = () => (camp ? showCampaignBriefing(next.key) : showBriefing(next.key));
-  $('btnRetry').onclick = () => (camp ? startCampaignLevel(key) : startLesson(key));
-  $('btnTutMenu').onclick = () => { newGame(randomSeed()); camp ? showCampaignMap() : showTutorialMenu(); };
+  $('btnRetry').onclick = () => (md ? startModeBattle(md, variant) : surv ? startSurvival(ck) : camp ? startCampaignLevel(key) : startLesson(key));
+  $('btnTutMenu').onclick = () => { newGame(randomSeed()); md ? showModesMenu() : surv ? showSurvivalMenu() : camp ? showCampaignMap() : showTutorialMenu(); };
 }
 
 function randomSeed() {

@@ -240,7 +240,7 @@ function drawUnitInAir(ctx, u, dying, fall, alpha, lift) {
     flash: u.flash, seed: u.seed, fall, alpha, perks: u.perks, lift,
     pray: u.praying && !dying ? u.pray % 1 : -1, rage: dying ? 0 : rageOf(u), panning: u.panning && !dying,
     flash: u.lastStand > 0 ? (Math.sin(RT * 30) > 0 ? 1 : 0) : u.flash,
-    wall: u.shieldWall, arch: u.type === 'archer' ? archPose(u, dying) : null, cast: u.swingKind === 'cast' || u.swingKind === 'summon',
+    wall: u.shieldWall, arch: u.type === 'archer' ? archPose(u, dying) : null, cast: u.swingKind === 'cast' || u.swingKind === 'summon', channel: !!u.channeling,
     chains: isGiant(u) ? giantChains(u) : 0, stone: u.isStatueGiant ? G.teams[u.team].statue.stone : null, guard: u.guardT > 0, invuln: u.invulnT > 0,
     petrified: !!u.petrified, brute: !!u.brute,
     starRanged: u.starRanged, grounded: u.grounded, aimFa: u.aimFa, pace: u.pace, salting: u.salting, laying: u.laying, javelin: !!(u.type === 'gladiator' && u.javelin), net: !!(u.type === 'gladiator' && u.net), netT: u.netT, kills: u.kills || 0, rise: u.riseT > 0 ? u.riseT : 0,
@@ -676,20 +676,20 @@ function drawPlacing(ctx) {
     const ok = w && w.team === 0 && w.progress >= 1 && w.tier !== 2;
     ctx.fillStyle = ok ? '#d8f0c8' : '#9c8f76';
     ctx.fillText(ok ? `Raise a palisade here (${w.reinforcing ? 'resume' : WALL_COST + ' gold'})` : 'Click one of your finished trenches', x, y - 24);
-  } else if (UI.placing === 'tar' || UI.placing === 'mine' || UI.placing === 'tower') {
+  } else if (ARCH_TRAPS.includes(UI.placing) || WIZ_RUNES.includes(UI.placing) || UI.placing === 'tower') {
     // the architect's work: a ghost at the cursor, red with the reason when it can't go there
     const tower = UI.placing === 'tower', yy = tower ? towerY() : clamp(y, LANE_TOP + 4, LANE_BOT - 4);   // towers always go at the back
     const problem = tower ? towerSpotProblem(me, x, yy) : trapSpotProblem(me, x, yy);
     ctx.globalAlpha = 0.55;
     if (tower) { const ghost = { x, y: yy, progress: 1, hp: 1, max: 1, team: 0, flash: problem ? 1 : 0 }; drawTower(ctx, ghost); drawTowerFront(ctx, ghost); }
-    else drawTrap(ctx, { kind: UI.placing, x, y: yy, team: 0, armed: true, magic: magicTraps(me), spotted: [true, true] });
+    else drawTrap(ctx, { kind: UI.placing, x, y: yy, team: 0, armed: true, magic: false, spotted: [true, true], prog: 1 });
     ctx.globalAlpha = 1;
     ctx.strokeStyle = problem ? '#d04030' : '#8fbf6a';
     ctx.lineWidth = 1.5;
     ellipse(ctx, x, yy, tower ? 34 : UI.placing === 'tar' ? TRAP.tar.coverR + 3 : 14, tower ? 8 : UI.placing === 'tar' ? 11 : 5);
     ctx.stroke();
     ctx.fillStyle = problem ? '#ffb3a8' : '#d8f0c8';
-    const name = tower ? `Archer tower (${TOWER.cost} gold)` : `${TRAP[UI.placing].name} (${trapCost(me, UI.placing)} gold)`;
+    const name = tower ? `Archer tower (${TOWER.cost} gold)` : `${trapDef(UI.placing).name} (${trapCost(me, UI.placing)} ${isRune(UI.placing) ? 'mana' : 'gold'})`;
     ctx.fillText(problem || name, x, yy - (tower ? TOWER.h + 40 : 24));
   } else if (UI.placing === 'salt') {
     const m = mineAt(x, y, false);
@@ -780,6 +780,8 @@ function render(ctx) {
       });
     }
   }
+  for (const s of [...G.walls, ...G.towers, ...G.teams.filter(t => !t.noCastle).map(t => t.statue)]) if (s.ward > 0 && inView(s.x)) drawWard(ctx, s);
+  drawWorkMarks(ctx);
   drawProjectiles(ctx);
   drawSpellShots(ctx);
   drawParticles(ctx);

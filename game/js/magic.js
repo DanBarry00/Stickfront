@@ -3,6 +3,9 @@
 
 const castableSpells = u => spellsOf(u.type).filter(k => u.perks[SPELLS[k].perk]);
 
+// A mage up a wizard tower reaches further with its spells too (castsFree: wizard.js).
+const spellRange = (u, S) => S.range + (u.onTower ? u.towerBonus || 0 : 0);
+
 // Spell areas are wide circles squashed to the depth of the battle lane.
 const inArea = (o, x, y, r) => Math.abs(o.x - x) <= r && Math.abs(o.y - y) <= 64;
 
@@ -36,19 +39,20 @@ function updateMageCasting(u, dt) {
   if (!p) return false;
   const S = SPELLS[p.k];
   if (!u.perks[S.perk]) { u.pendingCast = null; return false; }
-  if (Math.abs(p.x - u.x) > S.range) {
+  if (Math.abs(p.x - u.x) > spellRange(u, S)) {
+    if (u.onTower) { if (u.team === 0 && p.forced) toast('Out of reach of the tower'); u.pendingCast = null; return false; }   // (it can't leave its post to get closer)
     if (u.swing >= 0) return true;
     moveTo(u, p.x - Math.sign(p.x - u.x) * S.range * 0.85, u.y, dt);
     return true;
   }
   if (u.swing >= 0 || u.gcd > 0 || u.cd[p.k] > 0) return false;   // finish the staff swing / recharge first
-  const team = G.teams[u.team];
-  if (team.mana < S.mana) {
+  const team = G.teams[u.team], free = castsFree(u);
+  if (!free && team.mana < S.mana) {
     if (u.team === 0 && p.forced) toast(`Not enough mana for ${S.name} (${S.mana})`);
     u.pendingCast = null;
     return false;
   }
-  team.mana -= S.mana;
+  if (!free) team.mana -= S.mana;
   u.cd[p.k] = S.cd;
   u.gcd = SPELL_GCD;
   u.facing = p.x >= u.x ? 1 : -1;
@@ -86,7 +90,7 @@ function releaseSpell(u, c) {
 function bestSpot(u, S, centers, members, weight) {
   let best = null;
   for (const c of centers) {
-    if (Math.abs(c.x - u.x) > S.range + 60) continue;
+    if (Math.abs(c.x - u.x) > spellRange(u, S) + 60) continue;
     let s = 0;
     for (const m of members) if (inArea(m, c.x, c.y, S.r)) s += weight(m);
     if (c.bonus) s += c.bonus;
@@ -133,7 +137,7 @@ function autoCast(u) {
   let best = null;
   for (const k of castableSpells(u)) {
     const S = SPELLS[k];
-    if (u.cd[k] > 0 || team.mana < S.mana + SPELL_RESERVE) continue;
+    if (u.cd[k] > 0 || (!castsFree(u) && team.mana < S.mana + SPELL_RESERVE)) continue;
     const plan = planSpell(u, k, S, allies, foes);
     if (plan && plan.score >= 2 && (!best || plan.score > best.score)) best = { ...plan, k };
   }

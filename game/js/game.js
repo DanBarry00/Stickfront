@@ -182,7 +182,7 @@ function dequeueUnit(team, type) {
   if (i < 0) return;
   const [item] = q.splice(i, 1);
   team.gold += item.cost.gold;
-  team.mana = Math.min(MAX_MANA, team.mana + item.cost.mana);
+  team.mana = Math.min(manaCap(team), team.mana + item.cost.mana);
 }
 
 // Each group trains the unit at the head of its queue; the rest wait their turn.
@@ -214,12 +214,21 @@ function startResearch(team, type, key) {
   if (def.requires && !team.upgrades[type][def.requires]) return say(`Requires ${upgradeDef(type, def.requires).name}`);
   if (team.research[type]) return say(`The ${buildingName(type)} is already researching`);
   if (type === 'castle' && !hasArchitect(team)) return say('Castle upgrades need an Architect: train one first');
-  const price = upgradePrice(team, type, def);   // after the architects' savings
+  const founders = def.repeat ? ['architect', 'wizard'].map(t => G.units.find(u => u.team === team.id && !u.dead && u.type === t)) : [];
+  if (def.repeat) {   // the Founding Stone
+    if (popCap(team) >= POP_MAX) return say(`Your population is already as big as it gets (${POP_MAX})`);
+    if (!founders[1]) return say('A Founding Stone needs a Castle Wizard too: both are entombed in it');
+  }
+  const price = upgradePrice(team, type, def);   // after the Architect's and Castle Wizard's savings
   if (team.gold < price.gold) return say('Not enough gold');
   if (team.mana < price.mana) return say('Not enough mana');
   team.gold -= price.gold;
   team.mana -= price.mana;
   team.research[type] = { key, t: 0, paid: price };
+  if (def.repeat) {
+    for (const u of founders) entomb(u);
+    if (team.id === 0) toast('Your Architect and Castle Wizard are entombed in the walls: the Founding Stone is being laid');
+  }
   return true;
 }
 
@@ -230,9 +239,10 @@ function cancelResearch(team, type) {
   const r = team.research[type];
   if (!r) return;
   const def = upgradeDef(type, r.key);
+  if (def.repeat) return;   // (a Founding Stone can't be undone: its builders are already entombed)
   const paid = r.paid || { gold: def.cost, mana: def.mana || 0 };
   team.gold += paid.gold;
-  team.mana = Math.min(MAX_MANA, team.mana + paid.mana);
+  team.mana = Math.min(manaCap(team), team.mana + paid.mana);
   team.research[type] = null;
 }
 
@@ -240,13 +250,19 @@ function updateResearch(team, dt) {
   for (const type of RESEARCH_TYPES) {
     const r = team.research[type];
     if (!r) continue;
-    if (type === 'castle' && !hasArchitect(team)) { r.waiting = true; continue; }
+    if (type === 'castle' && !hasArchitect(team) && r.key !== 'found') { r.waiting = true; continue; }   // (a Founding Stone's builders are already in the walls)
     r.waiting = false;
     r.t += dt;
     const def = upgradeDef(type, r.key);
     if (r.t < def.time) continue;
-    team.upgrades[type][r.key] = true;
     team.research[type] = null;
+    if (def.repeat) {   // a Founding Stone: one more mouth the castle can feed, and it can be laid again
+      team.popBonus = (team.popBonus || 0) + 1;
+      team.foundN = (team.foundN || 0) + 1;
+      if (team.id === 0) toast(`The Founding Stone is laid: population ${popCap(team)}`);
+      continue;
+    }
+    team.upgrades[type][r.key] = true;
     // Reinforced Towers braces the towers already standing too
     if (type === 'architect' && r.key === 'tower2') for (const t of G.towers) if (t.team === team.id && !t.dead) { t.max = Math.round(t.max * TOWER.hp2); t.hp = Math.round(t.hp * TOWER.hp2); }
     if (/^archer\d$/.test(def.key) && team.archers.length < ARCHER_XS.length) team.archers.push(makeCastleArcher(team, team.archers.length));
@@ -328,7 +344,8 @@ function setStance(team, s) {
     if (u.team !== team.id || u.dead) continue;
     u.ownStance = null;
     if (u.type === 'miner' && ['mana', 'stance', 'build', 'replenish', 'pan'].includes(u.order.type)) continue;
-    if (u.type === 'architect' && ['stance', 'build', 'trap'].includes(u.order.type)) continue;   // architects keep at their work
+    if (u.type === 'architect' && ['stance', 'build', 'trap', 'rework'].includes(u.order.type)) continue;   // the Architect keeps at its work
+    if (u.type === 'wizard' && ['stance', 'trap', 'rework', 'ward', 'convert'].includes(u.order.type)) continue;   // ...and the Castle Wizard at its
     if (u.order.type === 'tower') continue;   // archers posted in towers stay put
     if (u.order.type === 'refit') continue;
     setOrder(u, { type: 'stance' });
@@ -347,13 +364,13 @@ function setUnitStance(u, s) {
 }
 
 // Recall only the miners into the castle (or send them back to work). The player's button
-// (withArchitects) calls the architects in too, dropping whatever they were building.
+// (withArchitects) calls the Architect and Castle Wizard in too, dropping whatever they were doing.
 function setMinerGarrison(team, on, withArchitects) {
   team.minersIn = on;
   for (const u of G.units) {
     if (u.team !== team.id || u.dead) continue;
     if (u.type === 'miner' && ['work', 'move', 'hold', 'garrison', 'attack'].includes(u.order.type)) setOrder(u, { type: 'stance' });
-    if (u.type === 'architect' && withArchitects && on && ['build', 'trap', 'move', 'hold', 'attack'].includes(u.order.type)) setOrder(u, { type: 'stance' });
+    if ((u.type === 'architect' || u.type === 'wizard') && withArchitects && on && ['build', 'trap', 'rework', 'ward', 'convert', 'move', 'hold', 'attack'].includes(u.order.type)) setOrder(u, { type: 'stance' });
   }
 }
 
@@ -437,7 +454,7 @@ function updateShrine(dt) {
   if (s.owner >= 0) {
     const t = G.teams[s.owner];
     t.gold += SHRINE.gold * dt;
-    t.mana = Math.min(MAX_MANA, t.mana + SHRINE.mana * dt);
+    t.mana = Math.min(manaCap(t), t.mana + SHRINE.mana * dt);
     G.stats[s.owner].gold += SHRINE.gold * dt;
     G.stats[s.owner].mana += SHRINE.mana * dt;
   }
@@ -474,7 +491,7 @@ function castleArcherStats(team) {
 // Defense beats offense (see DEFENSE): a statue left in peace mends itself, and a side that has
 // fallen far behind rallies until it recovers.
 function updateDefense(team, dt) {
-  if (G.over) return;
+  if (G.over || team.noCastle || G.clash) return;   // (no castle to rally round)
   const s = team.statue, foe = 1 - team.id;
   if (!s.dead && s.hp < s.max) {
     const threat = G.units.some(e => e.team === foe && !e.dead && !e.inside && !isWorker(e) && Math.abs(e.x - s.x) < DEFENSE.regenR);
@@ -496,7 +513,7 @@ function updateDefense(team, dt) {
 // archers' reach, fading to nothing at the middle of the map.
 function homeGround(u) {
   const team = G.teams[u.team];
-  if (!team) return 0;
+  if (!team || team.noCastle) return 0;
   const d = team.dir > 0 ? u.x : WORLD_W - u.x, reach = castleArcherStats(team).reach, mid = WORLD_W / 2;
   return DEFENSE.homeMax * clamp((mid - d) / (mid - reach), 0, 1);
 }
@@ -718,10 +735,12 @@ function update(dt) {
     G.ai.update(dt);
     if (G.autopilot) G.autopilot.update(dt);
     if (G.lesson) updateLesson(dt);
+    if (G.clash) clashTick();
   }
   updateShrine(dt);
   for (const m of G.mines) if (m.saltT > 0) m.saltT -= dt;   // salt wears off
   updateTraps(dt);
+  updateWardFlash(dt);
   for (const team of G.teams) updateStudy(team, dt);
   recordHistory();
   assignDefendSlots();
@@ -738,7 +757,7 @@ function update(dt) {
   updateProjectiles(dt);
   updateSpellWorld(dt);
   updateParticles(dt);
-  G.units = G.units.filter(u => !(u.dead && u.deathT > (u.petrified ? PETRIFIED_TIME + 3 : 9)));   // (Medusa's stone victims stand a while)
+  G.units = G.units.filter(u => !(u.dead && (u.entombed || u.deathT > (u.petrified ? PETRIFIED_TIME + 3 : 9))));   // (Medusa's stone victims stand a while)
   G.walls = G.walls.filter(w => !w.dead || w.ruin);   // ruins stay until rebuilt
   G.towers = G.towers.filter(t => !t.dead || t.ruin);
   G.selection = G.selection.filter(u => !u.dead);
