@@ -70,8 +70,10 @@ function swingAngle(s, rest) {
 // o: x y facing scale team type walk moving swing carry carryCap gear flash seed
 //    fall alpha perks pray(-1 | 0..1) lift rage(0..1) arch{phase,k,fa}
 // Robed mage: hooded, staff in hand. Raises the staff overhead to cast, thrusts it to heal/strike.
+// The Castle Wizard wears a slate robe and a tall brimmed hat, and carries a crystal-topped staff,
+// held up while it channels a ward or works a tower.
 function drawMage(ctx, o) {
-  const st = TEAM_STYLE[o.team], f = o.facing, P = o.perks || NO_PERKS, cleric = o.type === 'cleric', necro = o.type === 'necromancer';
+  const st = TEAM_STYLE[o.team], f = o.facing, P = o.perks || NO_PERKS, cleric = o.type === 'cleric', necro = o.type === 'necromancer', wiz = o.type === 'wizard';
   ctx.save();
   ctx.translate(o.x, o.y - (o.lift || 0));
   if (o.fall) ctx.rotate(-f * o.fall * 1.5);
@@ -81,17 +83,18 @@ function drawMage(ctx, o) {
   ctx.lineJoin = 'round';
   const mon = isMonster(o.team);
   const col = o.flash > 0 ? '#6e1510' : mon ? MONSTER.skin : st.body;
-  const robe = o.flash > 0 ? '#6e1510' : mon ? (cleric ? '#5a1418' : MONSTER.robe) : cleric ? '#a39a80' : necro ? '#1e2219' : '#2a1c2c';   // the fiends' priests wear blood red
-  const robeDark = mon ? MONSTER.robeDark : cleric ? '#766d58' : necro ? '#0b0d09' : '#150c16';
-  const trim = cleric ? shade(st.accent, -0.1) : necro ? shade(st.accent, -0.45) : o.team === 0 ? '#6a4a8a' : '#8a2030';
-  const orbCol = cleric ? '#fff0b8' : necro ? '#7dff8a' : '#b04dff';
+  const robe = o.flash > 0 ? '#6e1510' : mon ? (cleric ? '#5a1418' : MONSTER.robe) : cleric ? '#a39a80' : necro ? '#1e2219' : wiz ? '#2a3346' : '#2a1c2c';   // the fiends' priests wear blood red
+  const robeDark = mon ? MONSTER.robeDark : cleric ? '#766d58' : necro ? '#0b0d09' : wiz ? '#121722' : '#150c16';
+  const trim = cleric || wiz ? shade(st.accent, -0.1) : necro ? shade(st.accent, -0.45) : o.team === 0 ? '#6a4a8a' : '#8a2030';
+  const orbCol = cleric ? '#fff0b8' : necro ? '#7dff8a' : wiz ? '#a8dcff' : '#b04dff';
   const t = RT + o.seed, ph = o.walk, mv = o.moving, s = o.swing;
-  const casting = o.cast && s >= 0;
+  const casting = (o.cast && s >= 0) || (wiz && o.channel);
   const hipY = -27 - (mv ? Math.abs(Math.cos(ph)) * 1.4 : Math.sin(t * 2) * 0.4);
   const sx = 1 * f, sy = hipY - 23, hx = sx + 1.5 * f, hy = sy - 9;
 
   let th;
-  if (casting) th = s < 0.5 ? lerp(0.5, -1.55, easeOut(s / 0.5)) : lerp(-1.55, 0.35, (s - 0.5) / 0.5);
+  if (wiz && o.channel && s < 0) th = -1.45 + Math.sin(t * 6) * 0.05;
+  else if (casting) th = s < 0.5 ? lerp(0.5, -1.55, easeOut(s / 0.5)) : lerp(-1.55, 0.35, (s - 0.5) / 0.5);
   else if (s >= 0) th = s < 0.5 ? lerp(0.5, -0.3, s / 0.5) : lerp(-0.3, 0.5, (s - 0.5) / 0.5);
   else th = 0.5 + (mv ? Math.sin(ph + Math.PI) * 0.15 : Math.sin(t * 2) * 0.04);
   const [ex, ey] = polar(sx, sy + 1, th + 0.3, 8, f);
@@ -124,7 +127,7 @@ function drawMage(ctx, o) {
   ctx.moveTo(sx - 5, sy);
   ctx.lineTo(sx + 5, sy);
   ctx.lineTo(13 + sway, -9);
-  if (cleric) ctx.lineTo(-13 + sway, -9);
+  if (cleric || wiz) ctx.lineTo(-13 + sway, -9);
   else for (let i = 0; i <= 6; i++) ctx.lineTo(13 + sway - i * (26 / 6), -9 + (i % 2 ? -3 : 1));   // ragged hem
   ctx.closePath();
   ctx.fill();
@@ -154,14 +157,35 @@ function drawMage(ctx, o) {
   ctx.fillStyle = robe;
   ctx.strokeStyle = robeDark;
   ctx.lineWidth = 1.2;
-  ctx.beginPath();
-  ctx.arc(hx - 1 * f, hy - 0.5, 8.6, Math.PI * 0.9, Math.PI * 2.1);
-  if (!cleric) ctx.lineTo(hx - 13 * f, hy - 2);
-  ctx.lineTo(hx - 7 * f, hy + 8);
-  ctx.closePath();
-  ctx.fill();
-  ctx.stroke();
-  ctx.fillStyle = cleric ? 'rgba(255,240,190,0.5)' : necro ? 'rgba(125,255,138,0.8)' : 'rgba(200,80,255,0.75)';
+  if (wiz) {
+    // a tall, wide-brimmed hat, its crown slumped over at the tip, with a band in the side's colour
+    ctx.beginPath();
+    ctx.ellipse(hx, hy - 4.5, 12, 2.8, 0, 0, TAU);
+    ctx.fill(); ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(hx - 6.5, hy - 5);
+    ctx.lineTo(hx - 2 * f, hy - 19);
+    ctx.quadraticCurveTo(hx - 3 * f, hy - 25, hx - 9 * f, hy - 22);
+    ctx.lineTo(hx + 1 * f, hy - 16);
+    ctx.lineTo(hx + 6.5, hy - 5);
+    ctx.closePath();
+    ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = trim;
+    ctx.lineWidth = 1.8;
+    ctx.beginPath(); ctx.moveTo(hx - 6, hy - 7); ctx.lineTo(hx + 6, hy - 7); ctx.stroke();
+    // a grey beard
+    ctx.fillStyle = '#9a968c';
+    ctx.beginPath(); ctx.moveTo(hx + 1 * f, hy + 2); ctx.lineTo(hx + 6 * f, hy + 2); ctx.lineTo(hx + 3 * f, hy + 11); ctx.closePath(); ctx.fill();
+  } else {
+    ctx.beginPath();
+    ctx.arc(hx - 1 * f, hy - 0.5, 8.6, Math.PI * 0.9, Math.PI * 2.1);
+    if (!cleric) ctx.lineTo(hx - 13 * f, hy - 2);
+    ctx.lineTo(hx - 7 * f, hy + 8);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+  ctx.fillStyle = cleric ? 'rgba(255,240,190,0.5)' : necro ? 'rgba(125,255,138,0.8)' : wiz ? 'rgba(170,220,255,0.8)' : 'rgba(200,80,255,0.75)';
   ctx.beginPath();
   ctx.arc(hx + 3 * f, hy - 0.5, 1.2, 0, TAU);
   ctx.fill();
@@ -170,7 +194,7 @@ function drawMage(ctx, o) {
   // staff with its orb
   const [tx, ty] = polar(hx2, hy2, staffAng, P.focus ? 32 : 30, f);
   const [lx, ly] = polar(hx2, hy2, staffAng + Math.PI, 17, f);
-  ctx.strokeStyle = cleric ? '#7d5e34' : necro ? '#3a3226' : '#2a1c14';
+  ctx.strokeStyle = cleric ? '#7d5e34' : necro ? '#3a3226' : wiz ? '#5a4026' : '#2a1c14';
   ctx.lineWidth = 2.6;
   ctx.beginPath();
   ctx.moveTo(lx, ly);
@@ -184,6 +208,12 @@ function drawMage(ctx, o) {
     ctx.fillStyle = '#103a14';
     ctx.fillRect(tx - 2.2 + f * 0.6, ty - 4, 1.6, 1.8);
     ctx.fillRect(tx + 0.6 + f * 0.6, ty - 4, 1.6, 1.8);
+  } else if (wiz) {
+    // a pointed crystal set in a claw of wood
+    ctx.fillStyle = '#bfe4ff';
+    ctx.strokeStyle = '#3a5a78';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(tx, ty - 9); ctx.lineTo(tx + 3, ty - 3); ctx.lineTo(tx, ty + 1); ctx.lineTo(tx - 3, ty - 3); ctx.closePath(); ctx.fill(); ctx.stroke();
   } else if (!cleric) {
     // gnarled crook
     ctx.beginPath();
@@ -205,7 +235,7 @@ function drawMage(ctx, o) {
   g.addColorStop(1, rgba(orbCol, 0));
   ctx.fillStyle = g;
   ctx.fillRect(tx - R, ty - 2 - R, 2 * R, 2 * R);
-  ctx.fillStyle = necro ? 'rgba(0,0,0,0)' : orbCol;   // (the Necromancer's skull glows instead of an orb)
+  ctx.fillStyle = necro || wiz ? 'rgba(0,0,0,0)' : orbCol;   // (the Necromancer's skull and the wizard's crystal glow instead of an orb)
   ctx.beginPath();
   ctx.arc(tx, ty - 2, P.focus ? 3.4 : 2.8, 0, TAU);
   ctx.fill();
@@ -1308,11 +1338,12 @@ function drawStar(ctx, x, y, r, spin) {
 
 function drawStickman(ctx, o) {
   if (o.type === 'giant') return drawGiant(ctx, o);
-  if (o.type === 'cleric' || o.type === 'warlock' || o.type === 'necromancer') return drawMage(ctx, o);
+  if (o.type === 'cleric' || o.type === 'warlock' || o.type === 'necromancer' || o.type === 'wizard') return drawMage(ctx, o);
   if ((o.type === 'flyer' && !o.grounded) || o.type === 'firebird') return drawFlyer(ctx, o);
   if (o.type === 'ballista') return drawBallista(ctx, o);
   if (o.type === 'golem' || (o.type === 'zombie' && o.brute)) return drawGolem(ctx, o);   // (a Hulk: a golem of rotten flesh)
   if (o.type === 'medusa') return drawMedusa(ctx, o);
+  if (o.type === 'wagon') return drawWagon(ctx, o);
   const st = TEAM_STYLE[o.team], f = o.facing, P = o.perks || NO_PERKS;
   const isZom = o.type === 'zombie';
   ctx.save();
@@ -4271,7 +4302,8 @@ function drawTowerFront(ctx, tw) {
     }
   }
   ctx.restore();
-  structureBar(ctx, x, peak - 26, 36, tw);
+  if (tw.wizard || tw.converting) drawWizardTowerTop(ctx, tw);
+  structureBar(ctx, x, peak - 26 - (tw.wizard ? 52 : 0), 36, tw);
 }
 
 function structureBar(ctx, x, y, w, s) {
@@ -4450,24 +4482,7 @@ function drawRuin(ctx, s, showPrice) {
   ctx.restore();
 }
 
-// Traps are hidden from the enemy: drawn for their owner (and for neutral traps), or once one of
-// your saboteurs has sniffed it out. A trap being laid is drawn faint.
-function drawTrap(ctx, trap) {
-  if (trap.team === 1 && !trap.spotted[0]) return;
-  ctx.save();
-  ctx.globalAlpha = trap.armed ? (trap.team === -1 ? 0.8 : 0.95) : 0.35 + 0.3 * trap.prog;
-  const x = trap.x, y = trap.y, tar = trap.kind === 'tar';
-  if (tar) drawThatchCover(ctx, x, y, TRAP.tar.coverR, trap.magic);
-  else { ctx.save(); ctx.translate(x, y); ctx.scale(1.4, 1.4); drawPlateMine(ctx, 0, 0, trap.magic); ctx.restore(); }
-  if (trap.team === 1) {   // an enemy trap your saboteur found: marked in red
-    const r = tar ? 12 : 8;
-    ctx.globalAlpha = 1;
-    ctx.strokeStyle = 'rgba(230,80,60,0.85)';
-    ctx.lineWidth = 1.8;
-    ctx.beginPath(); ctx.moveTo(x - r, y - r); ctx.lineTo(x + r, y + r * 0.5); ctx.moveTo(x + r, y - r); ctx.lineTo(x - r, y + r * 0.5); ctx.stroke();
-  }
-  ctx.restore();
-}
+// (drawTrap and the other traps, runes, wards and wizard towers: works.js)
 
 // A tar pit hidden under a thatched cover: a mat of straw and brush laid over the hole, sagging a
 // little in the middle where a glint of tar shows through, with grass growing up round the rim.
@@ -4597,6 +4612,7 @@ function drawPlateMine(ctx, x, y, magic) {
 // A sprung tar pit: a wide glossy black pool, bubbling (and smouldering violet when it's magic),
 // with the broken thatch that hid it floating and slowly sinking. It lingers a good while.
 function drawTarPool(ctx, p) {
+  if (p.kind === 'caltrops') return drawCaltropField(ctx, p);
   const fade = Math.min(1, (p.dur - p.t) / 3, p.t / 0.25);
   const r = p.r, ry = r * 0.42;
   ctx.save();
@@ -4768,6 +4784,14 @@ function drawUnitIcon(cv, type) {
   const head = (x, y, r = 4.5) => { c.fillStyle = '#e8dcc0'; c.beginPath(); c.arc(x, y, r, 0, TAU); c.fill(); };
   const line = (col, w, pts) => { c.strokeStyle = col; c.lineWidth = w; c.beginPath(); pts.forEach(([x, y], i) => (i ? c.lineTo(x, y) : c.moveTo(x, y))); c.stroke(); };
   switch (type) {
+    case 'wizard':
+      // a crystal-topped staff before a pointed hat
+      c.fillStyle = '#2a3346'; c.beginPath(); c.moveTo(8, 30); c.lineTo(19, 6); c.quadraticCurveTo(22, 2, 27, 5); c.lineTo(22, 10); c.lineTo(28, 30); c.closePath(); c.fill();
+      c.fillStyle = '#3a4560'; c.beginPath(); c.ellipse(18, 30, 13, 3.4, 0, 0, TAU); c.fill();
+      line(gc, 2, [[11, 26], [25, 26]]);
+      line(wood, 2.6, [[29, 36], [33, 11]]);
+      c.fillStyle = '#bfe4ff'; c.beginPath(); c.moveTo(33.5, 2); c.lineTo(36.5, 8); c.lineTo(33.5, 12); c.lineTo(30.5, 8); c.closePath(); c.fill();
+      break;
     case 'architect':
       // a mason's hammer over rolled plans
       c.fillStyle = '#d8c89a'; c.save(); c.translate(20, 22); c.rotate(-0.5); c.fillRect(-14, -4, 28, 8); c.restore();

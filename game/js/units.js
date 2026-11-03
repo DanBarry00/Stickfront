@@ -292,7 +292,7 @@ const rageOf = u => (u.lastStand > 0 ? 1 : u.perks.rage ? clamp(1 - u.hp / u.max
 // A Cleric's touch (quickened, blessed) and a Warlock's curse (slowed, weakened) are exact opposites, so they cancel out.
 const spellDmg = u => 1 + (u.fx.empower > 0 ? MAGE_TOUCH.dmg : 0) - (u.fx.enfeeble > 0 ? MAGE_TOUCH.dmg : 0);
 const spellSpeed = u => 1 + (u.fx.haste > 0 ? MAGE_TOUCH.speed : 0) - (u.fx.slow > 0 ? MAGE_TOUCH.speed : 0);
-const dmgMult = u => (1 + 0.7 * rageOf(u)) * (1 + 0.04 * u.drillN) * (1 + 0.1 * u.insp) * (u.fury ? 1 + MAGE_AURA.fury : 1) * spellDmg(u) * clanMul(G.teams[u.team], 'dmg', u.type) * (u.type === 'gladiator' ? gladiatorMul(u) : 1);
+const dmgMult = u => (1 + 0.7 * rageOf(u)) * (1 + 0.04 * u.drillN) * (1 + 0.1 * u.insp) * (u.fury ? 1 + MAGE_AURA.fury : 1) * spellDmg(u) * clanMul(G.teams[u.team], 'dmg', u.type) * (u.type === 'gladiator' ? gladiatorMul(u) : 1) * towerMageMul(u);
 const atkTimeOf = u => (u.atk * (1 - 0.45 * rageOf(u)) * (1 - 0.08 * u.insp) * (u.guardT > 0 ? GIANT_GUARD.atkMul : 1)) / spellSpeed(u) / (1 + (u.hope ? HOPE.atk : 0) - (u.fear ? HOPE.atk : 0));   // a guarding giant swings slower
 const wallHeight = w => (w.tier === 2 ? WALL_H[1] : WALL_H[0]);
 
@@ -480,12 +480,18 @@ function onSwingHit(u) {
 function buildHit(u, w) {
   if (!w || w.dead) return;
   spawnBurst(u.x + u.facing * 18, u.y - 20, 3, { color: w.stone, speed: 60, up: 60, g: 400, life: 0.5, size: 2 });
+  if (w.isStatue) {
+    // patching the statue's stone, a chip at a time
+    w.hp = Math.min(w.max, w.hp + STATUE_REPAIR);
+    if (w.hp >= w.max && w.team === 0) floatText(w.x, LANE_TOP - 140, 'Statue repaired', '#c9b27a');
+    return;
+  }
   if (w.isTower) {
     // raising an archer tower, or mending one
     if (w.progress < 1) {
       w.progress = Math.min(1, w.progress + 1 / TOWER.buildHits);
       w.hp = Math.max(1, w.max * w.progress);
-      if (w.progress >= 1 && w.team === 0) toast('Archer tower built: right-click it with archers to post them');
+      if (w.progress >= 1 && w.team === 0) toast('Archer tower built: right-click it with an archer to post them');
     } else w.hp = Math.min(w.max, w.hp + w.max * WALL_REPAIR);
     return;
   }
@@ -512,17 +518,8 @@ function buildHit(u, w) {
   }
 }
 
-// A trench needs work: unfinished, palisade under way, or damaged.
-const trenchNeedsWork = w => !!w && !w.dead && (w.progress < 1 || w.reinforcing || w.hp < w.max);
-
-// Send builders to repair the most damaged of the team's finished trenches. Returns the trench.
-function repairTrenches(team, builders) {
-  const hurt = G.walls.filter(w => w.team === team.id && !w.dead && w.progress >= 1 && w.hp < w.max);
-  if (!hurt.length) return null;
-  const w = hurt.sort((a, b) => a.hp / a.max - b.hp / b.max)[0];
-  for (const u of builders) setOrder(u, { type: 'build', wall: w });
-  return w;
-}
+// A work needs the mallet: unfinished, palisade under way, or damaged (a statue: damaged).
+const trenchNeedsWork = w => !!w && !w.dead && (w.isStatue ? w.hp < w.max : w.progress < 1 || w.reinforcing || w.hp < w.max);
 
 // Move into reach of target and attack it (melee swing or bow shot).
 function engage(u, t, dt) {
@@ -1103,7 +1100,7 @@ function doPan(u, team, dt) {
     u.panT -= 1;
     const g = team.upgrades.castle.sifter ? SIFTER_GOLD : 1;   // the Sifter catches more of the gold
     team.gold += g;
-    team.mana = Math.min(MAX_MANA, team.mana + 1);
+    team.mana = Math.min(manaCap(team), team.mana + 1);
     G.stats[u.team].gold += g;
     G.stats[u.team].mana += 1;
     u.panTicks++;
@@ -1172,7 +1169,7 @@ function doMana(u, team, dt) {
   u.pray += (dt * (u.cheerT > 0 ? QM.cheerWork : 1)) / PRAY_TIME;
   if (Math.floor(prev + 0.5) < Math.floor(u.pray + 0.5)) {
     const amt = Math.round(MANA_PER_PRAYER * u.manaMul * (clanOf(team).prayer || 1));   // Mercenaries pray poorly, the Arcane Circle well
-    team.mana = Math.min(MAX_MANA, team.mana + amt);
+    team.mana = Math.min(manaCap(team), team.mana + amt);
     G.stats[u.team].mana += amt;
     st.glow = 1;
     const col = TEAM_STYLE[u.team].crystal;
@@ -1187,10 +1184,13 @@ function doMana(u, team, dt) {
 function doBuild(u, team, dt) {
   const w = u.order.wall;
   if (!trenchNeedsWork(w)) { setOrder(u, { type: 'stance' }); return; }
+  if (u.order.auto && workDanger(team, w.x)) { setOrder(u, { type: 'stance' }); return; }   // (its own idea: not into a fight)
   if (u.swing >= 0) return;
-  const wx = w.x - team.dir * 22, wy = w.isTower ? clamp(w.y + ((u.id % 3) - 1) * 10, LANE_TOP, LANE_BOT) : LANE_TOP + 8 + (u.id % 4) * 24;
+  // a statue is mended from in front of its plinth
+  const wx = w.isStatue ? w.x + team.dir * (w.halfW + 10) : w.x - team.dir * 22;
+  const wy = w.isTower ? clamp(w.y + ((u.id % 3) - 1) * 10, LANE_TOP, LANE_BOT) : w.isStatue ? LANE_TOP + 12 + (u.id % 4) * 20 : LANE_TOP + 8 + (u.id % 4) * 24;
   if (moveTo(u, wx, wy, dt)) {
-    u.facing = team.dir;
+    u.facing = w.isStatue ? -team.dir : team.dir;
     if (u.atkCd <= 0) startSwing(u, 'build', w);
   }
 }
@@ -1259,6 +1259,14 @@ function damage(t, amt, src, aoe) {
     if (t.sealed) { t.flash = 0.1; return; }   // (a campaign statue warded until its level's goal allows)
     if (src && src.type === 'ballista') amt = Math.round(amt * BALLISTA.structureMul);   // siege bolts wreck trenches and statues
     if (src && src.type === 'saboteur' && t.isWall) amt = Math.round(amt * (src.perks.sappers ? SABOTEUR.trenchMulSappers : SABOTEUR.trenchMul));   // saboteurs undermine trenches
+    if (t.ward > 0) {   // a Castle Wizard's ward takes the blow first
+      const soak = Math.min(t.ward, amt);
+      t.ward -= soak;
+      amt -= soak;
+      t.wardFlash = 0.25;
+      if (chance(0.5)) G.particles.push({ kind: 'spark', x: t.x + rnd(-1, 1) * (t.halfW || 12), y: (t.isStatue ? LANE_TOP - rnd(20, 160) : t.isTower ? t.y - rnd(20, 90) : LANE_TOP + rnd(-30, 40)), vx: rnd(-20, 20), vy: rnd(-30, 0), life: 0.5, max: 0.5, color: '#a8d8ff', size: 1.8 });
+      if (amt <= 0) return;
+    }
     t.hp -= amt;
     t.flash = 0.15;
     if (src) debugDamage(src, amt, true);
@@ -1283,6 +1291,7 @@ function damage(t, amt, src, aoe) {
   if (t.lastStand > 0) { t.flash = 0.12; return; }   // already living on borrowed time
   if (t.ward) amt = Math.max(1, Math.round(amt * (1 - MAGE_AURA.ward)));   // a Cleric's ward nearby
   if (t.hope || t.fear) amt = Math.max(1, Math.round(amt * (1 - (t.hope ? HOPE.dmg : 0) + (t.fear ? HOPE.dmg : 0))));   // Hope and Fear
+  if (t.curseT > 0) amt = Math.round(amt * (1 + RUNE.hex.curse));   // a reinforced hex's curse
   if (t.type === 'zombie' && src && (src.castle || isRanged(src))) amt = Math.max(1, Math.round(amt * NECRO.rangedMul));   // arrows pass through rotten flesh
   const home = t.type === 'zombie' ? 0 : homeGround(t);   // defenders fight better near their own castle (the dead don't care)
   if (home) amt = Math.max(1, Math.round(amt * (1 - home)));
@@ -1329,7 +1338,7 @@ function damage(t, amt, src, aoe) {
   if (src) debugDamage(src, Math.min(amt, amt + t.hp));
   spawnBurst(t.x, t.y - 38, 6, { color: '#5c0d0b', speed: 90, up: 40, g: 500, life: 0.6, size: 2.2 });
   if (chance(0.6)) addDecal(t.x + rnd(-12, 12), t.y + rnd(-3, 4), rnd(1.5, 4), 0.55);
-  if (src && !src.isStructure) {   // miners swing back at it; soldiers charge a shooter (shooterToCharge)
+  if (src && !src.isStructure && src.team !== t.team) {   // miners swing back at it; soldiers charge a shooter (shooterToCharge); (not at a hexed friend)
     t.lastAttacker = src;
     t.retaliateT = 4;
   }
@@ -1378,7 +1387,7 @@ function killUnit(u, src) {
   leaveRampart(u);
   addDecal(u.x - u.facing * 14, u.y + 1, rnd(6, 10), 0.6);
   if (src && G.stats[src.team]) {   // (kills by the Monolith tower's neutral archers count for nobody)
-    G.stats[src.team].kills++;
+    if (src.team !== u.team) G.stats[src.team].kills++;   // (a hexed soldier's victims don't count)
     // a Gladiator feeds on glory; a zombie's victim gets up again on the zombie's side
     if (src.type === 'gladiator' && !src.dead && src.team !== u.team) gladiatorKill(src);
     if (src.type === 'zombie' && src.team !== u.team && src.necro && !src.necro.dead) zombieKill(src.necro, u);
@@ -1426,6 +1435,11 @@ function updateBuffs() {
         if (m.perks.hope && dx <= reach) o.hope = true;
       } else if (m.perks.fear && dx <= reach) o.fear = true;
     }
+  }
+  // a Sanctum (a Cleric up a wizard tower): everyone of its side within reach takes heart and is warded
+  for (const m of alive) {
+    if (m.type !== 'cleric' || !m.onTower || !m.onTower.wizard) continue;
+    for (const o of alive) if (o.team === m.team && !o.inside && o.type !== 'zombie' && Math.abs(o.x - m.x) <= WTOWER.sanctumR) { o.hope = true; o.ward = true; }
   }
   // Gladiators count the friends around them (the fewer, the harder they hit)
   for (const u of alive) {
@@ -1512,13 +1526,21 @@ function updateUnit(u, dt) {
   }
   if (u.stunT > 0) u.stunT -= dt;
   if (u.cheerT > 0) u.cheerT -= dt;
-  if (u.netT > 0) u.netT -= dt;
-  if (u.type !== 'miner' && u.type !== 'architect') u.retaliateT -= dt;   // (workers count theirs down themselves)
+  if (u.netT > 0) u.netT -= dt; else u.snared = false;
+  if (u.hexT > 0) u.hexT -= dt;
+  if (u.curseT > 0) u.curseT -= dt;
+  if (u.scaredT > 0) u.scaredT -= dt;
+  if (u.type !== 'miner' && u.type !== 'architect' && u.type !== 'wizard') u.retaliateT -= dt;   // (workers count theirs down themselves)
   if (u.qmHoldT > 0) u.qmHoldT -= dt;
   if (u.stunT > 0 || u.netT > 0) { /* stunned, or pinned under a net: no actions */ }
   else if (u.qmHoldT > 0 && u.swing < 0) { /* stopped by a Quartermaster to be patched up or refitted */ }
+  else if (u.scaredT > 0) fleeInTerror(u, dt);   // a dread sigil: running for home (wizard.js)
+  else if (u.hexT > 0) actHexed(u, dt);          // a hex: lashing out at its own side
+  else if (u.order.type === 'tower' && TOWER_MAGES.includes(u.type)) updateTowerMage(u, dt);   // a mage up a wizard tower
   else if (u.type === 'miner') updateMiner(u, dt);
   else if (u.type === 'architect') updateArchitect(u, dt);
+  else if (u.type === 'wizard') updateWizard(u, dt);
+  else if (u.type === 'wagon') updateWagon(u, dt);   // Escort's siege wagon (modes2.js)
   else if (u.type === 'quartermaster') updateQuartermaster(u, dt);
   else if (u.type === 'necromancer') updateNecromancer(u, dt);
   else if (u.type === 'zombie') updateZombie(u, dt);

@@ -2,14 +2,15 @@
 // Sound: everything is synthesized with the Web Audio API (no sound files). Unit and action sounds
 // are placed by where they happen: quieter off-screen and panned left or right of the camera, and
 // each kind is rate-limited so a big fight stays readable. Ambience (birds, a breeze) drifts in now
-// and then, and war drums beat while either side attacks (slower while a line advances).
+// and then. A war horn sounds when either side's attack begins, then low drums boom under the
+// fighting (slower still while a line advances).
 // Browsers only allow sound after the player clicks or presses a key, so the engine starts then.
 
 const SND = {
   ctx: null, master: null, bus: {}, noiseBuf: null,
   vol: (() => { try { const v = parseFloat(localStorage.getItem('stickfront.volume')); return Number.isFinite(v) ? clamp(v, 0, 1) : 0.6; } catch (e) { return 0.6; } })(),
   last: {}, voices: 0,
-  ambT: 6, drumMode: null, nextStep: 0, step: 0,
+  ambT: 6, drumMode: null, nextStep: 0, step: 0, hornAt: null,
 };
 
 // Minimum seconds between two of the same sound, and how loud each kind is.
@@ -240,11 +241,46 @@ function birds() {
   }
 }
 
-// War drums: a quick beat while either side attacks, a slow one while a line advances.
+// War drums: slow, low booms under an attack, slower still while a line advances. A step is one
+// slot of the pattern: B a full boom, b a lighter one.
 const DRUMS = {
-  attack: { step: 60 / 140 / 2, pattern: 'B.T.BBT.' },   // eighth notes at 140 bpm
-  advance: { step: 60 / 76, pattern: 'B.BT' },          // quarter notes at 76 bpm
+  attack: { step: 60 / 80 / 2, pattern: 'B...B.b.' },
+  advance: { step: 60 / 96, pattern: 'B.b.' },
 };
+const WAR_HORN = { dur: 2.4, gap: 30, drumsAfter: 1.7 };   // gap: the least seconds between two; drumsAfter: when the drums come in under it
+
+// The war horn: one long, low note that swells, its pitch scooping up into place, and fades.
+function warHorn(t) {
+  const ctx = SND.ctx, D = WAR_HORN.dur, lp = ctx.createBiquadFilter(), g = ctx.createGain();
+  lp.type = 'lowpass';
+  lp.frequency.setValueAtTime(260, t);
+  lp.frequency.linearRampToValueAtTime(760, t + 0.7);
+  lp.frequency.linearRampToValueAtTime(420, t + D);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.linearRampToValueAtTime(0.5, t + 0.45);
+  g.gain.setValueAtTime(0.5, t + D - 0.8);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + D);
+  lp.connect(g).connect(SND.bus.sfx);
+  for (const [f, level] of [[73.4, 0.5], [73.9, 0.35], [110, 0.3], [146.8, 0.12]]) {
+    const o = ctx.createOscillator(), v = ctx.createGain();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(f * 0.9, t);
+    o.frequency.exponentialRampToValueAtTime(f, t + 0.35);
+    v.gain.value = level;
+    o.connect(v).connect(lp);
+    o.start(t);
+    o.stop(t + D + 0.02);
+  }
+}
+
+// One drum boom: a deep falling note, a little more body for small speakers, and the thud of the skin.
+function drumBoom(t, big) {
+  const out = SND.bus.drums;
+  sTone(out, t, 'sine', big ? 78 : 64, big ? 34 : 30, big ? 1.15 : 0.8, big ? 0.95 : 0.6, 0.008);
+  sTone(out, t, 'sine', big ? 150 : 124, 60, 0.22, big ? 0.4 : 0.25, 0.004);
+  sNoise(out, t, 0.09, big ? 0.3 : 0.18, 'lowpass', 180);
+}
+
 function drumMode() {
   let adv = false;
   for (const g of G.groups) {
@@ -263,13 +299,19 @@ function drumTick() {
     SND.drumMode = mode;
     SND.bus.drums.gain.setTargetAtTime(mode ? 0.7 : 0, now, mode ? 0.15 : 0.6);
     if (mode && SND.nextStep < now) { SND.nextStep = now + 0.05; SND.step = 0; }
+    // an attack begins: the horn first, and the drums come in under it
+    if (mode === 'attack' && now - (SND.hornAt ?? -1e9) >= WAR_HORN.gap) {
+      SND.hornAt = now;
+      warHorn(now + 0.02);
+      SND.nextStep = now + WAR_HORN.drumsAfter;
+      SND.step = 0;
+    }
   }
   if (!mode) return;
   const D = DRUMS[mode];
   while (SND.nextStep < now + 0.15) {
     const hit = D.pattern[SND.step % D.pattern.length], t = SND.nextStep;
-    if (hit === 'B') { sTone(SND.bus.drums, t, 'sine', 110, 46, 0.4, 0.75); sNoise(SND.bus.drums, t, 0.03, 0.15, 'lowpass', 300); }
-    else if (hit === 'T') { sTone(SND.bus.drums, t, 'sine', 210, 150, 0.14, 0.35); sNoise(SND.bus.drums, t, 0.05, 0.18, 'bandpass', 1400, 900, 1.5); }
+    if (hit === 'B' || hit === 'b') drumBoom(t, hit === 'B');
     SND.nextStep += D.step;
     SND.step++;
   }

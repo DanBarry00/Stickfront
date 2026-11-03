@@ -94,10 +94,10 @@ const LESSONS = [
     key: 'siege', name: 'Hold the Line', sub: 'Architects, traps and the Quartermaster',
     brief: [
       'The enemy is sending wave after wave. You can\'t out-fight them in the open, so dig in.',
-      'Your <b>Architect</b> digs trenches, lays tar pits and mines, raises archer towers and repairs them. Your <b>Quartermaster</b> patches up the wounded and refits veterans for free.',
+      'Your <b>Architect</b> digs trenches, lays hidden traps (tar pits, mines, spike pits, caltrops and snares), raises archer towers, and repairs and finishes them on its own. Your <b>Quartermaster</b> patches up the wounded, refits veterans for free and brings the Architect materials for free traps.',
       'Survive five waves and their army is spent. Then finish them.',
     ],
-    counters: ['Trenches stop enemies on foot until they hack through', 'Tar pits slow, mines blast', 'Archers in a tower reach further and are hard to hit'],
+    counters: ['Trenches stop enemies on foot until they hack through', 'Tar pits slow, mines blast, spike pits maim, caltrops cut, snares hold', 'Archers in a tower reach further and are hard to hit'],
     unlocks: ['architect', 'quartermaster'], give: ['architect', 'quartermaster'], upgrades: true,
     enemyUnits: ['sword', 'spear', 'gladiator', 'archer'],
     player: { gold: 650, free: { architect: ['walls'] }, army: [{ type: 'miner', n: 4 }, { type: 'sword', n: 2 }, { type: 'archer', n: 2 }, { type: 'architect', n: 1 }, { type: 'quartermaster', n: 1 }] },
@@ -107,11 +107,11 @@ const LESSONS = [
     ] } },
     tips: [
       { text: 'Select your Architect. Press <kbd>B</kbd> and click in front of your army to dig a <b>trench</b>.', next: s => G.walls.some(w => w.team === 0) },
-      { text: 'Lay traps ahead of the trench: <b>tar pit</b> (<kbd>Shift</kbd>+<kbd>B</kbd>) and <b>mine</b> (<kbd>Shift</kbd>+<kbd>N</kbd>).', next: s => G.traps.filter(t => t.team === 0).length >= 2 },
+      { text: 'Lay traps ahead of the trench: <b>tar pit</b> (<kbd>Shift</kbd>+<kbd>B</kbd>), <b>mine</b> (<kbd>Shift</kbd>+<kbd>N</kbd>), <b>spike pit</b> (<kbd>Shift</kbd>+<kbd>K</kbd>), <b>caltrops</b> (<kbd>Shift</kbd>+<kbd>L</kbd>) or <b>snare</b> (<kbd>Shift</kbd>+<kbd>M</kbd>).', next: s => G.traps.filter(t => t.team === 0).length >= 3 },
       { text: 'Raise an <b>archer tower</b> behind the trench (<kbd>Shift</kbd>+<kbd>Y</kbd>), then right-click it with an archer to post it.', next: s => G.towers.some(t => t.team === 0 && t.progress >= 1) },
       { text: 'Put your melee on the trench: select them and press <kbd>K</kbd> (Defend trench). Enemies have to stop and hack at it.', secs: 18 },
       { text: 'Your <b>Quartermaster</b> works on its own: it bandages the wounded and refits veterans with new upgrades for free.', secs: 16 },
-      { text: 'Between waves, the Architect repairs damage (<kbd>Y</kbd>) and rebuilds ruins.', next: s => s.ai.wave >= 5 && s.ai.waveLeft() === 0 },
+      { text: 'With the Architect selected, everything it can work on is marked: damaged, half-built or sprung. It mends and finishes on its own when idle; right-click a ruin to rebuild it (<kbd>Y</kbd> picks the most urgent job).', next: s => s.ai.wave >= 5 && s.ai.waveLeft() === 0 },
       { text: 'Their army is spent. Go and destroy the statue!' },
     ],
   },
@@ -151,6 +151,31 @@ const LESSONS = [
       { text: 'When the enemy attacks, right-click their Cleric or Warlock with your ninjas and archers.', next: s => s.ai.attacks >= 1 },
       { text: 'A Fireball\'s target ring shows before it lands. Spread out, or pull back out of it.', secs: 18 },
       { text: 'With their healers gone, their line can\'t hold. Push!' },
+    ],
+  },
+  {
+    key: 'wizardry', name: 'Runes and Wards', sub: 'The Castle Wizard and wizard towers',
+    brief: [
+      'The enemy is coming in waves again, bigger than last time. This time you have a <b>Castle Wizard</b>, your Architect\'s magical partner.',
+      'It lays <b>runes</b> that stun, hex (they turn on their own side) or terrify, keeps a <b>ward</b> on your works, <b>enchants</b> the Architect\'s traps, and raises a <b>wizard tower</b> for a mage.',
+      'Survive six waves, then finish them.',
+    ],
+    counters: ['A hex turns a whole wave on itself', 'Wards soak up damage before your trench or statue takes any', 'A Cleric in a wizard tower (a Sanctum) heals and steadies your whole line'],
+    unlocks: ['wizard'], give: ['wizard'], upgrades: true,
+    enemyUnits: ['sword', 'spear', 'gladiator', 'archer', 'warlock'],
+    player: { gold: 800, mana: 250, free: { architect: ['walls'] }, army: [{ type: 'miner', n: 5 }, { type: 'sword', n: 2 }, { type: 'spear', n: 1 }, { type: 'archer', n: 2 }, { type: 'cleric', n: 1 }, { type: 'architect', n: 1 }, { type: 'wizard', n: 1 }, { type: 'quartermaster', n: 1 }] },
+    enemy: { gold: 0, army: [{ type: 'spear', n: 3 }, { type: 'archer', n: 2 }] },
+    ai: { miners: 0, mix: {}, pace: 1, attackAt: 99, waves: { first: 90, every: 55, list: [
+      { sword: 3, spear: 1 }, { sword: 4, spear: 1, archer: 2 }, { sword: 4, spear: 2, gladiator: 1 }, { sword: 5, spear: 2, archer: 2, warlock: 1 },
+      { sword: 5, spear: 2, gladiator: 1, warlock: 1 }, { sword: 5, spear: 3, gladiator: 1, archer: 2 },
+    ] } },
+    tips: [
+      { text: 'Select your <b>Castle Wizard</b>. Lay runes ahead of your line: <b>binding</b> (<kbd>Shift</kbd>+<kbd>F</kbd>) stuns, <b>hex</b> (<kbd>Shift</kbd>+<kbd>V</kbd>) turns them on each other, <b>dread</b> (<kbd>Shift</kbd>+<kbd>X</kbd>) sends them running. Runes cost mana.', next: s => G.traps.filter(t => t.team === 0 && isRune(t.kind)).length >= 2 },
+      { text: 'The wizard keeps a shimmering <b>ward</b> on your statue, trenches and towers by itself: it soaks up damage first. Right-click one with the wizard to ward it now.', secs: 18 },
+      { text: 'Work together: right-click one of the Architect\'s traps with the wizard to <b>enchant</b> it, and a rune with the Architect to <b>reinforce</b> it.', next: s => G.traps.some(t => t.team === 0 && (t.magic || t.reinforced)) },
+      { text: 'Have the Architect raise an archer tower (<kbd>Shift</kbd>+<kbd>Y</kbd>), then the wizard\'s <b>Wizard tower</b> button turns it into one. Right-click it with your Cleric: a <b>Sanctum</b>.', next: s => G.towers.some(t => t.team === 0 && t.wizard && towerCrew(t).length) },
+      { text: 'A Warlock up there makes a <b>Spire</b>, a Necromancer a <b>Graveyard</b> of endless zombies. Spells cast from the tower are free.', next: s => s.ai.wave >= 6 && s.ai.waveLeft() === 0 },
+      { text: 'Their army is spent. Go and destroy the statue!' },
     ],
   },
   {
@@ -216,7 +241,7 @@ const LESSONS = [
       'Every unit and upgrade, against the regular Normal computer. It plays one of its strategies, so watch what it builds and answer it.',
       'From here on a <b>giant is sealed in each statue</b>. When a statue falls, its giant breaks free, and the battle ends only when the giant dies too.',
     ],
-    counters: ['Everything you\'ve learned', 'Castle upgrades need an Architect'],
+    counters: ['Everything you\'ve learned', 'Castle upgrades need an Architect', 'Once your population is full, Founding Stones raise it (an Architect and a Castle Wizard are entombed in each)'],
     smart: true, statueGiant: true, playerClan: 'base', clan: 'base',
     tips: [
       { text: 'This is the real game. Scout what the enemy trains and build what beats it.', secs: 20 },
@@ -234,7 +259,7 @@ const CLAN_TRIALS = CLAN_ORDER.filter(k => k !== 'base').map(k => ({
   tips: [{ text: `The ${CLANS[k].name}: ${CLANS[k].tagline}` }],
 }));
 
-const lessonUnlocked = i => i === 0 || lessonDone(LESSONS[i - 1].key);
+const lessonUnlocked = i => i === 0 || LESSONS.slice(i - 1).some(l => lessonDone(l.key));   // (a lesson added later doesn't lock what you've already reached)
 const trialsOpen = () => lessonDone('war');
 const lessonByKey = key => LESSONS.find(l => l.key === key) || CLAN_TRIALS.find(l => l.key === key);
 
@@ -511,6 +536,7 @@ function updateLesson(dt) {
   const ls = G.lesson;
   if (!ls || G.over) return;
   if (ls.campaign) campaignTick(dt);
+  if (ls.mode) modeTick(dt);
   // the live line (rounds, timers) refreshes twice a second
   if (ls.L.status && (ls.statusT = (ls.statusT || 0) - dt) <= 0) {
     ls.statusT = 0.5;
@@ -533,6 +559,8 @@ const hideLessonBox = () => { const b = $('lessonBox'); if (b) b.classList.add('
 // A lesson's end: winning records it and shows what it unlocked.
 function lessonEndHTML(won) {
   if (G.lesson.campaign) return campaignEnd(won);
+  if (G.lesson.survival) return survivalEnd();
+  if (G.lesson.mode) return modeEnd(won);
   const L = G.lesson.L, first = won && !lessonDone(L.key);
   if (won && !lessonDone(L.key)) { TUT.done.push(L.key); saveTut(); }
   const unlocked = (L.unlocks || []).map(t => UNIT_TYPES[t].name);

@@ -192,6 +192,27 @@ function drawStatusOver(ctx, u) {
       ctx.fill();
     }
   }
+  if (u.hexT > 0) {
+    // hexed: a violet spiral turning over its head
+    ctx.strokeStyle = `rgba(216,112,240,${0.6 + 0.3 * Math.sin(RT * 8)})`;
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    for (let i = 0; i <= 20; i++) {
+      const a = RT * 6 + i * 0.6, r = 1 + i * 0.45;
+      ctx.lineTo(u.x + Math.cos(a) * r, top + 2 + Math.sin(a) * r * 0.45);
+    }
+    ctx.stroke();
+  }
+  if (u.scaredT > 0) {
+    // terrified: a trembling white mark
+    ctx.save();
+    ctx.translate(u.x + Math.sin(RT * 40) * 1.2, top - 2);
+    ctx.font = '700 17px Georgia, serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#f0ece0';
+    ctx.fillText('!', 0, 0);
+    ctx.restore();
+  }
   if (u.confusedT > 0) {
     ctx.save();
     ctx.translate(u.x, top - 4);

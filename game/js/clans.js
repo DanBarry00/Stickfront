@@ -25,6 +25,7 @@
 //   thickHide              its giants take no extra damage from archers
 //   ai                     extra share of the army the computer aims for: { unitType: share }
 //   aiPray                 miners the computer keeps praying (at least)
+//   trapMax                most traps and runes it can have laid (default TRAP.max)
 //   coming                 clan features not in the game yet (listed on the setup screen)
 
 const ALL_UPGRADES = type => UPGRADES[type].map(d => d.key);
@@ -59,11 +60,12 @@ const CLANS = {
     tower: true,                 // an archer tower behind the trench...
     traps: ['tar', 'mine'],      // ...and a tar pit and a mine in front of it
     trench: true,
+    trapMax: 16,
     free: { architect: ['walls'], spear: ['shield', 'inspire'], sword: ['drill'], archer: ['bow'], castle: ['archer2'] },
     castleArchers: 4,
     lockUnits: ['warlock', 'giant'],
     ai: { spear: 0.12, archer: 0.05, ballista: 0.12 },
-    strengths: ['Starts with a trench held by a Spearton, an archer tower behind it with an archer posted, a tar pit and a mine in front of it, and an Architect', 'Earthworks, Shields, Military Training, Rallying Cry, Recurve Bows and a second castle archer', 'Clan unit: Ballista, a siege engine with range 550 that wrecks trenches and statues', 'Clan-only: Levy II, a free Spearton every minute', '4 castle archer slots'],
+    strengths: ['Starts with a trench held by a Spearton, an archer tower behind it with an archer posted, a tar pit and a mine in front of it, and an Architect', 'Earthworks, Shields, Military Training, Rallying Cry, Recurve Bows and a second castle archer', 'Clan unit: Ballista, a siege engine with range 550 that wrecks trenches and statues', 'Clan-only: Levy II, a free Spearton every minute', '4 castle archer slots', `Can lay 16 traps and runes (others ${TRAP.max})`],
     weaknesses: ['No Warlocks and no Giants'],
   },
 
@@ -96,7 +98,7 @@ const CLANS = {
     name: 'Arcane Circle',
     tagline: 'Magic first: cheap mages and a deep mana pool.',
     mana: 150,
-    army: [{ type: 'miner', n: 2 }, { type: 'cleric', n: 1 }, { type: 'warlock', n: 1 }],
+    army: [{ type: 'miner', n: 2 }, { type: 'wizard', n: 1 }, { type: 'warlock', n: 1 }],
     free: { cleric: ['pool'], warlock: ['pool'] },
     cost: { cleric: { mana: -25 }, warlock: { mana: -25 } },
     prayer: 1.5,
@@ -104,7 +106,7 @@ const CLANS = {
     castleArchers: 1,
     lockUnits: ['giant'],
     ai: { cleric: 0.1, warlock: 0.1, golem: 0.08 },
-    strengths: ['Starts with 150 mana, a Cleric, a Warlock, Healing Pool and Blight Pool', 'Mages cost 35 mana instead of 60', 'Praying gives 50% more mana', 'Clan unit: Spirit Golem, a 700 hp tank you command directly that can Hunker Down and shrugs off Warlock magic'],
+    strengths: ['Starts with 150 mana, a Castle Wizard, a Warlock, Healing Pool and Blight Pool', `Masters of runes: its Castle Wizard's runes reach and last ${Math.round((RUNE.arcane - 1) * 100)}% longer, and enchanting traps costs half`, 'Mages cost 35 mana instead of 60', 'Praying gives 50% more mana', 'Clan unit: Spirit Golem, a 700 hp tank you command directly that can Hunker Down and shrugs off Warlock magic'],
     weaknesses: ['Swordwrath and Spearton have 10% less health', 'Only 1 castle archer', 'No Giants'],
   },
 
@@ -176,7 +178,12 @@ function unitCost(team, type) {
   const def = UNIT_TYPES[type], c = (clanOf(team).cost || {})[type] || {};
   return { gold: def.cost + (c.gold || 0), mana: Math.max(0, (def.mana || 0) + (c.mana || 0)) };
 }
-const popCap = team => clanOf(team).pop || POP_CAP;
+// Founding Stones add to a clan's cap, up to POP_MAX.
+const popCap = team => Math.min(POP_MAX, (clanOf(team).pop || POP_CAP) + (team.popBonus || 0));
+// The statue's mana store (bigger with the Architect's Cistern and Reliquary).
+const manaCap = team => MAX_MANA + (team && team.upgrades.architect.cistern ? MANA_STORE.cistern : 0) + (team && team.upgrades.architect.reliquary ? MANA_STORE.reliquary : 0);
+// The most traps and runes a side can have laid.
+const trapMax = team => clanOf(team).trapMax || TRAP.max;
 const unitPop = (team, type) => (type === 'giant' && clanOf(team).giantPop) || UNIT_TYPES[type].pop;
 // (team.aiEdge: the computer's own edge on Very Hard, for its soldiers only)
 const clanMul = (team, field, type) => { if (!team) return 1; const m = clanOf(team)[field] || {}; const ai = team.aiEdge && !isWorker({ type }) ? team.aiEdge[field] || 1 : 1; return (m.all || 1) * (type !== 'miner' ? m.troops || 1 : 1) * (m[type] || 1) * ai; };

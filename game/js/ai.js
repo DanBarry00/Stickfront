@@ -68,18 +68,20 @@ class PoorAI {
 // Very Hard: Hard, but quicker to decide, quicker to strike and better paid.
 const SMART = {
   normal: { think: [2, 3.5], miners: 7, praying: 1, panning: 0, research: 'basic', mages: true, giants: false, formations: false, advance: true, perThink: 1, attackPower: 800, edge: 1.05, saveAt: 7, bigArmy: 9, reserve: 250, saveBias: 0.7, armyPerUpgrade: 0.8, researchGap: 90, prayAt: 4, panAt: 99, manaCap: 300, ninjas: 0.1, flyers: 0.06,
-    wave: [140, 180], waveEdge: 0.95, raid: [90, 130], raidSize: 2, shrineArmy: 5, shrineEdge: 0.9, stipend: 0, stipendMana: 0, architects: 1, towers: 0, traps: 1 },
+    wave: [140, 180], waveEdge: 0.95, raid: [90, 130], raidSize: 2, shrineArmy: 5, shrineEdge: 0.9, stipend: 0, stipendMana: 0, architects: 1, wizard: 1, towers: 1, traps: 3, runes: 1, wtower: false, found: true },
   hard: { think: [1, 1.8], miners: 8, praying: 1, panning: 1, research: 'all', mages: true, giants: true, formations: true, perThink: 2, attackPower: 1000, edge: 1.0, saveAt: 7, bigArmy: 9, reserve: 250, saveBias: 0.6, armyPerUpgrade: 0.35, researchGap: 70, prayAt: 5, panAt: 8, manaCap: 700, ninjas: 0.14, flyers: 0.1,
-    wave: [80, 110], waveEdge: 0.95, raid: [45, 70], raidSize: 3, shrineArmy: 3, shrineEdge: 0.6, stipend: 3, stipendMana: 0.6, architects: 1, towers: 1, traps: 2 },
+    wave: [80, 110], waveEdge: 0.95, raid: [45, 70], raidSize: 3, shrineArmy: 3, shrineEdge: 0.6, stipend: 3, stipendMana: 0.6, architects: 1, wizard: 1, towers: 1, traps: 5, runes: 3, wtower: true, enchant: true, found: true },
   veryhard: { think: [0.6, 1.2], miners: 9, praying: 1, panning: 1, research: 'all', mages: true, giants: true, formations: true, perThink: 3, attackPower: 950, edge: 0.95, saveAt: 7, bigArmy: 8, reserve: 200, saveBias: 0.5, armyPerUpgrade: 0.3, researchGap: 60, prayAt: 5, panAt: 8, manaCap: 800, ninjas: 0.14, flyers: 0.1,
-    wave: [65, 90], waveEdge: 0.9, raid: [35, 55], raidSize: 4, shrineArmy: 3, shrineEdge: 0.55, stipend: 5.5, stipendMana: 1.3, architects: 2, towers: 2, traps: 4, aiEdge: { hp: 1.12, dmg: 1.08 } },
+    wave: [65, 90], waveEdge: 0.9, raid: [35, 55], raidSize: 4, shrineArmy: 3, shrineEdge: 0.55, stipend: 5.5, stipendMana: 1.3, architects: 1, wizard: 1, towers: 2, traps: 7, runes: 4, wtower: true, enchant: true, found: true, aiEdge: { hp: 1.12, dmg: 1.08 } },
 };
 // Keeping the player busy: besides its big attacks, the AI sends a wave on a timer (wave, in seconds
 // after the last push ends) once its army is at least waveEdge of the enemy's (plus half its castle
 // archers' worth), and small raiding parties (up to raidSize units every raid seconds) at miners
 // working away from their army. It goes for the Monolith with shrineArmy soldiers at shrineEdge of
 // the enemy army. Hard also gets a small income on top of its mining (stipend gold and stipendMana
-// mana per second) to pay for all that. architects / towers / traps: how many it keeps of each.
+// mana per second) to pay for all that. architects / wizard / towers / traps / runes: how many it keeps
+// of each; wtower: raises a wizard tower; enchant: enchants traps and reinforces runes; found: lays
+// Founding Stones once its population is full.
 
 // Research order: what a sensible commander buys first.
 const AI_RESEARCH = [
@@ -93,7 +95,7 @@ const AI_RESEARCH = [
   ['sword', 'greatsword'], ['archer', 'longbow'], ['archer', 'broadheads'], ['flyer', 'hawkeye'], ['flyer', 'scope2'],
   ['flyer', 'barbs2'], ['archer', 'steady'], ['castle', 'levy2'],
   ['quartermaster', 'salves'], ['gladiator', 'manica'], ['necromancer', 'horde'], ['necromancer', 'rites'], ['necromancer', 'hulk'], ['gladiator', 'nets'], ['quartermaster', 'wagon'], ['necromancer', 'grave'], ['gladiator', 'fame'], ['necromancer', 'horde2'],
-  ['architect', 'traps2'], ['architect', 'tower2'], ['architect', 'tower3'],
+  ['architect', 'traps2'], ['wizard', 'aegis'], ['architect', 'tower2'], ['wizard', 'runecraft'], ['architect', 'tower3'], ['architect', 'cistern'], ['architect', 'reliquary'],
   ['ballista', 'torsion'], ['ballista', 'ironbolt'], ['ballista', 'mantlet'], ['golem', 'plating'], ['golem', 'core'], ['beastmaster', 'stones'], ['beastmaster', 'lore'], ['saboteur', 'sappers'], ['saboteur', 'brine'], ['firebird', 'pitch'], ['firebird', 'fuse'],
   ['cleric', 'big'], ['warlock', 'pool'], ['cleric', 'hope'], ['warlock', 'fear'], ['cleric', 'focus2'],
   ['warlock', 'focus2'], ['miner', 'pick2'], ['miner', 'bag2'], ['spear', 'shield2'], ['archer', 'fire'],
@@ -151,7 +153,7 @@ const AI_STYLES = {
     start: 'fortify',
     phases: {
       fortify: { label: 'fortifying and teching up', attack: 'never',
-        cfg: c => ({ towers: TOWER.max, traps: c.traps + 3, architects: Math.max(2, c.architects), saveAt: 5, armyPerUpgrade: 0.3, saveBias: 0.75,
+        cfg: c => ({ towers: TOWER.max, traps: c.traps + 3, runes: c.runes + 1, wtower: true, saveAt: 5, armyPerUpgrade: 0.3, saveBias: 0.75,
           researchFirst: [['castle', 'archer2'], ['spear', 'shield'], ['archer', 'arrows'], ['castle', 'archer3'], ['architect', 'tower2']] }),
         next: (ai, s) => ((s.army >= ai.plan.ballSize && s.upgrades >= ai.plan.ballUpgrades) || s.inPhase > ai.plan.ballBy || (s.army >= 10 && s.ours > s.theirs * 1.8)) && 'deathball' },
       deathball: { label: 'one overwhelming push', attack: 'all', cfg: () => ({ allEdge: 0.9, storm: 0.85, lose: 0.45 }),
@@ -235,7 +237,7 @@ const AI_BOOSTS = {
     postArcher(spawnUnit(team, 'archer', tw.x - team.dir * 30, LANE_TOP + 10), tw);
     return true;
   } },
-  chest: { name: 'a war chest', give(team) { team.gold += 300; team.mana = Math.min(MAX_MANA, team.mana + 120); return true; } },
+  chest: { name: 'a war chest', give(team) { team.gold += 300; team.mana = Math.min(manaCap(team), team.mana + 120); return true; } },
   scholars: { name: 'cheaper research', give(team) { for (let i = 0; i < 3; i++) discountRandomUpgrade(team, 0.25, false); return true; } },
 };
 const AI_BOOST_COUNT = { normal: 0, hard: 1, veryhard: 3 };
@@ -410,7 +412,7 @@ class SmartAI {
       if (team.research[type]) continue;
       if (type === 'castle' && !hasArchitect(team)) continue;   // castle upgrades need an architect
       // no point researching for ninjas, Kestrels or ballistas it hasn't built
-      if (['ninja', 'flyer', 'ballista', 'golem', 'beastmaster', 'saboteur', 'firebird', 'architect', 'quartermaster', 'gladiator', 'necromancer'].includes(type) && !G.units.some(u => u.team === this.id && !u.dead && u.type === type)) continue;
+      if (['ninja', 'flyer', 'ballista', 'golem', 'beastmaster', 'saboteur', 'firebird', 'architect', 'wizard', 'quartermaster', 'gladiator', 'necromancer'].includes(type) && !G.units.some(u => u.team === this.id && !u.dead && u.type === type)) continue;
       return { type, d };
     }
     return null;
@@ -565,7 +567,7 @@ class SmartAI {
     // Hard's extra income (it cheats a little to keep the pressure on)
     if (c.stipend && !team.statue.dead && !G.over) {
       team.gold += c.stipend * dt;
-      team.mana = Math.min(MAX_MANA, team.mana + c.stipendMana * dt);
+      team.mana = Math.min(manaCap(team), team.mana + c.stipendMana * dt);
     }
     this.timer -= dt;
     this.refitT -= dt;
@@ -578,7 +580,9 @@ class SmartAI {
     const army = mine.filter(u => !isWorker(u) && !isGiant(u) && u.type !== 'zombie' && u.order.type !== 'tower');   // archers posted in towers stay there; zombies follow their master
     this.economy(team, miners, army.length);
     this.architects(team, army);
+    this.smashTraps(army, foe);
     const threatNow = armyPower(foe, team.statue.x, 900) > 300;
+    this.foundingStone(team, threatNow);
     const saving = this.research(team, army.length, armyPower(this.id) < armyPower(foe) * 0.85) && !threatNow;
     if (!saving) for (let i = 0; i < c.perThink; i++) if (miners.length >= 3) queueUnit(team, this.pickUnit(team));
 
@@ -789,21 +793,25 @@ class SmartAI {
     for (const g of this.lines()) { g.mode = 'attack'; g.storming = true; g.halt = false; }
   }
 
-  // Architects: one or two once the army is under way. They mend damaged trenches and towers, keep
-  // an archer tower (or two) just behind the line and traps ahead of it, and study the rest of the
-  // time (that happens by itself). Empty towers, ours or the Monolith's, get an archer posted.
+  // The Architect and Castle Wizard: one of each once the army is under way. Finishing, repairs and
+  // wards happen by themselves (they see to them when idle); the AI has the Architect keep an
+  // archer tower (or two) just behind the line and traps ahead of it, and the Castle Wizard runes
+  // among them, enchanting and reinforcing them on the harder levels and raising a wizard tower
+  // for a mage. Empty towers, ours or the Monolith's, get an archer posted. Once its population is
+  // full and it's flush, it lays a Founding Stone (and trains a new pair).
   architects(team, army) {
     const c = this.cfg, foe = 1 - this.id;
+    this.postArchers(team, army, foe);
+    this.wizardWork(team, army, foe);
     if (!c.architects || !canTrain(team, 'architect')) return;
     const archs = G.units.filter(u => u.team === this.id && !u.dead && u.type === 'architect');
-    if (archs.length + queuedCount(team, 'architect') < c.architects && army.length >= 6 && team.gold > 300) queueUnit(team, 'architect');
-    this.postArchers(team, army, foe);
+    if (archs.length + queuedCount(team, 'architect') < c.architects && army.length >= 5 && team.gold >= unitCost(team, 'architect').gold + 25) queueUnit(team, 'architect');
     const idle = archs.filter(u => u.order.type === 'stance' || u.order.type === 'hold');
     if (!idle.length || this.mode === 'turtle' || team.minersIn) return;
-    // mend what's damaged first
-    if ([...G.walls, ...G.towers].some(w => canMend(team, w) && !w.dead && w.progress >= 1 && w.hp < w.max * 0.7)) {
-      repairStructures(team, [idle.shift()]);
-      if (!idle.length) return;
+    // reinforce a rune now and then (gold to spare)
+    if (c.enchant && team.gold > 320 && chance(0.4)) {
+      const rune = G.traps.find(t => t.team === this.id && t.armed && isRune(t.kind) && !t.reinforced && !workDanger(team, t.x));
+      if (rune && reinforceRune(team, rune, [idle[0]])) { idle.shift(); if (!idle.length) return; }
     }
     // rebuild our ruins (cheap), and the Monolith's tower while our army holds the ground there
     const ruin = [...G.towers, ...G.walls].find(s => s.ruin && team.gold >= rebuildCost(s) + 40 &&
@@ -821,15 +829,83 @@ class SmartAI {
       if (!towerSpotProblem(team, x, y)) { orderTower(team, x, y, [idle.shift()]); if (!idle.length) return; }
     }
     // traps ahead of it
-    if (c.traps && team.gold > 200 && army.length >= 4 && G.traps.filter(t => t.team === this.id).length < c.traps) {
-      const kind = chance(0.5) ? 'tar' : 'mine';
-      if (((team.trapCd || {})[kind] || 0) <= G.time) {
-        for (let tries = 0; tries < 8; tries++) {
-          const x = line + team.dir * rnd(90, 280), y = rowY(rndi(0, 5));
-          if (!trapSpotProblem(team, x, y)) { orderTrap(team, kind, x, y, [idle.shift()]); break; }
-        }
-      }
+    if (c.traps && team.gold > 200 && army.length >= 4 && G.traps.filter(t => t.team === this.id && !isRune(t.kind)).length < c.traps) {
+      const kind = pick(ARCH_TRAPS);
+      if (((team.trapCd || {})[kind] || 0) <= G.time && team.gold >= trapCost(team, kind) + 150) this.layTrap(team, kind, line, idle.shift());
     }
+  }
+
+  // Somewhere ahead of the line for a trap or rune.
+  layTrap(team, kind, line, u) {
+    for (let tries = 0; tries < 8; tries++) {
+      const x = line + team.dir * rnd(90, 300), y = rowY(rndi(0, 5));
+      if (!trapSpotProblem(team, x, y)) return orderTrap(team, kind, x, y, [u]);
+    }
+    return null;
+  }
+
+  // The Castle Wizard (see architects): trained once the army is under way and there's mana; lays
+  // runes, enchants traps, and raises and mans a wizard tower.
+  wizardWork(team, army, foe) {
+    const c = this.cfg;
+    if (!c.wizard || !canTrain(team, 'wizard')) return;
+    const wiz = G.units.find(u => u.team === this.id && !u.dead && u.type === 'wizard');
+    if (!wiz) {
+      const cost = unitCost(team, 'wizard');
+      if (!queuedCount(team, 'wizard') && army.length >= 6 && team.gold >= cost.gold + 25 && team.mana >= cost.mana + 25) queueUnit(team, 'wizard');
+      return;
+    }
+    this.manWizardTower(team, army);
+    if (wiz.order.type !== 'stance' && wiz.order.type !== 'hold') return;
+    if (this.mode === 'turtle' || team.minersIn) return;
+    const line = defendLine(team);
+    // a wizard tower, once it has an archer tower and a mage to put in it
+    if (c.wtower && !wizardTowerOf(team) && team.gold > WTOWER.gold + 250 && team.mana > WTOWER.mana + 120 && army.some(u => TOWER_MAGES.includes(u.type))) {
+      const tw = G.towers.find(t => !convertProblem(team, t) && !workDanger(team, t.x));
+      if (tw && convertTower(team, tw, [wiz])) return;
+    }
+    // runes among the traps
+    if (c.runes && G.traps.filter(t => t.team === this.id && isRune(t.kind)).length < c.runes) {
+      const kind = pick(WIZ_RUNES);
+      if (((team.trapCd || {})[kind] || 0) <= G.time && team.mana >= trapCost(team, kind) + 120 && this.layTrap(team, kind, line, wiz)) return;
+    }
+    // enchant a trap (mana to spare)
+    if (c.enchant && team.mana > 260) {
+      const trap = G.traps.find(t => t.team === this.id && !isRune(t.kind) && !t.magic && !workDanger(team, t.x));
+      if (trap) enchantTrap(team, trap, [wiz]);
+    }
+  }
+
+  // Our wizard tower gets a mage: a Necromancer for a Graveyard if we have one, else a Cleric, else a Warlock.
+  manWizardTower(team, army) {
+    const tw = G.towers.find(t => t.team === this.id && !t.dead && t.wizard);
+    if (!tw || towerCrew(tw).length || army.some(u => u.order.type === 'tower' && u.order.tower === tw)) return;
+    for (const type of ['necromancer', 'cleric', 'warlock']) {
+      const m = army.filter(u => u.type === type && u.order.type !== 'group' && u.order.type !== 'refit' && Math.abs(u.x - tw.x) < 1500)
+        .sort((p, q) => Math.abs(p.x - tw.x) - Math.abs(q.x - tw.x))[0];
+      if (m && postMage(m, tw)) return;
+    }
+  }
+
+  // Enemy traps and runes our Castle Wizard (or a saboteur) has found get smashed by the nearest
+  // free soldier on foot, when no fight is going on there.
+  smashTraps(army, foe) {
+    for (const t of G.traps) {
+      if (t.dead || t.team === this.id || !t.spotted[this.id] || armyPower(foe, t.x, 300) > 120) continue;
+      if (army.some(u => u.order.type === 'attack' && u.order.target === t)) continue;
+      const u = army.filter(u => !isRanged(u) && !isFlying(u) && u.order.type === 'stance' && Math.abs(u.x - t.x) < 700)
+        .sort((p, q) => Math.abs(p.x - t.x) - Math.abs(q.x - t.x))[0];
+      if (u) setOrder(u, { type: 'attack', target: t });
+    }
+  }
+
+  // A Founding Stone: when the population is full and gold and mana are piling up, and nothing threatens.
+  foundingStone(team, threatened) {
+    if (!this.cfg.found || threatened || team.research.castle || popCap(team) >= POP_MAX) return;
+    if (popUsed(team) < popCap(team) - 1) return;
+    if (!G.units.some(u => u.team === this.id && !u.dead && u.type === 'architect') || !G.units.some(u => u.team === this.id && !u.dead && u.type === 'wizard')) return;
+    const p = upgradePrice(team, 'castle', upgradeDef('castle', 'found'));
+    if (team.gold >= p.gold + 450 && team.mana >= p.mana + 120) startResearch(team, 'castle', 'found');
   }
 
   // Empty towers get an archer: our own, and the Monolith's neutral one when our army holds the ground.

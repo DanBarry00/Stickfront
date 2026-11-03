@@ -11,6 +11,7 @@ const rowY = (row, n = LANE_ROWS) => (LANE_TOP + LANE_BOT) / 2 + (row - (n - 1) 
 const WALL_TOP = LANE_TOP - 195;   // castle ceiling / rampart height
 
 const POP_CAP = 30;
+const POP_MAX = 45;           // Founding Stones raise the cap one at a time, up to this
 const START_GOLD = 500;
 const MAX_MANA = 1000;
 const STATUE_HP = 2500;
@@ -85,12 +86,54 @@ const WALL_REPAIR = 0.035;   // share of a trench's max hp restored by each spad
 // line across the lane (within lineDx), up to lineMax to a line, lineDy apart. Ninjas, saboteurs
 // and flyers don't set them off; saboteurs find (within sabSight) and smash enemy traps. Arcane
 // Circle traps are magic: the mine hits harder and the tar burns.
+// A side can have at most max traps and runes laid (the Defense Clan its own trapMax). Enchanted
+// (magic) traps: tar burns, the mine hits harder, spikes curse survivors with dread, caltrops are
+// poisoned and the snare binds everyone near it. A sprung spike pit stays where it is, to be re-armed.
 const TRAP = {
   tar: { name: 'Tar Pit', cost: 40, cd: 12, poolR: 80, poolTime: 25, slow: 0.5, magicDps: 8, coverR: 30 },   // coverR: the thatched cover, stepped on anywhere
   mine: { name: 'Mine', cost: 60, cd: 18, blastR: 60, dmg: 50, magicMul: 1.5, knock: 45 },
+  spikes: { name: 'Spike Pit', cost: 50, cd: 14, dmg: 75, curseR: 45, curseTime: 3 },
+  caltrops: { name: 'Caltrops', cost: 35, cd: 10, r: 62, time: 30, dps: 5, magicDps: 11 },
+  snare: { name: 'Snare', cost: 40, cd: 12, time: 4, magicR: 55, magicTime: 3 },
   trigger: 18, spacing: 70, lineDx: 12, lineMax: 3, lineDy: 22, layTime: 1.5, sabSight: 140, trapmaker: { cost: 0.67, cd: 0.5 },
   midClear: 300,   // no traps this close to the middle of the map
+  max: 10,
 };
+const ARCH_TRAPS = ['tar', 'mine', 'spikes', 'caltrops', 'snare'];
+// The Castle Wizard's runes (paid in mana): binding stuns everyone near it, a hex turns them on
+// their own side, and a dread sigil sends them running home. Giants are only briefly stunned, and
+// shrug off hexes and dread. An Architect can reinforce a rune (gold): the binding rune gets iron
+// spikes (spikeDmg), a hex becomes a curse (curse: extra damage taken while hexed) and a dread
+// sigil gets a hidden pit (pitDmg, and longer terror).
+const RUNE = {
+  bind: { name: 'Binding Rune', mana: 40, cd: 14, r: 70, stun: 2.5, giantStun: 1.2, spikeDmg: 40 },
+  hex: { name: 'Hex Rune', mana: 50, cd: 18, r: 70, time: 5, curse: 0.25 },
+  dread: { name: 'Dread Sigil', mana: 40, cd: 14, r: 80, time: 4, pitDmg: 30, pitTime: 6 },
+  enchant: 30, reinforce: 40, workTime: 1.5,   // mana to enchant a trap, gold to reinforce a rune, seconds of work either way
+  arcane: 1.3,   // the Arcane Circle: runes reach and last this much longer, and enchanting costs half
+};
+const WIZ_RUNES = ['bind', 'hex', 'dread'];
+const isRune = kind => !!RUNE[kind] && WIZ_RUNES.includes(kind);
+const trapDef = kind => TRAP[kind] || RUNE[kind];
+// Wards: a Castle Wizard channels a shimmering shield onto your statue, trenches and towers that
+// soaks up damage before the structure does, up to share of its health (statue: statueMax), at rate
+// a second (Aegis: aegis times both). It never fades on its own.
+const WARD = { share: 0.35, statueMax: 600, rate: 30, range: 160, aegis: 1.6, sense: 260 };   // sense: how near the Castle Wizard senses enemy runes and traps
+// Wizard towers: a Castle Wizard rebuilds one archer tower per side as a wizard tower (cost, work
+// seconds). It holds one mage, whose spells are free up there, and what it becomes depends on the mage:
+//   Necromancer: a Graveyard, raising a zombie every grave (graveRites with Quick Rites) seconds with
+//                no limit; they march straight on the enemy
+//   Cleric:      a Sanctum, healing healMul as much, and everyone within sanctumR takes heart (Hope)
+//                and gets a ward of magic armor
+//   Warlock:     a Spire, its bolts hitting spireMul as hard, spireRange further
+const WTOWER = { gold: 150, mana: 100, work: 12, grave: 6, graveRites: 4, healMul: 1.8, sanctumR: 450, spireMul: 1.6, spireRange: 160, mageRange: 60 };
+const TOWER_MAGES = ['necromancer', 'cleric', 'warlock'];
+// Founding Stone (castle upgrade): an Architect and a Castle Wizard are entombed in the castle walls
+// for +1 population, up to POP_MAX. Each one costs a little more than the last.
+const FOUNDING = { gold: 250, mana: 75, goldStep: 50, manaStep: 15, time: 30 };
+// The Statue's mana store (Architect upgrades): Cistern and Reliquary raise it.
+const MANA_STORE = { cistern: 300, reliquary: 500 };
+const STATUE_REPAIR = 14;   // statue hp restored by each blow of an Architect's mallet
 // Archer towers: an architect raises one (cost, buildHits blows of the hammer); an archer posted in
 // it reaches range further and takes projMul of projectile damage. Melee troops that bring it down
 // bury the archer in the rubble. Reinforced Towers: hp2 times the health; Watchtowers: range3 more.
@@ -106,7 +149,8 @@ const towerY = () => LANE_TOP + 3;                        // towers stand at the
 const REBUILD = 0.3;
 // Idle architects (or ones in the castle, at garrisonMul the pace) study: every time seconds of
 // study knocks step off the price of a random upgrade, down to at most max off.
-const ARCH_RESEARCH = { time: 30, step: 0.1, max: 0.4, garrisonMul: 1.5, mana: 0.5 };   // mana: per second, each architect studying at the statue
+const ARCH_RESEARCH = { time: 30, step: 0.1, max: 0.4, garrisonMul: 1.5, gold: 0.6, mana: 0.5 };   // gold: per second, the Architect studying at the statue; mana: the Castle Wizard
+// (the Architect's study knocks gold off upgrade prices, the Castle Wizard's mana)
 
 const BURN_DPS = 4;          // Flaming Arrows damage over time
 const BURN_TIME = 3;
@@ -122,9 +166,9 @@ const UNIT_TYPES = {
     desc: 'Mines gold, prays at the statue for mana, or pans the castle stream for both. Fights back weakly if attacked.',
   },
   architect: {
-    key: 'architect', name: 'Architect', cost: 175, time: 5, hp: 80, speed: 70, pop: 1,
+    key: 'architect', name: 'Architect', cost: 175, time: 5, hp: 80, speed: 70, pop: 1, max: 1,
     dmg: 6, range: 26, atkTime: 1, aggro: 0, hotkey: '`', code: 'Backquote',
-    desc: 'Builds and repairs: digs trenches (with Earthworks), lays hidden traps, raises archer towers, repairs and rebuilds trenches and towers (the Monolith’s too). Left idle (or in the castle) it studies, making random upgrades cheaper, and makes a little mana at the statue. Castle upgrades need one.',
+    desc: 'Your builder (one at a time). Digs trenches (with Earthworks), lays hidden traps (tar pits, mines, spike pits, caltrops, snares), raises archer towers, and repairs, finishes and rebuilds your works and statue: on its own too, whenever nobody needs it. Reinforces the Castle Wizard\'s runes. Left idle it studies at the statue: a little gold, and upgrades get cheaper in gold. Castle upgrades need one.',
   },
   sword: {
     key: 'sword', name: 'Swordwrath', cost: 125, time: 3.5, hp: 140, speed: 100, pop: 1,
@@ -203,10 +247,17 @@ const UNIT_TYPES = {
 };
 // Supply and support: heals and refits troops in the field for free, hands Gladiators new nets and
 // javelins, cheers miners on, restores spent gold deposits and brings the architects materials.
+// The Architect's magical partner: lays runes, wards your works, enchants the Architect's traps,
+// raises a wizard tower, and studies for mana when idle.
+UNIT_TYPES.wizard = {
+  key: 'wizard', name: 'Castle Wizard', cost: 175, mana: 75, time: 7, hp: 80, speed: 68, pop: 1, max: 1,
+  dmg: 6, range: 26, atkTime: 1.2, aggro: 0, hotkey: '.', code: 'Period',
+  desc: 'Your castle\'s mage (one at a time). Lays hidden runes that stun, hex (they turn on their own side) or terrify enemies, senses the enemy\'s traps and runes near it, enchants the Architect\'s traps, and on its own keeps a shimmering ward on your statue, trenches and towers that soaks up damage. Rebuilds one archer tower as a wizard tower for a mage. Left idle it studies at the statue: a little mana, and upgrades get cheaper in mana.',
+};
 UNIT_TYPES.quartermaster = {
   key: 'quartermaster', name: 'Quartermaster', cost: 200, time: 6, hp: 100, speed: 100, pop: 1,
   dmg: 5, range: 26, atkTime: 1, aggro: 0, hotkey: ',', code: 'Comma', max: 2,
-  desc: 'Keeps your side supplied and stays clear of fights. With the troops: patches up the wounded, refits veterans for free and hands Gladiators a new net and javelin. With the workers: cheers miners on (they hurry for a while), restores spent gold deposits, and now and then brings an Architect materials for a free trap. Two at most: then one stays with the troops and the other with the workers.',
+  desc: 'Keeps your side supplied and stays clear of fights. With the troops: patches up the wounded, refits veterans for free and hands Gladiators a new net and javelin. With the workers: cheers miners on (they hurry for a while), restores spent gold deposits, and now and then brings the Architect materials for a free trap and the Castle Wizard reagents for a free rune. Two at most: then one stays with the troops and the other with the workers.',
 };
 // A showman who fights alone: a javelin and a net to throw (once each until resupplied), a short
 // sword, and he grows stronger with every kill. He never marches in formation.
@@ -221,17 +272,23 @@ UNIT_TYPES.necromancer = {
   dmg: 0, range: 240, atkTime: 1.4, aggro: 300, hotkey: '0', code: 'Digit0',
   desc: 'Raises zombies (up to 6, more with upgrades; they don\'t count toward your population) and leads them. Zombies are fast, weak fodder that take half damage from arrows and other shots, and an enemy a zombie kills rises as another. If the Necromancer falls, its zombies just attack.',
 };
+// Escort's siege wagon (modes2.js): never trained, pushed toward the enemy statue by its escort.
+UNIT_TYPES.wagon = {
+  key: 'wagon', name: 'Siege Wagon', cost: 0, time: 0, hp: 2600, speed: 30, pop: 0,
+  dmg: 0, range: 0, atkTime: 1, aggro: 0, summoned: true,
+  desc: 'A cart loaded with black powder. It rolls toward the enemy statue while your soldiers escort it, and blows it apart when it arrives.',
+};
 UNIT_TYPES.zombie = {
   key: 'zombie', name: 'Zombie', cost: 0, time: 0, hp: 60, speed: 108, pop: 0,
   dmg: 8, range: 28, atkTime: 1.1, aggro: 240, summoned: true,
   desc: 'Raised by a Necromancer. Weak, but it runs at its prey, takes half damage from arrows and other shots, and whoever it kills rises as another zombie.',
 };
-const UNIT_ORDER = ['miner', 'architect', 'quartermaster', 'sword', 'archer', 'spear', 'gladiator', 'cleric', 'warlock', 'necromancer', 'giant', 'ninja', 'flyer', 'ballista', 'golem', 'beastmaster', 'saboteur', 'firebird'];
+const UNIT_ORDER = ['miner', 'architect', 'wizard', 'quartermaster', 'sword', 'archer', 'spear', 'gladiator', 'cleric', 'warlock', 'necromancer', 'giant', 'ninja', 'flyer', 'ballista', 'golem', 'beastmaster', 'saboteur', 'firebird'];
 // Training groups: each group trains one unit at a time from a shared queue (so a Swordwrath
 // waits for the Spearton ahead of it), in one building that also holds all its units' upgrades.
 // Colors tint the training bar.
 const TRAIN_GROUPS = [
-  { key: 'workers', name: 'Workers', building: 'Workers\' Lodge', color: '#c9a23a', types: ['miner', 'architect', 'quartermaster'] },
+  { key: 'workers', name: 'Workers', building: 'Workers\' Lodge', color: '#c9a23a', types: ['miner', 'architect', 'wizard', 'quartermaster'] },
   { key: 'infantry', name: 'Infantry', building: 'Barracks', color: '#c0503a', types: ['sword', 'spear', 'gladiator', 'ninja', 'saboteur'] },
   { key: 'ranged', name: 'Ranged', building: 'Archery Range', color: '#7aa84a', types: ['archer', 'flyer', 'firebird', 'ballista', 'beastmaster'] },
   { key: 'mages', name: 'Mages', building: 'Mage Tower', color: '#9a62d8', types: ['cleric', 'warlock', 'necromancer'] },
@@ -245,7 +302,7 @@ const isGiant = u => u.type === 'giant';
 const isFlying = u => (u.type === 'flyer' && !u.grounded) || u.type === 'firebird';
 // Ninjas count as ranged while throwing stars (u.starRanged is decided each frame).
 // Workers (miners and architects) don't fight: they're left out of armies, formations and army strength.
-const isWorker = u => u.type === 'miner' || u.type === 'architect' || u.type === 'quartermaster';
+const isWorker = u => u.type === 'miner' || u.type === 'architect' || u.type === 'wizard' || u.type === 'quartermaster';
 const isRanged = u => u.type === 'medusa' || u.type === 'archer' || u.type === 'warlock' || u.type === 'ballista' || u.type === 'beastmaster' || isFlying(u) || (u.type === 'ninja' && !!u.starRanged);
 const trainCode = def => def.code || 'Digit' + def.hotkey;
 // One building per class inside the castle (the Giant Pit stands outside the gate). Units walk out
@@ -379,6 +436,13 @@ const UPGRADES = {
     { key: 'tower2', name: 'Reinforced Towers', cost: 175, mana: 25, time: 25, team: true, desc: 'Archer towers (built after this, and every one standing) get iron bracing: 60% more health.' },
     { key: 'tower3', name: 'Watchtowers', cost: 225, mana: 50, time: 30, team: true, requires: 'tower2', desc: 'Taller towers: an archer posted in one reaches 60 further still.' },
     { key: 'traps2', name: 'Trapmaker', cost: 150, mana: 25, time: 25, team: true, desc: 'Traps cost a third less and are ready again in half the time.' },
+    { key: 'cistern', name: 'Cistern', cost: 200, mana: 50, time: 25, team: true, desc: `A carved basin under the statue: you can store ${MANA_STORE.cistern} more mana.` },
+    { key: 'reliquary', name: 'Reliquary', cost: 300, mana: 100, time: 35, team: true, requires: 'cistern', desc: `Rune-cut vaults round the statue's foot: store another ${MANA_STORE.reliquary} mana.` },
+  ],
+  wagon: [],
+  wizard: [
+    { key: 'runecraft', name: 'Runecraft', cost: 175, mana: 75, time: 25, team: true, desc: 'Runes cost a third less mana and are ready again in half the time.' },
+    { key: 'aegis', name: 'Aegis', cost: 200, mana: 100, time: 30, team: true, desc: `Wards hold ${Math.round((WARD.aegis - 1) * 100)}% more and are channelled ${Math.round((WARD.aegis - 1) * 100)}% faster.` },
   ],
   archer: [
     { key: 'bow', name: 'Recurve Bows', cost: 175, mana: 0, time: 20, desc: 'Range 380 → 500. Castle archers reach just as much further.' },
@@ -452,7 +516,7 @@ const UPGRADES = {
   ],
   quartermaster: [
     { key: 'salves', name: 'Healing Salves', cost: 150, mana: 25, time: 20, desc: `Quartermasters' bandages heal ${QM.heal} → ${QM.healSalves}.` },
-    { key: 'wagon', name: 'Supply Wagon', cost: 175, mana: 25, time: 25, desc: `Materials for a free trap every ${QM.materialsWagon}s instead of every ${QM.materialsCd}s.` },
+    { key: 'wagon', name: 'Supply Wagon', cost: 175, mana: 25, time: 25, desc: `Materials for a free trap (and reagents for a free rune) every ${QM.materialsWagon}s instead of every ${QM.materialsCd}s.` },
   ],
   gladiator: [
     { key: 'manica', name: 'Manica', cost: 150, mana: 25, time: 20, desc: `An armored sleeve and greave: Gladiators take ${GLADIATOR.manica * 100}% less damage.` },
@@ -483,6 +547,7 @@ const UPGRADES = {
     { key: 'archer4', name: 'Fourth Castle Archer', cost: 400, mana: 150, time: 35, team: true, requires: 'archer3', desc: 'Posts a fourth archer on the rampart (clans with 4 castle archer slots only).' },
     { key: 'sifter', name: 'Sifter', cost: 200, mana: 25, time: 25, team: true, desc: `A wooden sluice set in the castle stream: panning miners get ${SIFTER_GOLD} gold a tick instead of 1 (their mana is unchanged).` },
     { key: 'levy', name: 'Levy', cost: 300, mana: 100, time: 35, team: true, desc: `A free Swordwrath marches out of the Barracks every ${LEVY_INTERVAL} seconds (if you have room in your population).` },
+    { key: 'found', name: 'Founding Stone', cost: FOUNDING.gold, mana: FOUNDING.mana, time: FOUNDING.time, team: true, repeat: true, desc: `Your Architect and Castle Wizard are entombed in the castle walls, binding it stronger: +1 population, up to ${POP_MAX}. Both are lost (train new ones). Each Founding Stone costs a little more.` },
     { key: 'levy2', name: 'Levy II', cost: 450, mana: 150, time: 40, team: true, requires: 'levy', clans: ['defense'], desc: `A free Spearton also marches out of the Barracks every ${LEVY_INTERVAL} seconds (if you have room in your population).` },
   ],
 };

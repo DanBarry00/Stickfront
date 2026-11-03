@@ -19,7 +19,7 @@ const campDone = key => CAMP.done.includes(key);
 
 // What the Horde calls its troops.
 const MONSTER_NAMES = {
-  miner: 'Grubber', architect: 'Pitwright', quartermaster: 'Scavenger', sword: 'Ghoul', archer: 'Bone Archer', spear: 'Hellguard',
+  miner: 'Grubber', architect: 'Pitwright', wizard: 'Hexwitch', quartermaster: 'Scavenger', sword: 'Ghoul', archer: 'Bone Archer', spear: 'Hellguard',
   gladiator: 'Butcher', cleric: 'Blood Priest', warlock: 'Hexer', necromancer: 'Lich', giant: 'Abomination', ninja: 'Shade',
   flyer: 'Bat Rider', golem: 'Colossus', zombie: 'Zombie', medusa: 'Medusa',
 };
@@ -127,7 +127,7 @@ const CAMPAIGN = [
         const a = campUnit(team, 'archer', tw.x, tw.y + 2);
         postArcher(a, tw);
       }
-      ['mine', 'tar', 'mine'].forEach((k, i) => freeTrap(team.id, k, campX(team, 1400 + i * 60), rowY(1 + i * 2)));
+      ['mine', 'spikes', 'tar', 'caltrops', 'mine'].forEach((k, i) => freeTrap(team.id, k, campX(team, 1400 + i * 50), rowY(i % 2 ? 4 : 1)));
     },
     ai: { miners: 5, stipend: 1, mix: { spear: 1, archer: 2 }, pace: 4, attackAt: 14, grow: 4, retreatAt: 0.4, formation: 'advance' },
     tips: [
@@ -205,6 +205,36 @@ const CAMPAIGN = [
     ],
   },
   {
+    key: 'hexpass', name: 'The Hexed Pass', sub: 'Runes in the mud and a Graveyard on the hill', pos: [640, 205],
+    brief: [
+      'The only road north runs through a pass the Horde\'s <b>Hexwitches</b> have sown with runes: step on one and your soldiers freeze, turn on each other, or run screaming. A <b>Graveyard</b> tower on the hill raises the dead without end.',
+      'Your own Architect and Castle Wizard march with you. A Castle Wizard can sense runes and traps near it, so bring it up behind your army. Tear down the Graveyard, then the totem.',
+    ],
+    counters: ['Your Castle Wizard reveals enemy runes and traps near it: right-click them to smash them', 'Melee troops bring the Graveyard tower down, and its Lich with it', 'A hex turns your soldiers on each other: don\'t bunch up'],
+    goal: 'statue', theme: CAMP_THEMES.dusk,
+    enemyUnits: ['miner', 'sword', 'spear', 'archer', 'warlock', 'necromancer'],
+    player: { gold: 900, mana: 250, army: [{ type: 'miner', n: 5 }, { type: 'sword', n: 3 }, { type: 'spear', n: 2 }, { type: 'archer', n: 3 }, { type: 'cleric', n: 1 }, { type: 'architect', n: 1 }, { type: 'wizard', n: 1 }, { type: 'quartermaster', n: 1 }] },
+    enemy: { gold: 300, mana: 200, hp: { troops: 1.1 }, free: { architect: ['walls'], spear: ['shield'] }, army: [{ type: 'miner', n: 5 }, { type: 'spear', n: 2 }, { type: 'archer', n: 3 }] },
+    setup(team) {
+      // the Graveyard: a wizard tower on the hill with a Lich in it, behind a trench
+      campTrench(team, campX(team, 1250), false);
+      const tw = orderTower(team, campX(team, 1120), rowY(0), [], true);
+      tw.wizard = true;
+      postMage(campUnit(team, 'necromancer', tw.x, tw.y + 2), tw);
+      // the pass sown with runes and traps
+      [['hex', 1420, 1], ['bind', 1470, 4], ['dread', 1540, 2], ['spikes', 1600, 5], ['hex', 1660, 3], ['caltrops', 1720, 0], ['bind', 1790, 4], ['snare', 1850, 1]]
+        .forEach(([k, x, row]) => freeTrap(team.id, k, campX(team, x), rowY(row)));
+      for (const t of G.traps) if (t.team === team.id && !isRune(t.kind)) t.magic = true;
+    },
+    ai: { miners: 6, pray: 1, stipend: 1.5, stipendMana: 0.8, mix: { sword: 2, spear: 1, archer: 2, warlock: 1 }, pace: 4, attackAt: 8, grow: 3, retreatAt: 0.34, formation: 'advance' },
+    tips: [
+      { text: 'Don\'t march blind into the pass. Bring your Castle Wizard up behind your army: enemy runes and traps near it show up, marked in red.', secs: 25 },
+      { text: 'Right-click a revealed rune or trap with your soldiers to smash it (it can\'t go off while they hack at it from the side).', secs: 22 },
+      { text: 'The Graveyard keeps the dead coming. Get melee troops to its foot: when the tower falls, the Lich dies with it.', secs: 25 },
+      { text: 'Lay your own runes on your side of the pass for when they counterattack.' },
+    ],
+  },
+  {
     key: 'titanfall', name: 'Titanfall', sub: 'Abominations march out every minute', pos: [565, 160],
     brief: [
       'In the Horde\'s breeding pits, <b>Abominations</b> are stitched together faster than we can kill them. A wave lumbers out of their gate every minute, each bigger than the last.',
@@ -275,7 +305,7 @@ const CAMPAIGN = [
 ];
 
 const campIndex = key => CAMPAIGN.findIndex(l => l.key === key);
-const campOpen = i => !CAMPAIGN[i].soon && (i === 0 || campDone(CAMPAIGN[i - 1].key));
+const campOpen = i => !CAMPAIGN[i].soon && (i === 0 || CAMPAIGN.slice(i - 1).some(l => campDone(l.key)));   // (a level added later doesn't lock what you've already reached)
 
 // ---------------------------------------------------------------- starting a level
 
@@ -328,7 +358,7 @@ class CampaignAI extends LessonAI {
   update(dt) {
     super.update(dt);
     const team = G.teams[this.id], c = this.c;
-    if (c.stipendMana) team.mana = Math.min(MAX_MANA, team.mana + c.stipendMana * dt);
+    if (c.stipendMana) team.mana = Math.min(manaCap(team), team.mana + c.stipendMana * dt);
     if (c.rounds) this.updateRounds(team, dt);
     if (c.boss) this.updateBoss(team, dt);
     if (c.medusa) this.updateMedusaLair(team, dt);
